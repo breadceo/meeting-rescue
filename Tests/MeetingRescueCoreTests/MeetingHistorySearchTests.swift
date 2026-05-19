@@ -1,0 +1,102 @@
+import Testing
+@testable import MeetingRescueCore
+
+@Suite("Meeting history search")
+struct MeetingHistorySearchTests {
+    @Test("confirmed decision matches outrank raw transcript matches")
+    func confirmedDecisionOutranksRawTranscript() {
+        let decisionSections = [
+            MeetingHistorySearchSection(field: .confirmedDecision, text: "가격 정책은 6월 파일럿 이후 고정한다", weight: 96, timestamp: "04:13"),
+            MeetingHistorySearchSection(field: .rawTranscript, text: "가격 이야기가 잠깐 나왔다", weight: 24, timestamp: "02:01")
+        ]
+        let rawOnlySections = [
+            MeetingHistorySearchSection(field: .rawTranscript, text: "가격 정책은 아직 논의 중이다", weight: 24, timestamp: "02:01")
+        ]
+
+        let decisionMatch = MeetingHistorySearch.match(sections: decisionSections, query: "가격 정책")
+        let rawMatch = MeetingHistorySearch.match(sections: rawOnlySections, query: "가격 정책")
+
+        #expect(decisionMatch?.field == .confirmedDecision)
+        #expect((decisionMatch?.score ?? 0) > (rawMatch?.score ?? 0))
+        #expect(decisionMatch?.displayText.contains("[04:13] 확정 결정:") == true)
+    }
+
+    @Test("query terms can match across participant and decision fields")
+    func multiTermQueryMatchesAcrossFields() {
+        let sections = [
+            MeetingHistorySearchSection(field: .participant, text: "Alex Mina", weight: 84),
+            MeetingHistorySearchSection(field: .decision, text: "검색 결과에는 match snippet을 보여준다", weight: 68, timestamp: "12:10")
+        ]
+
+        let match = MeetingHistorySearch.match(sections: sections, query: "Alex snippet")
+
+        #expect(match != nil)
+        #expect(match?.displayText.contains("snippet") == true || match?.displayText.contains("Alex") == true)
+    }
+
+    @Test("short Korean substring query matches without whitespace tokenization")
+    func shortKoreanSubstringQueryMatches() {
+        let sections = [
+            MeetingHistorySearchSection(field: .topic, text: "검색품질 개선 방향을 논의했다", weight: 58, timestamp: "00:30")
+        ]
+
+        let match = MeetingHistorySearch.match(sections: sections, query: "품질")
+
+        #expect(match?.field == .topic)
+        #expect(match?.displayText.contains("품질") == true)
+    }
+
+    @Test("spacing-insensitive Korean phrase query matches compound words")
+    func spacingInsensitiveKoreanPhraseMatches() {
+        let sections = [
+            MeetingHistorySearchSection(field: .topic, text: "검색품질 개선 방향을 논의했다", weight: 58, timestamp: "00:30")
+        ]
+
+        let match = MeetingHistorySearch.match(sections: sections, query: "검색 품질")
+
+        #expect(match?.field == .topic)
+        #expect(match?.timestamp == "00:30")
+    }
+
+    @Test("compound team names match spaced queries and keep raw transcript anchor")
+    func compoundTeamNameMatchesSpacedQuery() {
+        let sections = [
+            MeetingHistorySearchSection(field: .currentIssue, text: "마케팅 계정 확인이 필요하다", weight: 80),
+            MeetingHistorySearchSection(field: .rawTranscript, text: "[09:04] Casey Lee: 마케팅팀이랑 소통해서 확인하도록 하겠습니다.", weight: 24, timestamp: "09:04")
+        ]
+
+        let anchorMatch = MeetingHistorySearch.timestampedMatch(sections: sections, query: "마케팅 팀")
+
+        #expect(anchorMatch?.field == .rawTranscript)
+        #expect(anchorMatch?.timestamp == "09:04")
+    }
+
+    @Test("minor typo in English query can still match local fuzzy tokens")
+    func fuzzyEnglishTypoMatches() {
+        let sections = [
+            MeetingHistorySearchSection(field: .topic, text: "Meeting intelligence latency 개선", weight: 58, timestamp: "03:20"),
+            MeetingHistorySearchSection(field: .rawTranscript, text: "[03:10] Alex: unrelated latency note", weight: 24, timestamp: "03:10")
+        ]
+
+        let match = MeetingHistorySearch.match(sections: sections, query: "meeting intellignece")
+
+        #expect(match?.field == .topic)
+        #expect(match?.timestamp == "03:20")
+    }
+
+    @Test("timestamped match can be used as navigation anchor when best match has no timestamp")
+    func timestampedMatchProvidesNavigationAnchor() {
+        let sections = [
+            MeetingHistorySearchSection(field: .currentIssue, text: "주간 회의에서 마케팅 계정 확인이 현재 이슈로 정리되었다", weight: 80),
+            MeetingHistorySearchSection(field: .rawTranscript, text: "[09:04] Casey Lee: 마케팅팀이랑 소통해서 확인하도록 하겠습니다.", weight: 24, timestamp: "09:04")
+        ]
+
+        let displayMatch = MeetingHistorySearch.match(sections: sections, query: "마케팅")
+        let anchorMatch = MeetingHistorySearch.timestampedMatch(sections: sections, query: "마케팅")
+
+        #expect(displayMatch?.field == .currentIssue)
+        #expect(displayMatch?.timestamp == nil)
+        #expect(anchorMatch?.field == .rawTranscript)
+        #expect(anchorMatch?.timestamp == "09:04")
+    }
+}

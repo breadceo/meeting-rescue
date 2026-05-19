@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["currentIssue", "topicTimeline", "decisionCandidates", "actionItemCandidates", "risksOrNotes"],
+  "properties": {
+    "currentIssue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["summary", "openQuestions"],
+      "properties": {
+        "summary": { "type": "string" },
+        "openQuestions": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "topicTimeline": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "startTimestamp", "endTimestamp", "title", "summary"],
+        "properties": {
+          "id": { "type": "string" },
+          "startTimestamp": { "type": "string" },
+          "endTimestamp": { "type": ["string", "null"] },
+          "title": { "type": "string" },
+          "summary": { "type": "string" }
+        }
+      }
+    },
+    "decisionCandidates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "text", "status", "evidenceTimestamp", "speaker"],
+        "properties": {
+          "id": { "type": "string" },
+          "text": { "type": "string" },
+          "status": { "enum": ["candidate", "confirmed", "deleted"] },
+          "evidenceTimestamp": { "type": "string" },
+          "speaker": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "actionItemCandidates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "assignee", "task", "deadline", "status", "evidenceTimestamp", "speaker"],
+        "properties": {
+          "id": { "type": "string" },
+          "assignee": { "type": ["string", "null"] },
+          "task": { "type": "string" },
+          "deadline": { "type": ["string", "null"] },
+          "status": { "enum": ["candidate", "confirmed", "deleted"] },
+          "evidenceTimestamp": { "type": "string" },
+          "speaker": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "risksOrNotes": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  }
+}

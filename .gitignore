@@ -1,0 +1,11 @@
+.build/
+.swiftpm/
+DerivedData/
+dist/
+config/release.local.env
+config/*.secret.env
+tasks.md
+execution-log.md
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
+.DS_Store
