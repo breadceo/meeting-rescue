@@ -1,0 +1,21 @@
+README.md
+  h_d82ccb34241a0d 93-94,105-106,114
+VERSION
+  h_d82ccb34241a0d 1
+scripts/notarize_app.sh
+  h_d82ccb34241a0d 19-21,37,62-97,100-101
+scripts/package_release.sh
+  h_d82ccb34241a0d 18-19,29-40,48,58
+scripts/publish_github_release.sh
+  h_d82ccb34241a0d 18,20,71,78,117
+---
+{
+  "schema_version": "zax-attestation/1.1.0",
+  "base_commit_sha": "004de611e23a498cbfd61f6ab1804861a75d6448",
+  "prompts": {},
+  "humans": {
+    "h_d82ccb34241a0d": {
+      "author": "ethan@zigbang.com"
+    }
+  }
+}
