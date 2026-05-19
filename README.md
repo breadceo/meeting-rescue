@@ -72,7 +72,7 @@ swift run MeetingRescue
 open "dist/Meeting Rescue.app"
 ```
 
-`build_app.sh`는 release build를 만든 뒤 `dist/Meeting Rescue.app`을 생성하고, SwiftPM resource bundle과 앱 아이콘을 함께 복사합니다. 생성된 앱은 ad-hoc signing됩니다.
+`build_app.sh`는 release build를 만든 뒤 `dist/Meeting Rescue.app`을 생성하고, SwiftPM resource bundle과 앱 아이콘을 함께 복사합니다. `config/release.local.env`에 signing identity가 있으면 Developer ID signing을 사용하고, 없으면 로컬 개발용 ad-hoc signing을 사용합니다.
 
 ## Transcript 폴더
 
@@ -298,16 +298,15 @@ repo에는 앱 source, schema, tests, build script만 포함하는 것을 권장
 
 ## macOS 권한 팝업
 
-transcript 폴더가 `Documents`, `Desktop`, `Downloads`, `Music`, `Photos` 같은 macOS 보호 영역 아래에 있으면 접근 권한 팝업이 뜰 수 있습니다.
+notarized 배포 앱은 Gatekeeper의 “미확인 개발자” 경고 없이 열 수 있습니다.
 
-개발 중 `dist/Meeting Rescue.app`을 자주 새로 빌드하고 ad-hoc signing하면 macOS가 새 앱으로 판단해 권한 팝업을 다시 띄울 수 있습니다.
+다만 transcript 폴더가 `Documents`, `Desktop`, `Downloads` 같은 macOS 보호 영역 아래에 있으면 파일 접근 권한 확인이 한 번 뜰 수 있습니다. 이 권한은 앱이 사용자가 선택한 transcript 폴더를 읽기 위한 macOS privacy 동작입니다.
 
-반복을 줄이는 방법:
+권장 사용법:
 
-- 같은 앱 번들을 계속 사용
-- 안정적인 signing identity 사용
-- transcript 폴더를 보호 영역 밖으로 이동
 - folder picker로 다시 선택해 bookmark 저장
+- 같은 앱 번들을 계속 사용
+- transcript 폴더를 보호 영역 밖으로 둘지 검토
 
 ## 개발 명령
 
@@ -380,9 +379,5 @@ scripts/
 - NotebookLM-style Q&A Threads
 - Search quality v2
 - Codex app-server provider prototype
-- signed/notarized app distribution
-
-상세 작업 목록과 실행 이력은 다음 파일을 참고하세요.
-
-- `tasks.md`
-- `execution-log.md`
+- GitHub Release publish command
+- manual update check
