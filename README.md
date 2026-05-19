@@ -43,7 +43,7 @@ swift test
 ## 빠른 시작
 
 ```sh
-git clone <repository-url>
+git clone https://github.com/breadceo/meeting-rescue.git
 cd meeting-rescue
 ./scripts/build_app.sh
 open "dist/Meeting Rescue.app"
@@ -73,6 +73,37 @@ open "dist/Meeting Rescue.app"
 ```
 
 `build_app.sh`는 release build를 만든 뒤 `dist/Meeting Rescue.app`을 생성하고, SwiftPM resource bundle과 앱 아이콘을 함께 복사합니다. `config/release.local.env`에 signing identity가 있으면 Developer ID signing을 사용하고, 없으면 로컬 개발용 ad-hoc signing을 사용합니다.
+
+## 배포 빌드
+
+release 설정은 git에 올리지 않는 `config/release.local.env`에 둡니다. 시작점으로 예제 파일을 복사하세요.
+
+```sh
+cp config/release.env.example config/release.local.env
+```
+
+로컬 release archive를 만들려면:
+
+```sh
+./scripts/package_release.sh
+```
+
+생성물:
+
+- `dist/Meeting-Rescue-vX.Y.Z.zip`
+- `dist/Meeting-Rescue-vX.Y.Z.zip.sha256`
+- `dist/release-notes-vX.Y.Z.md`
+
+Developer ID notarization까지 수행하려면 `config/release.local.env`에 `SIGN_IDENTITY`와 `NOTARY_KEYCHAIN_PROFILE`을 설정한 뒤:
+
+```sh
+./scripts/notarize_app.sh
+```
+
+notarization이 성공하면 최종 배포용 archive가 생성됩니다.
+
+- `dist/Meeting-Rescue-vX.Y.Z-notarized.zip`
+- `dist/Meeting-Rescue-vX.Y.Z-notarized.zip.sha256`
 
 ## Transcript 폴더
 
@@ -358,6 +389,8 @@ Tests/
   MeetingRescueCoreTests/
 scripts/
   build_app.sh
+  package_release.sh
+  notarize_app.sh
 ```
 
 ## 알려진 제한
