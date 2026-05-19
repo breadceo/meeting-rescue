@@ -1,0 +1,37 @@
+.gitignore
+  h_d82ccb34241a0d 9
+Package.resolved
+  h_d82ccb34241a0d 1-15
+Package.swift
+  h_d82ccb34241a0d 13-15,23-26
+README.md
+  h_d82ccb34241a0d 75,108-115,385,403-406
+Sources/MeetingRescue/ContentView.swift
+  h_d82ccb34241a0d 25,58,1452,1534-1540
+Sources/MeetingRescue/MeetingRescueApp.swift
+  h_d82ccb34241a0d 6,12-20
+Sources/MeetingRescue/SparkleUpdater.swift
+  h_d82ccb34241a0d 1-19
+VERSION
+  h_d82ccb34241a0d 1
+config/release.env.example
+  h_d82ccb34241a0d 6-7,12-15
+docs/appcast.xml
+  h_d82ccb34241a0d 1-11
+docs/index.html
+  h_d82ccb34241a0d 1-13
+scripts/build_app.sh
+  h_d82ccb34241a0d 20-21,26,37,40,44-52,105-122
+scripts/publish_github_release.sh
+  h_d82ccb34241a0d 1-125
+---
+{
+  "schema_version": "zax-attestation/1.1.0",
+  "base_commit_sha": "c6978e6a96a815c270ca9808db639da8cddd79b8",
+  "prompts": {},
+  "humans": {
+    "h_d82ccb34241a0d": {
+      "author": "ethan@zigbang.com"
+    }
+  }
+}
