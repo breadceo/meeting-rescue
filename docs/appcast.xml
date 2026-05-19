@@ -7,5 +7,24 @@
     <link>https://breadceo.github.io/meeting-rescue/appcast.xml</link>
     <description>Meeting Rescue release updates.</description>
     <language>ko</language>
+    <item>
+      <title>Meeting Rescue 0.1.1</title>
+      <description><![CDATA[
+        <p>Meeting Rescue 0.1.1 release.</p>
+        <p><a href="https://github.com/breadceo/meeting-rescue/releases/tag/v0.1.1">Release notes</a></p>
+      ]]></description>
+      <pubDate>Tue, 19 May 2026 17:58:32 +0900</pubDate>
+      <sparkle:version>4</sparkle:version>
+      <sparkle:shortVersionString>0.1.1</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <enclosure
+        url="https://github.com/breadceo/meeting-rescue/releases/download/v0.1.1/Meeting-Rescue-v0.1.1-notarized.zip"
+        sparkle:edSignature="+mCoNRxVvNIWUYT3GJuUTDY8w1ZApF/8Zkv890gtm78L+Ix4zXhAHhujjxRgnp5BNCYQl7d/Pf2oACSxKiC+CA==" length="5527613"
+        type="application/zip" />
+    </item>
   </channel>
 </rss>
+<!-- sparkle-signatures:
+edSignature: 6Soj2o5vXdF4Lq/3/EJX0roZTWbUXKavNLXaPw/+ZThdaHYwDgcyt88BgcyxCZsnpufqNl2+fFzPcu3VYKuiAQ==
+length: 1226
+-->
