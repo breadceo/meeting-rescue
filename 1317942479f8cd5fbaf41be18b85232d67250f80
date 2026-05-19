@@ -1,0 +1,13 @@
+README.md
+  h_d82ccb34241a0d 75,301,303,305,308-309,382-383
+---
+{
+  "schema_version": "zax-attestation/1.1.0",
+  "base_commit_sha": "1317942479f8cd5fbaf41be18b85232d67250f80",
+  "prompts": {},
+  "humans": {
+    "h_d82ccb34241a0d": {
+      "author": "ethan@zigbang.com"
+    }
+  }
+}
