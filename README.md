@@ -90,8 +90,8 @@ cp config/release.env.example config/release.local.env
 
 생성물:
 
-- `dist/Meeting-Rescue-vX.Y.Z.zip`
-- `dist/Meeting-Rescue-vX.Y.Z.zip.sha256`
+- `dist/Meeting-Rescue-vX.Y.Z.dmg`
+- `dist/Meeting-Rescue-vX.Y.Z.dmg.sha256`
 - `dist/release-notes-vX.Y.Z.md`
 
 Developer ID notarization까지 수행하려면 `config/release.local.env`에 `SIGN_IDENTITY`와 `NOTARY_KEYCHAIN_PROFILE`을 설정한 뒤:
@@ -102,8 +102,8 @@ Developer ID notarization까지 수행하려면 `config/release.local.env`에 `S
 
 notarization이 성공하면 최종 배포용 archive가 생성됩니다.
 
-- `dist/Meeting-Rescue-vX.Y.Z-notarized.zip`
-- `dist/Meeting-Rescue-vX.Y.Z-notarized.zip.sha256`
+- `dist/Meeting-Rescue-vX.Y.Z-notarized.dmg`
+- `dist/Meeting-Rescue-vX.Y.Z-notarized.dmg.sha256`
 
 GitHub Release와 Sparkle appcast를 발행하려면 notarization 이후 다음 명령을 실행합니다.
 
@@ -111,7 +111,7 @@ GitHub Release와 Sparkle appcast를 발행하려면 notarization 이후 다음 
 ./scripts/publish_github_release.sh
 ```
 
-이 스크립트는 `vX.Y.Z` tag와 GitHub Release asset을 만들고, Sparkle 서명을 포함한 `docs/appcast.xml`을 갱신합니다. `docs/appcast.xml`은 GitHub Pages의 `/docs` source로 배포되어 앱의 자동 업데이트 feed가 됩니다. Sparkle private key는 Keychain에 보관하고, 백업 파일이 필요하면 `private/` 아래에 두세요. `private/`는 git에 포함하지 않습니다.
+이 스크립트는 `vX.Y.Z` tag와 GitHub Release DMG asset을 만들고, Sparkle 서명을 포함한 `docs/appcast.xml`을 갱신합니다. `docs/appcast.xml`은 GitHub Pages의 `/docs` source로 배포되어 앱의 자동 업데이트 feed가 됩니다. Sparkle private key는 Keychain에 보관하고, 백업 파일이 필요하면 `private/` 아래에 두세요. `private/`는 git에 포함하지 않습니다.
 
 ## Transcript 폴더
 

@@ -15,8 +15,9 @@ GITHUB_REPOSITORY="${GITHUB_REPOSITORY:-breadceo/meeting-rescue}"
 DIST_DIR="${DIST_DIR:-$ROOT_DIR/dist}"
 RELEASE_TITLE="${RELEASE_TITLE:-Meeting Rescue $TAG_NAME}"
 RELEASE_NOTES_PATH="${RELEASE_NOTES_PATH:-$DIST_DIR/release-notes-v$APP_VERSION.md}"
-ARCHIVE_PATH="${ARCHIVE_PATH:-$DIST_DIR/Meeting-Rescue-v$APP_VERSION-notarized.zip}"
+ARCHIVE_PATH="${ARCHIVE_PATH:-$DIST_DIR/Meeting-Rescue-v$APP_VERSION-notarized.dmg}"
 CHECKSUM_PATH="${CHECKSUM_PATH:-$ARCHIVE_PATH.sha256}"
+ARCHIVE_CONTENT_TYPE="${ARCHIVE_CONTENT_TYPE:-application/x-apple-diskimage}"
 RELEASE_DRAFT="${RELEASE_DRAFT:-0}"
 PAGES_BASE_URL="${PAGES_BASE_URL:-https://breadceo.github.io/meeting-rescue}"
 RELEASE_ASSET_URL="${RELEASE_ASSET_URL:-https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG_NAME/$(basename "$ARCHIVE_PATH")}"
@@ -67,14 +68,14 @@ git push origin "$TAG_NAME"
 
 if gh release view "$TAG_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
   gh release upload "$TAG_NAME" \
-    "$ARCHIVE_PATH#Meeting Rescue $APP_VERSION for macOS" \
+    "$ARCHIVE_PATH#Meeting Rescue $APP_VERSION for macOS DMG" \
     "$CHECKSUM_PATH#SHA-256 checksum" \
     --repo "$GITHUB_REPOSITORY" \
     --clobber
 else
   release_args=(
     release create "$TAG_NAME"
-    "$ARCHIVE_PATH#Meeting Rescue $APP_VERSION for macOS"
+    "$ARCHIVE_PATH#Meeting Rescue $APP_VERSION for macOS DMG"
     "$CHECKSUM_PATH#SHA-256 checksum"
     --repo "$GITHUB_REPOSITORY"
     --title "$RELEASE_TITLE"
@@ -113,7 +114,7 @@ cat > "$APPCAST_PATH" <<APPCAST
       <enclosure
         url="$RELEASE_ASSET_URL"
         $signature_attributes
-        type="application/zip" />
+        type="$ARCHIVE_CONTENT_TYPE" />
     </item>
   </channel>
 </rss>
