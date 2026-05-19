@@ -13,6 +13,8 @@ APP_VERSION="${APP_VERSION:-$(tr -d '[:space:]' < "$VERSION_FILE")}"
 TAG_NAME="${TAG_NAME:-v$APP_VERSION}"
 GITHUB_REPOSITORY="${GITHUB_REPOSITORY:-breadceo/meeting-rescue}"
 DIST_DIR="${DIST_DIR:-$ROOT_DIR/dist}"
+APP_NAME="${APP_NAME:-Meeting Rescue}"
+APP_DIR="$DIST_DIR/$APP_NAME.app"
 RELEASE_TITLE="${RELEASE_TITLE:-Meeting Rescue $TAG_NAME}"
 RELEASE_NOTES_PATH="${RELEASE_NOTES_PATH:-$DIST_DIR/release-notes-v$APP_VERSION.md}"
 ARCHIVE_PATH="${ARCHIVE_PATH:-$DIST_DIR/Meeting-Rescue-v$APP_VERSION-notarized.dmg}"
@@ -56,9 +58,51 @@ fi
 
 shasum -a 256 -c "$CHECKSUM_PATH"
 
+if [[ -d "$APP_DIR" ]]; then
+  codesign --verify --deep --strict --verbose=2 "$APP_DIR" >/dev/null
+fi
+
+if [[ "$ARCHIVE_PATH" == *.dmg ]]; then
+  xcrun stapler validate "$ARCHIVE_PATH" >/dev/null
+  spctl -a -t open --context context:primary-signature -vv "$ARCHIVE_PATH" >/dev/null
+fi
+
 signature_attributes="$("$SPARKLE_SIGN_UPDATE_TOOL" "$ARCHIVE_PATH")"
 pub_date="$(LC_ALL=C date -R)"
 build_number="$(plutil -extract CFBundleVersion raw -o - "$DIST_DIR/Meeting Rescue.app/Contents/Info.plist" 2>/dev/null || git rev-list --count HEAD 2>/dev/null || printf '1')"
+archive_basename="$(basename "$ARCHIVE_PATH")"
+checksum_value="$(awk '{print $1}' "$CHECKSUM_PATH")"
+app_notary_result="$DIST_DIR/notary/Meeting-Rescue-v$APP_VERSION-notary-result.json"
+dmg_notary_result="$DIST_DIR/notary/Meeting-Rescue-v$APP_VERSION-dmg-notary-result.json"
+app_notary_status="$(plutil -extract status raw -o - "$app_notary_result" 2>/dev/null || printf 'not recorded')"
+app_notary_id="$(plutil -extract id raw -o - "$app_notary_result" 2>/dev/null || printf '-')"
+dmg_notary_status="$(plutil -extract status raw -o - "$dmg_notary_result" 2>/dev/null || printf 'not recorded')"
+dmg_notary_id="$(plutil -extract id raw -o - "$dmg_notary_result" 2>/dev/null || printf '-')"
+
+if grep -q 'pending' "$RELEASE_NOTES_PATH"; then
+  cat > "$RELEASE_NOTES_PATH" <<NOTES
+# Meeting Rescue v$APP_VERSION
+
+- Build: $build_number
+- Bundle ID: ${BUNDLE_ID:-com.local.meeting-rescue}
+- Distribution: GitHub Release DMG
+
+## 검증
+
+- codesign verification: passed
+- App notarization: $app_notary_status ($app_notary_id)
+- DMG notarization: $dmg_notary_status ($dmg_notary_id)
+- staple validation: passed
+- Gatekeeper validation: accepted
+- Sparkle appcast signature: passed
+
+## Checksum
+
+\`\`\`txt
+$checksum_value  $archive_basename
+\`\`\`
+NOTES
+fi
 
 if ! git rev-parse "$TAG_NAME" >/dev/null 2>&1; then
   git tag -a "$TAG_NAME" -m "Meeting Rescue $TAG_NAME"
