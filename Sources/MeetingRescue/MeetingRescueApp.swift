@@ -6,7 +6,7 @@ struct MeetingRescueApp: App {
     @StateObject private var sparkleUpdater = SparkleUpdater()
 
     var body: some Scene {
-        WindowGroup {
+        WindowGroup(AppVersion.displayTitle) {
             ContentView()
                 .environmentObject(viewModel)
                 .environmentObject(sparkleUpdater)

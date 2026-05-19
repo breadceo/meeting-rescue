@@ -70,7 +70,7 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .top, spacing: 16) {
                 VStack(alignment: .leading, spacing: 7) {
-                    Text("Meeting Rescue")
+                    Text(AppVersion.displayTitle)
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(Color.smoothAccent)
                         .textCase(.uppercase)
