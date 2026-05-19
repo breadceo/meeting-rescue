@@ -10,6 +10,9 @@ let package = Package(
     products: [
         .executable(name: "MeetingRescue", targets: ["MeetingRescue"])
     ],
+    dependencies: [
+        .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.7.0")
+    ],
     targets: [
         .target(
             name: "MeetingRescueCore",
@@ -17,7 +20,10 @@ let package = Package(
         ),
         .executableTarget(
             name: "MeetingRescue",
-            dependencies: ["MeetingRescueCore"],
+            dependencies: [
+                "MeetingRescueCore",
+                .product(name: "Sparkle", package: "Sparkle")
+            ],
             path: "Sources/MeetingRescue",
             resources: [
                 .copy("Resources")

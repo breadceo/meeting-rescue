@@ -3,11 +3,21 @@ import SwiftUI
 @main
 struct MeetingRescueApp: App {
     @StateObject private var viewModel = AppViewModel()
+    @StateObject private var sparkleUpdater = SparkleUpdater()
 
     var body: some Scene {
         WindowGroup {
             ContentView()
                 .environmentObject(viewModel)
+                .environmentObject(sparkleUpdater)
+        }
+        .commands {
+            CommandGroup(after: .appInfo) {
+                Button("업데이트 확인...") {
+                    sparkleUpdater.checkForUpdates()
+                }
+                .disabled(!sparkleUpdater.canCheckForUpdates)
+            }
         }
     }
 }

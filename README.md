@@ -72,7 +72,7 @@ swift run MeetingRescue
 open "dist/Meeting Rescue.app"
 ```
 
-`build_app.sh`는 release build를 만든 뒤 `dist/Meeting Rescue.app`을 생성하고, SwiftPM resource bundle과 앱 아이콘을 함께 복사합니다. `config/release.local.env`에 signing identity가 있으면 Developer ID signing을 사용하고, 없으면 로컬 개발용 ad-hoc signing을 사용합니다.
+`build_app.sh`는 release build를 만든 뒤 `dist/Meeting Rescue.app`을 생성하고, SwiftPM resource bundle, 앱 아이콘, Sparkle update framework를 함께 복사합니다. `config/release.local.env`에 signing identity가 있으면 Developer ID signing을 사용하고, 없으면 로컬 개발용 ad-hoc signing을 사용합니다.
 
 ## 배포 빌드
 
@@ -104,6 +104,14 @@ notarization이 성공하면 최종 배포용 archive가 생성됩니다.
 
 - `dist/Meeting-Rescue-vX.Y.Z-notarized.zip`
 - `dist/Meeting-Rescue-vX.Y.Z-notarized.zip.sha256`
+
+GitHub Release와 Sparkle appcast를 발행하려면 notarization 이후 다음 명령을 실행합니다.
+
+```sh
+./scripts/publish_github_release.sh
+```
+
+이 스크립트는 `vX.Y.Z` tag와 GitHub Release asset을 만들고, Sparkle 서명을 포함한 `docs/appcast.xml`을 갱신합니다. `docs/appcast.xml`은 GitHub Pages의 `/docs` source로 배포되어 앱의 자동 업데이트 feed가 됩니다. Sparkle private key는 Keychain에 보관하고, 백업 파일이 필요하면 `private/` 아래에 두세요. `private/`는 git에 포함하지 않습니다.
 
 ## Transcript 폴더
 
@@ -374,6 +382,7 @@ Sources/
     ContentView.swift
     MeetingRescueApp.swift
     MeetingSearchDatabase.swift
+    SparkleUpdater.swift
     Resources/
       analysis-output.schema.json
       analysis-patch-output.schema.json
@@ -391,6 +400,10 @@ scripts/
   build_app.sh
   package_release.sh
   notarize_app.sh
+  publish_github_release.sh
+docs/
+  appcast.xml
+  index.html
 ```
 
 ## 알려진 제한

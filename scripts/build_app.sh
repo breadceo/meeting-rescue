@@ -17,10 +17,13 @@ VERSION_FILE="${VERSION_FILE:-$ROOT_DIR/VERSION}"
 APP_VERSION="${APP_VERSION:-$(tr -d '[:space:]' < "$VERSION_FILE")}"
 BUILD_NUMBER="${BUILD_NUMBER:-$(git rev-list --count HEAD 2>/dev/null || printf '1')}"
 APP_COPYRIGHT="${APP_COPYRIGHT:-Local development build}"
+SPARKLE_FEED_URL="${SPARKLE_FEED_URL:-https://breadceo.github.io/meeting-rescue/appcast.xml}"
+SPARKLE_PUBLIC_ED_KEY="${SPARKLE_PUBLIC_ED_KEY:-8yIn4P2gjbcldQzL4LaA7ekXXB6DdEJIq7J5bc8yKU0=}"
 APP_DIR="$ROOT_DIR/dist/$APP_NAME.app"
 CONTENTS_DIR="$APP_DIR/Contents"
 MACOS_DIR="$CONTENTS_DIR/MacOS"
 RESOURCES_DIR="$CONTENTS_DIR/Resources"
+FRAMEWORKS_DIR="$CONTENTS_DIR/Frameworks"
 APP_ICON_SOURCE="$ROOT_DIR/Sources/MeetingRescue/Resources/AppIcon.png"
 APP_ICON_NAME="AppIcon"
 
@@ -31,12 +34,22 @@ swift build -c "$CONFIGURATION" --product MeetingRescue
 BIN_DIR="$(swift build -c "$CONFIGURATION" --show-bin-path)"
 EXECUTABLE="$BIN_DIR/MeetingRescue"
 RESOURCE_BUNDLE="$BIN_DIR/MeetingRescue_MeetingRescue.bundle"
+SPARKLE_FRAMEWORK_SOURCE="$ROOT_DIR/.build/artifacts/sparkle/Sparkle/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework"
 
 rm -rf "$APP_DIR"
-mkdir -p "$MACOS_DIR" "$RESOURCES_DIR"
+mkdir -p "$MACOS_DIR" "$RESOURCES_DIR" "$FRAMEWORKS_DIR"
 
 cp "$EXECUTABLE" "$MACOS_DIR/MeetingRescue"
 chmod +x "$MACOS_DIR/MeetingRescue"
+install_name_tool -add_rpath "@executable_path/../Frameworks" "$MACOS_DIR/MeetingRescue" 2>/dev/null || true
+
+if [[ -d "$SPARKLE_FRAMEWORK_SOURCE" ]]; then
+  ditto "$SPARKLE_FRAMEWORK_SOURCE" "$FRAMEWORKS_DIR/Sparkle.framework"
+else
+  printf 'error: Sparkle.framework not found at %s\n' "$SPARKLE_FRAMEWORK_SOURCE" >&2
+  printf 'Run swift package resolve and build again.\n' >&2
+  exit 1
+fi
 
 if [[ -d "$RESOURCE_BUNDLE" ]]; then
   cp -R "$RESOURCE_BUNDLE" "$RESOURCES_DIR/MeetingRescue_MeetingRescue.bundle"
@@ -89,6 +102,24 @@ cat > "$CONTENTS_DIR/Info.plist" <<PLIST
   <string>$APP_COPYRIGHT</string>
   <key>NSDocumentsFolderUsageDescription</key>
   <string>Meeting Rescue는 사용자가 선택한 Recordings 폴더의 transcript 파일을 읽기 위해 Documents 접근이 필요합니다.</string>
+  <key>SUFeedURL</key>
+  <string>$SPARKLE_FEED_URL</string>
+  <key>SUPublicEDKey</key>
+  <string>$SPARKLE_PUBLIC_ED_KEY</string>
+  <key>SUEnableAutomaticChecks</key>
+  <true/>
+  <key>SUAutomaticallyUpdate</key>
+  <true/>
+  <key>SUAllowsAutomaticUpdates</key>
+  <true/>
+  <key>SUScheduledCheckInterval</key>
+  <integer>86400</integer>
+  <key>SUEnableInstallerLauncherService</key>
+  <true/>
+  <key>SURequireSignedFeed</key>
+  <true/>
+  <key>SUVerifyUpdateBeforeExtraction</key>
+  <true/>
 </dict>
 </plist>
 PLIST

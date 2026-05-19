@@ -22,6 +22,7 @@ private struct EditingCandidate: Equatable {
 
 struct ContentView: View {
     @EnvironmentObject private var viewModel: AppViewModel
+    @EnvironmentObject private var sparkleUpdater: SparkleUpdater
     @State private var showingSettings = false
     @State private var intelligenceMode: IntelligenceMode = .overview
     @State private var editingCandidate: EditingCandidate?
@@ -54,6 +55,7 @@ struct ContentView: View {
         .sheet(isPresented: $showingSettings) {
             SettingsView()
                 .environmentObject(viewModel)
+                .environmentObject(sparkleUpdater)
         }
         .sheet(isPresented: $viewModel.isShowingOnboarding) {
             OnboardingView()
@@ -1447,6 +1449,7 @@ struct ContentView: View {
 
 struct SettingsView: View {
     @EnvironmentObject private var viewModel: AppViewModel
+    @EnvironmentObject private var sparkleUpdater: SparkleUpdater
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -1527,6 +1530,13 @@ struct SettingsView: View {
                 } label: {
                     Label("selected Recordings folder 변경", systemImage: "folder")
                 }
+
+                Button {
+                    sparkleUpdater.checkForUpdates()
+                } label: {
+                    Label("업데이트 확인", systemImage: "arrow.down.circle")
+                }
+                .disabled(!sparkleUpdater.canCheckForUpdates)
 
                 Button(role: .destructive) {
                     viewModel.clearCurrentAnalysisState()
