@@ -64,6 +64,9 @@ struct ContentView: View {
         .sheet(item: $selectedAnalysisAttempt) { attempt in
             AnalysisAttemptDetailView(attempt: attempt)
         }
+        .onChange(of: sparkleUpdater.blockingSheetDismissalRequestID) {
+            dismissBlockingSheetsForUpdate()
+        }
     }
 
     private var header: some View {
@@ -1364,6 +1367,14 @@ struct ContentView: View {
         .controlSize(.regular)
     }
 
+    private func dismissBlockingSheetsForUpdate() {
+        showingSettings = false
+        selectedAnalysisAttempt = nil
+        if viewModel.isShowingOnboarding {
+            viewModel.completeOnboarding()
+        }
+    }
+
     private func statusChip(_ label: String, _ value: String, systemImage: String) -> some View {
         Label {
             HStack(spacing: 4) {
@@ -1531,6 +1542,7 @@ struct SettingsView: View {
                 .buttonStyle(SmoothActionButtonStyle())
 
                 Button {
+                    dismiss()
                     sparkleUpdater.checkForUpdates()
                 } label: {
                     Label("업데이트 확인", systemImage: "arrow.down.circle")
