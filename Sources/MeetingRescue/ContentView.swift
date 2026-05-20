@@ -287,7 +287,7 @@ struct ContentView: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
-        .background(Color.white, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .background(Color.smoothSurface, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .stroke(viewModel.isTestRunActive ? Color.smoothAccent.opacity(0.55) : Color.smoothLine, lineWidth: 1)
@@ -310,7 +310,7 @@ struct ContentView: View {
                     .foregroundStyle(Color.smoothMuted)
                     .padding(.horizontal, 7)
                     .padding(.vertical, 3)
-                    .background(Color.white, in: Capsule())
+                    .background(Color.smoothSurface, in: Capsule())
                     .overlay(Capsule().stroke(Color.smoothLine, lineWidth: 1))
             }
 
@@ -335,7 +335,7 @@ struct ContentView: View {
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
-            .background(Color.white, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .background(Color.smoothSurface, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .stroke(Color.smoothAccent.opacity(0.55), lineWidth: 1)
@@ -371,7 +371,7 @@ struct ContentView: View {
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 7)
-            .background(Color.white, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .background(Color.smoothSurface, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .stroke(Color.smoothLine, lineWidth: 1)
@@ -394,7 +394,7 @@ struct ContentView: View {
                 .foregroundStyle(Color.smoothInk)
                 .padding(.horizontal, 7)
                 .padding(.vertical, 3)
-                .background(Color.white, in: Capsule())
+                .background(Color.smoothSurface, in: Capsule())
                 .overlay(Capsule().stroke(Color.smoothLine, lineWidth: 1))
         }
         .menuStyle(.borderlessButton)
@@ -421,7 +421,7 @@ struct ContentView: View {
                             .font(.caption.weight(.semibold))
                             .frame(width: 24, height: 24)
                             .foregroundStyle(Color.smoothAccent)
-                            .background(Color.white, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                            .background(Color.smoothSurface, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
                             .overlay(
                                 RoundedRectangle(cornerRadius: 7, style: .continuous)
                                     .stroke(Color.smoothLine, lineWidth: 1)
@@ -538,7 +538,7 @@ struct ContentView: View {
         .padding(.horizontal, 7)
         .padding(.vertical, 5)
         .frame(maxWidth: .infinity)
-        .background(Color.white, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+        .background(Color.smoothSurface, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 7, style: .continuous)
                 .stroke(isActive ? Color.smoothAccent.opacity(0.55) : Color.smoothLine, lineWidth: 1)
@@ -558,7 +558,7 @@ struct ContentView: View {
         if viewModel.transcriptRunMode == .liveWatch {
             return Color.smoothMint
         }
-        return Color.white
+        return Color.smoothSurface
     }
 
     private func historyRow(
@@ -629,7 +629,7 @@ struct ContentView: View {
             }
         }
         .padding(10)
-        .background(isSelected ? Color.smoothMint : Color.white, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .background(isSelected ? Color.smoothMint : Color.smoothSurface, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .stroke(isSelected ? Color.smoothAccent.opacity(0.45) : Color.smoothLine, lineWidth: 1)
@@ -682,7 +682,7 @@ struct ContentView: View {
                     .frame(height: 1)
                     .id("bottom")
             }
-            .background(Color.white)
+            .background(Color.smoothSurface)
             .onChange(of: viewModel.rawTranscriptRevision) {
                 proxy.scrollTo("bottom", anchor: .bottom)
             }
@@ -831,7 +831,7 @@ struct ContentView: View {
         }
         .padding(10)
         .frame(maxWidth: .infinity, minHeight: 54)
-        .background(Color.white, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .background(Color.smoothSurface, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .stroke(Color.smoothLine, lineWidth: 1)
@@ -1167,7 +1167,7 @@ struct ContentView: View {
                 .font(.callout)
                 .frame(minHeight: 72)
                 .padding(6)
-                .background(Color.white, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .background(Color.smoothSurface, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(Color.smoothLine, lineWidth: 1))
             editFormActions(
                 saveDisabled: decisionDraftText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
@@ -1359,10 +1359,8 @@ struct ContentView: View {
         Button(action: action) {
             Label(title, systemImage: systemImage)
                 .font(.callout.weight(.semibold))
-                .padding(.horizontal, 6)
-                .padding(.vertical, 2)
         }
-        .buttonStyle(.bordered)
+        .buttonStyle(SmoothActionButtonStyle())
         .controlSize(.regular)
     }
 
@@ -1383,7 +1381,7 @@ struct ContentView: View {
         .font(.caption.weight(.medium))
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
-        .background(Color.white, in: Capsule())
+        .background(Color.smoothSurface, in: Capsule())
         .overlay(Capsule().stroke(Color.smoothLine, lineWidth: 1))
         .frame(maxWidth: 260, alignment: .leading)
     }
@@ -1467,7 +1465,7 @@ struct SettingsView: View {
                     } label: {
                         Label("온보딩", systemImage: "questionmark.circle")
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(SmoothActionButtonStyle())
                 }
                 Text("Model preset은 provider 공통 설정입니다. Codex와 Claude Code는 preset을 CLI model/effort로 적용하고, Custom Command에는 환경변수로 전달합니다.")
                     .font(.callout)
@@ -1530,12 +1528,14 @@ struct SettingsView: View {
                 } label: {
                     Label("selected Recordings folder 변경", systemImage: "folder")
                 }
+                .buttonStyle(SmoothActionButtonStyle())
 
                 Button {
                     sparkleUpdater.checkForUpdates()
                 } label: {
                     Label("업데이트 확인", systemImage: "arrow.down.circle")
                 }
+                .buttonStyle(SmoothActionButtonStyle())
                 .disabled(!sparkleUpdater.canCheckForUpdates)
 
                 Button(role: .destructive) {
@@ -1543,6 +1543,7 @@ struct SettingsView: View {
                 } label: {
                     Label("현재 meeting analysis state 지우기", systemImage: "eraser")
                 }
+                .buttonStyle(SmoothActionButtonStyle(kind: .destructive))
                 .disabled(viewModel.activeTranscriptURL == nil)
 
                 Button(role: .destructive) {
@@ -1550,6 +1551,7 @@ struct SettingsView: View {
                 } label: {
                     Label("선택 폴더 잊기", systemImage: "xmark.circle")
                 }
+                .buttonStyle(SmoothActionButtonStyle(kind: .destructive))
                 .disabled(viewModel.selectedFolderURL == nil)
 
                 Button {
@@ -1560,6 +1562,7 @@ struct SettingsView: View {
                 } label: {
                     Label("onboarding 다시 보기", systemImage: "questionmark.circle")
                 }
+                .buttonStyle(SmoothActionButtonStyle())
             }
 
             HStack {
@@ -1567,6 +1570,7 @@ struct SettingsView: View {
                 Button("닫기") {
                     dismiss()
                 }
+                .buttonStyle(SmoothActionButtonStyle())
                 .keyboardShortcut(.defaultAction)
             }
         }
@@ -1644,7 +1648,7 @@ struct SettingsView: View {
             }
         }
         .padding(10)
-        .background(Color.white.opacity(0.7), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .background(Color.smoothSurface.opacity(0.7), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 
     private func priceString(_ value: Double) -> String {
@@ -1672,7 +1676,7 @@ private struct OnboardingView: View {
                 } label: {
                     Label("닫기", systemImage: "xmark")
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(SmoothActionButtonStyle())
             }
 
             VStack(alignment: .leading, spacing: 12) {
@@ -1693,14 +1697,14 @@ private struct OnboardingView: View {
                             } label: {
                                 Label("감지된 폴더 확인", systemImage: "checkmark.seal")
                             }
-                            .buttonStyle(.borderedProminent)
+                            .buttonStyle(SmoothActionButtonStyle(kind: .primary))
 
                             Button {
                                 viewModel.chooseFolder()
                             } label: {
                                 Label("직접 선택", systemImage: "folder.badge.plus")
                             }
-                            .buttonStyle(.bordered)
+                            .buttonStyle(SmoothActionButtonStyle())
                         }
                     }
                 } else {
@@ -1713,7 +1717,7 @@ private struct OnboardingView: View {
                         } label: {
                             Label("직접 선택", systemImage: "folder.badge.plus")
                         }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(SmoothActionButtonStyle(kind: .primary))
                     }
                 }
                 if let selectedFolderURL = viewModel.selectedFolderURL {
@@ -1764,7 +1768,7 @@ private struct OnboardingView: View {
                 } label: {
                     Label("시작", systemImage: "arrow.right.circle.fill")
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(SmoothActionButtonStyle(kind: .primary))
                 .controlSize(.large)
             }
         }
@@ -1805,7 +1809,7 @@ private struct OnboardingView: View {
             .foregroundStyle(isAvailable ? Color.smoothAccent : Color.smoothMuted)
             .padding(.horizontal, 9)
             .padding(.vertical, 5)
-            .background(Color.white.opacity(0.75), in: Capsule())
+            .background(Color.smoothSurface.opacity(0.75), in: Capsule())
     }
 
     private func onboardingHelpRow(_ title: String, _ description: String, systemImage: String) -> some View {
@@ -1830,7 +1834,7 @@ private extension View {
     func onboardingCard() -> some View {
         padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.white.opacity(0.82), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .background(Color.smoothSurface.opacity(0.82), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .stroke(Color.smoothLine, lineWidth: 1)
@@ -1871,7 +1875,7 @@ private struct AnalysisAttemptDetailView: View {
                             .foregroundStyle(Color.smoothInk)
                             .padding(.horizontal, 10)
                             .padding(.vertical, 6)
-                            .background(Color.white, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                            .background(Color.smoothSurface, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
                             .overlay(
                                 RoundedRectangle(cornerRadius: 7, style: .continuous)
                                     .stroke(Color.smoothLine, lineWidth: 1)
@@ -1908,7 +1912,7 @@ private struct AnalysisAttemptDetailView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(10)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.white, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .background(Color.smoothSurface, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                     .overlay(
                         RoundedRectangle(cornerRadius: 8, style: .continuous)
                             .stroke(Color.smoothLine, lineWidth: 1)
@@ -1934,10 +1938,8 @@ private struct AnalysisAttemptDetailView: View {
                 } label: {
                     Label("닫기", systemImage: "xmark")
                         .font(.callout.weight(.semibold))
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 8)
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(SmoothActionButtonStyle(kind: .primary))
                 .keyboardShortcut(.defaultAction)
             }
         }
@@ -1988,7 +1990,7 @@ private struct AnalysisAttemptDetailView: View {
             }
         }
         .padding(10)
-        .background(Color.white, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .background(Color.smoothSurface, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .stroke(Color.smoothLine, lineWidth: 1)
@@ -2008,7 +2010,7 @@ private struct AnalysisAttemptDetailView: View {
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.white, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .background(Color.smoothSurface, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .stroke(Color.smoothLine, lineWidth: 1)
@@ -2028,7 +2030,7 @@ private struct AnalysisAttemptDetailView: View {
             }
             AnalysisAttemptTextView(text: text)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Color.white, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .background(Color.smoothSurface, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .stroke(Color.smoothLine, lineWidth: 1)
@@ -2127,7 +2129,7 @@ private struct TranscriptLineRow: View, Equatable {
 private extension View {
     func smoothPanel() -> some View {
         self
-            .background(Color.white, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .background(Color.smoothSurface, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .stroke(Color.smoothLine, lineWidth: 1)
@@ -2140,7 +2142,7 @@ private extension View {
             .padding(14)
             .background {
                 ZStack(alignment: .leading) {
-                    Color.white
+                    Color.smoothSurface
                     Rectangle()
                         .fill(tint)
                         .frame(width: 4)
@@ -2154,13 +2156,144 @@ private extension View {
     }
 }
 
+private struct SmoothActionButtonStyle: ButtonStyle {
+    enum Kind {
+        case secondary
+        case primary
+        case destructive
+    }
+
+    @Environment(\.isEnabled) private var isEnabled
+
+    let kind: Kind
+
+    init(kind: Kind = .secondary) {
+        self.kind = kind
+    }
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .padding(.horizontal, horizontalPadding)
+            .padding(.vertical, verticalPadding)
+            .foregroundStyle(foreground.opacity(isEnabled ? 1 : 0.48))
+            .background(background.opacity(backgroundOpacity(configuration: configuration)), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(stroke.opacity(isEnabled ? 1 : 0.55), lineWidth: 1)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    private var horizontalPadding: CGFloat {
+        kind == .primary ? 12 : 10
+    }
+
+    private var verticalPadding: CGFloat {
+        kind == .primary ? 7 : 6
+    }
+
+    private var foreground: Color {
+        switch kind {
+        case .primary:
+            return Color.smoothOnAccent
+        case .secondary:
+            return Color.smoothInk
+        case .destructive:
+            return Color.smoothDestructive
+        }
+    }
+
+    private var background: Color {
+        switch kind {
+        case .primary:
+            return Color.smoothAccent
+        case .secondary:
+            return Color.smoothControl
+        case .destructive:
+            return Color.smoothDestructive.opacity(0.12)
+        }
+    }
+
+    private var stroke: Color {
+        switch kind {
+        case .primary:
+            return Color.smoothAccent
+        case .secondary:
+            return Color.smoothLine
+        case .destructive:
+            return Color.smoothDestructive.opacity(0.35)
+        }
+    }
+
+    private func backgroundOpacity(configuration: Configuration) -> Double {
+        guard isEnabled else { return 0.48 }
+        return configuration.isPressed ? 0.72 : 1
+    }
+}
+
+private extension NSAppearance {
+    var smoothUsesDarkPalette: Bool {
+        bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+    }
+}
+
 private extension Color {
-    static let smoothCanvas = Color(red: 0.965, green: 0.961, blue: 0.937)
-    static let smoothInk = Color(red: 0.075, green: 0.078, blue: 0.071)
-    static let smoothMuted = Color(red: 0.42, green: 0.43, blue: 0.39)
-    static let smoothLine = Color(red: 0.875, green: 0.865, blue: 0.82)
-    static let smoothAccent = Color(red: 0.0, green: 0.56, blue: 0.38)
-    static let smoothMint = Color(red: 0.84, green: 0.96, blue: 0.88)
-    static let smoothSky = Color(red: 0.84, green: 0.91, blue: 0.99)
-    static let smoothWarm = Color(red: 1.0, green: 0.91, blue: 0.78)
+    static let smoothCanvas = smoothDynamic(
+        light: smoothRGB(0.965, 0.961, 0.937),
+        dark: smoothRGB(0.092, 0.096, 0.086)
+    )
+    static let smoothSurface = smoothDynamic(
+        light: smoothRGB(1.0, 1.0, 1.0),
+        dark: smoothRGB(0.145, 0.151, 0.136)
+    )
+    static let smoothControl = smoothDynamic(
+        light: smoothRGB(0.948, 0.945, 0.918),
+        dark: smoothRGB(0.195, 0.204, 0.183)
+    )
+    static let smoothInk = smoothDynamic(
+        light: smoothRGB(0.075, 0.078, 0.071),
+        dark: smoothRGB(0.925, 0.929, 0.888)
+    )
+    static let smoothMuted = smoothDynamic(
+        light: smoothRGB(0.42, 0.43, 0.39),
+        dark: smoothRGB(0.66, 0.68, 0.61)
+    )
+    static let smoothLine = smoothDynamic(
+        light: smoothRGB(0.875, 0.865, 0.82),
+        dark: smoothRGB(0.292, 0.302, 0.265)
+    )
+    static let smoothAccent = smoothDynamic(
+        light: smoothRGB(0.0, 0.56, 0.38),
+        dark: smoothRGB(0.28, 0.82, 0.61)
+    )
+    static let smoothOnAccent = smoothDynamic(
+        light: smoothRGB(1.0, 1.0, 1.0),
+        dark: smoothRGB(0.055, 0.078, 0.064)
+    )
+    static let smoothDestructive = smoothDynamic(
+        light: smoothRGB(0.78, 0.16, 0.13),
+        dark: smoothRGB(1.0, 0.46, 0.38)
+    )
+    static let smoothMint = smoothDynamic(
+        light: smoothRGB(0.84, 0.96, 0.88),
+        dark: smoothRGB(0.118, 0.265, 0.195)
+    )
+    static let smoothSky = smoothDynamic(
+        light: smoothRGB(0.84, 0.91, 0.99),
+        dark: smoothRGB(0.128, 0.206, 0.326)
+    )
+    static let smoothWarm = smoothDynamic(
+        light: smoothRGB(1.0, 0.91, 0.78),
+        dark: smoothRGB(0.34, 0.245, 0.125)
+    )
+
+    private static func smoothDynamic(light: NSColor, dark: NSColor) -> Color {
+        Color(nsColor: NSColor(name: nil) { appearance in
+            appearance.smoothUsesDarkPalette ? dark : light
+        })
+    }
+
+    private static func smoothRGB(_ red: CGFloat, _ green: CGFloat, _ blue: CGFloat) -> NSColor {
+        NSColor(calibratedRed: red, green: green, blue: blue, alpha: 1)
+    }
 }
