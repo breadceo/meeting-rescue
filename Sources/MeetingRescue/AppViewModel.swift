@@ -753,6 +753,9 @@ final class AppViewModel: ObservableObject {
                 return
             }
             debouncedHistorySearchText = query
+            if !historyIncludesRawTranscriptSearch {
+                refreshMeetingHistory(force: true, includeRawTranscriptSearch: true)
+            }
             refreshSearchDatabaseMatches(for: query)
         }
     }
