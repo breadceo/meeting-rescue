@@ -256,7 +256,7 @@ trigger preset:
 
 ## Search
 
-Meeting history search는 SQLite FTS5 index를 사용합니다.
+Meeting history search는 SQLite FTS5 index와 local semantic vector를 함께 사용합니다.
 
 검색 대상:
 
@@ -270,6 +270,15 @@ Meeting history search는 SQLite FTS5 index를 사용합니다.
 - decision/action candidates
 - risks/notes
 - raw transcript segments
+
+검색 ranking:
+
+- FTS5 keyword score
+- local semantic vector score
+- field weight(title, confirmed decision/action, topic, raw transcript 등)
+- 최신순/관련도순 sort option
+
+semantic vector는 Application Support의 SQLite search DB에 chunk 단위로 캐시됩니다. 외부 embedding API를 호출하지 않는 `local-semantic-v2` provider라 검색 비용은 0이고, 마지막 search diagnostics에는 provider, latency, cache signature 관련 metadata가 남습니다.
 
 live meeting 중에는 현재 쓰이는 live transcript가 계속 수정되므로 검색 DB rebuild를 미룹니다. meeting end marker가 감지되거나 live가 아닌 과거 회의를 탐색할 때 검색 DB 갱신이 재개됩니다.
 
@@ -412,7 +421,7 @@ docs/
 - 현재 transcript `.txt` format에 맞춰져 있습니다.
 - microphone recording과 STT는 포함하지 않습니다.
 - Slack/Jira/Calendar 연동은 아직 없습니다.
-- semantic embedding 기반 검색은 아직 없습니다.
+- 외부 embedding API 기반 semantic search는 아직 없습니다. 현재는 로컬 deterministic vector 기반 hybrid search입니다.
 - Codex app-server provider는 prototype backlog입니다.
 - NotebookLM-style Q&A는 아직 구현되지 않았습니다.
 
@@ -423,7 +432,6 @@ docs/
 - Single Meeting Q&A
 - Multi-Meeting Source Q&A
 - NotebookLM-style Q&A Threads
-- Search quality v2
 - Codex app-server provider prototype
 - GitHub Release publish command
 - manual update check

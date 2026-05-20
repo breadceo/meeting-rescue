@@ -8,6 +8,7 @@ struct MeetingSearchDatabaseResult: Equatable, Sendable {
 }
 
 final class MeetingSearchDatabase: @unchecked Sendable {
+    private let schemaVersion = "2"
     private let databaseURL: URL
 
     init(databaseURL: URL) {
@@ -18,6 +19,9 @@ final class MeetingSearchDatabase: @unchecked Sendable {
         let db = try openDatabase()
         defer { sqlite3_close(db) }
         try createSchema(in: db)
+        guard try scalarString(in: db, sql: "SELECT value FROM metadata WHERE key = 'schemaVersion' LIMIT 1") == schemaVersion else {
+            return nil
+        }
         return try scalarString(
             in: db,
             sql: "SELECT value FROM metadata WHERE key = 'signature' LIMIT 1"
@@ -35,12 +39,16 @@ final class MeetingSearchDatabase: @unchecked Sendable {
         try execute("BEGIN IMMEDIATE TRANSACTION", in: db)
         do {
             try execute("DELETE FROM segments_fts", in: db)
+            try execute("DELETE FROM segments_semantic", in: db)
             let total = max(items.count, 1)
             progress?(0, total)
             for (index, item) in items.enumerated() {
                 try insert(item: item, in: db)
                 progress?(index + 1, total)
             }
+            try upsertMetadata(key: "schemaVersion", value: schemaVersion, in: db)
+            try upsertMetadata(key: "semanticProvider", value: MeetingHistorySearch.semanticProviderName, in: db)
+            try upsertMetadata(key: "semanticEstimatedCostUSD", value: "0", in: db)
             try upsertMetadata(key: "signature", value: signature, in: db)
             try upsertMetadata(key: "updatedAt", value: ISO8601DateFormatter().string(from: Date()), in: db)
             try execute("COMMIT", in: db)
@@ -51,6 +59,7 @@ final class MeetingSearchDatabase: @unchecked Sendable {
     }
 
     func search(query: String, limit: Int = 240) throws -> [MeetingSearchDatabaseResult] {
+        let startedAt = Date()
         let terms = MeetingHistorySearch.indexQueryTerms(for: query)
         guard !terms.isEmpty else {
             return []
@@ -59,6 +68,25 @@ final class MeetingSearchDatabase: @unchecked Sendable {
         let db = try openDatabase()
         defer { sqlite3_close(db) }
         try createSchema(in: db)
+        var bestByPath: [String: MeetingSearchDatabaseResult] = [:]
+        try keywordSearch(query: query, terms: terms, limit: limit, db: db, bestByPath: &bestByPath)
+        try semanticSearch(query: query, limit: limit, db: db, bestByPath: &bestByPath)
+        try upsertMetadata(key: "lastSearchDiagnostics", value: searchDiagnosticsJSON(query: query, startedAt: startedAt), in: db)
+        return bestByPath.values.sorted {
+            if $0.match.score == $1.match.score {
+                return $0.path.localizedStandardCompare($1.path) == .orderedAscending
+            }
+            return $0.match.score > $1.match.score
+        }
+    }
+
+    private func keywordSearch(
+        query: String,
+        terms: [String],
+        limit: Int,
+        db: OpaquePointer,
+        bestByPath: inout [String: MeetingSearchDatabaseResult]
+    ) throws {
         let matchQuery = terms.map(escapedFTSTerm).joined(separator: " ")
         let sql = """
         SELECT path, field, timestamp, text, weight, bm25(segments_fts) AS rank
@@ -72,8 +100,10 @@ final class MeetingSearchDatabase: @unchecked Sendable {
         bindText(matchQuery, at: 1, in: statement)
         sqlite3_bind_int(statement, 2, Int32(limit))
 
-        var bestByPath: [String: MeetingSearchDatabaseResult] = [:]
         while sqlite3_step(statement) == SQLITE_ROW {
+            guard !Task.isCancelled else {
+                return
+            }
             let path = columnText(statement, 0)
             let field = MeetingHistorySearchField(rawValue: columnText(statement, 1)) ?? .rawTranscript
             let timestamp = optionalColumnText(statement, 2)
@@ -93,11 +123,67 @@ final class MeetingSearchDatabase: @unchecked Sendable {
             }
             bestByPath[path] = result
         }
-        return bestByPath.values.sorted {
+    }
+
+    private func semanticSearch(
+        query: String,
+        limit: Int,
+        db: OpaquePointer,
+        bestByPath: inout [String: MeetingSearchDatabaseResult]
+    ) throws {
+        let queryVector = MeetingHistorySearch.semanticVector(for: query)
+        guard !queryVector.isEmpty else {
+            return
+        }
+        let sql = """
+        SELECT path, field, timestamp, text, weight, vector
+        FROM segments_semantic;
+        """
+        let statement = try prepare(sql, in: db)
+        defer { sqlite3_finalize(statement) }
+
+        var bestSemanticByPath: [String: MeetingSearchDatabaseResult] = [:]
+        while sqlite3_step(statement) == SQLITE_ROW {
+            guard !Task.isCancelled else {
+                return
+            }
+            let vector = columnText(statement, 5)
+            let semanticScore = MeetingHistorySearch.semanticScore(queryVector: queryVector, vectorString: vector)
+            guard semanticScore > 0 else {
+                continue
+            }
+            let path = columnText(statement, 0)
+            let field = MeetingHistorySearchField(rawValue: columnText(statement, 1)) ?? .rawTranscript
+            let timestamp = optionalColumnText(statement, 2)
+            let text = columnText(statement, 3)
+            let weight = Int(sqlite3_column_int(statement, 4))
+            let score = weight + semanticScore
+            let match = MeetingHistorySearchMatch(
+                score: score,
+                field: field,
+                snippet: text.trimmedFTSSnippet(),
+                timestamp: timestamp
+            )
+            let result = MeetingSearchDatabaseResult(path: path, match: match)
+            if let existing = bestSemanticByPath[path], existing.match.score >= score {
+                continue
+            }
+            bestSemanticByPath[path] = result
+        }
+
+        let semanticResults = bestSemanticByPath.values.sorted {
             if $0.match.score == $1.match.score {
                 return $0.path.localizedStandardCompare($1.path) == .orderedAscending
             }
             return $0.match.score > $1.match.score
+        }
+        .prefix(limit)
+
+        for result in semanticResults {
+            if let existing = bestByPath[result.path], existing.match.score >= result.match.score {
+                continue
+            }
+            bestByPath[result.path] = result
         }
     }
 
@@ -132,27 +218,64 @@ final class MeetingSearchDatabase: @unchecked Sendable {
             tokenize = 'unicode61 remove_diacritics 2'
         );
         """, in: db)
+        try execute("""
+        CREATE TABLE IF NOT EXISTS segments_semantic (
+            path TEXT NOT NULL,
+            field TEXT NOT NULL,
+            timestamp TEXT,
+            text TEXT NOT NULL,
+            weight INTEGER NOT NULL,
+            vector TEXT NOT NULL
+        );
+        """, in: db)
+        try execute("""
+        CREATE INDEX IF NOT EXISTS idx_segments_semantic_path
+        ON segments_semantic(path);
+        """, in: db)
     }
 
     private func insert(item: MeetingHistoryItem, in db: OpaquePointer) throws {
-        let sql = """
+        let ftsSQL = """
         INSERT INTO segments_fts(path, field, timestamp, text, weight, indexedText)
         VALUES (?, ?, ?, ?, ?, ?);
         """
-        let statement = try prepare(sql, in: db)
-        defer { sqlite3_finalize(statement) }
+        let ftsStatement = try prepare(ftsSQL, in: db)
+        defer { sqlite3_finalize(ftsStatement) }
+
+        let semanticSQL = """
+        INSERT INTO segments_semantic(path, field, timestamp, text, weight, vector)
+        VALUES (?, ?, ?, ?, ?, ?);
+        """
+        let semanticStatement = try prepare(semanticSQL, in: db)
+        defer { sqlite3_finalize(semanticStatement) }
 
         for section in item.searchSections {
-            sqlite3_reset(statement)
-            sqlite3_clear_bindings(statement)
-            bindText(item.url.path, at: 1, in: statement)
-            bindText(section.field.rawValue, at: 2, in: statement)
-            bindOptionalText(section.timestamp, at: 3, in: statement)
-            bindText(section.text, at: 4, in: statement)
-            bindText(String(section.weight), at: 5, in: statement)
-            bindText(MeetingHistorySearch.indexText(for: section.text), at: 6, in: statement)
-            guard sqlite3_step(statement) == SQLITE_DONE else {
+            sqlite3_reset(ftsStatement)
+            sqlite3_clear_bindings(ftsStatement)
+            bindText(item.url.path, at: 1, in: ftsStatement)
+            bindText(section.field.rawValue, at: 2, in: ftsStatement)
+            bindOptionalText(section.timestamp, at: 3, in: ftsStatement)
+            bindText(section.text, at: 4, in: ftsStatement)
+            bindText(String(section.weight), at: 5, in: ftsStatement)
+            bindText(MeetingHistorySearch.indexText(for: section.text), at: 6, in: ftsStatement)
+            guard sqlite3_step(ftsStatement) == SQLITE_DONE else {
                 throw error(db, fallback: "검색 segment 저장에 실패했습니다.")
+            }
+
+            let vector = MeetingHistorySearch.semanticVectorString(for: section.text)
+            guard !vector.isEmpty else {
+                continue
+            }
+            sqlite3_reset(semanticStatement)
+            sqlite3_clear_bindings(semanticStatement)
+            bindText(item.url.path, at: 1, in: semanticStatement)
+            bindText(section.field.rawValue, at: 2, in: semanticStatement)
+            bindOptionalText(section.timestamp, at: 3, in: semanticStatement)
+            bindText(section.text, at: 4, in: semanticStatement)
+            bindText(String(section.weight), at: 5, in: semanticStatement)
+            bindText(vector, at: 6, in: semanticStatement)
+            guard sqlite3_step(semanticStatement) == SQLITE_DONE else {
+                throw error(db, fallback: "검색 semantic segment 저장에 실패했습니다.")
             }
         }
     }
@@ -221,6 +344,14 @@ final class MeetingSearchDatabase: @unchecked Sendable {
 
     private func escapedFTSTerm(_ value: String) -> String {
         "\"\(value.replacingOccurrences(of: "\"", with: "\"\""))\""
+    }
+
+    private func searchDiagnosticsJSON(query: String, startedAt: Date) -> String {
+        let elapsedMilliseconds = Int(Date().timeIntervalSince(startedAt) * 1000)
+        let escapedQuery = query.replacingOccurrences(of: "\"", with: "\\\"")
+        return """
+        {"query":"\(escapedQuery)","provider":"\(MeetingHistorySearch.semanticProviderName)","estimatedCostUSD":0,"elapsedMilliseconds":\(elapsedMilliseconds)}
+        """
     }
 
     private func error(_ db: OpaquePointer?, fallback: String) -> SearchDatabaseError {

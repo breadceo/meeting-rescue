@@ -151,7 +151,7 @@ struct MeetingHistorySearchResult: Identifiable, Equatable, Sendable {
     }
 }
 
-enum MeetingHistorySortOrder: String, CaseIterable, Equatable {
+enum MeetingHistorySortOrder: String, CaseIterable, Equatable, Sendable {
     case newest
     case relevance
 
@@ -452,6 +452,60 @@ private func sortedUnique(_ values: [String]) -> [String] {
     .sorted { $0.localizedStandardCompare($1) == .orderedAscending }
 }
 
+private func buildMeetingHistorySearchResults(
+    items: [MeetingHistoryItem],
+    query: String,
+    facetSelection: MeetingHistoryFacetSelection,
+    sortOrder: MeetingHistorySortOrder,
+    databaseMatchesByPath: [String: MeetingHistorySearchMatch]
+) -> [MeetingHistorySearchResult] {
+    let facetFilteredItems = items.filter {
+        facetSelection.matches($0.filterDocument)
+    }
+    let matchedResults = facetFilteredItems.compactMap { item -> MeetingHistorySearchResult? in
+        let databaseMatch = databaseMatchesByPath[item.id]
+        guard let match = databaseMatch ?? item.searchMatch(for: query) else {
+            return nil
+        }
+        let anchorTimestamp = match.timestamp ?? databaseMatch?.timestamp ?? item.searchAnchorMatch(for: query)?.timestamp
+        return MeetingHistorySearchResult(item: item, match: match, anchorTimestamp: anchorTimestamp)
+    }
+    return sortMeetingHistorySearchResults(
+        matchedResults,
+        sortOrder: sortOrder,
+        queryIsEmpty: false
+    )
+}
+
+private func sortMeetingHistorySearchResults(
+    _ results: [MeetingHistorySearchResult],
+    sortOrder: MeetingHistorySortOrder,
+    queryIsEmpty: Bool
+) -> [MeetingHistorySearchResult] {
+    results.sorted { lhs, rhs in
+        if sortOrder == .newest || queryIsEmpty {
+            if lhs.item.modificationDate == rhs.item.modificationDate {
+                let lhsScore = lhs.match?.score ?? 0
+                let rhsScore = rhs.match?.score ?? 0
+                if lhsScore == rhsScore {
+                    return lhs.item.title.localizedStandardCompare(rhs.item.title) == .orderedAscending
+                }
+                return lhsScore > rhsScore
+            }
+            return lhs.item.modificationDate > rhs.item.modificationDate
+        }
+        let lhsScore = lhs.match?.score ?? 0
+        let rhsScore = rhs.match?.score ?? 0
+        if lhsScore == rhsScore {
+            if lhs.item.modificationDate == rhs.item.modificationDate {
+                return lhs.item.title.localizedStandardCompare(rhs.item.title) == .orderedAscending
+            }
+            return lhs.item.modificationDate > rhs.item.modificationDate
+        }
+        return lhsScore > rhsScore
+    }
+}
+
 @MainActor
 final class AppViewModel: ObservableObject {
     @Published var selectedFolderURL: URL?
@@ -551,6 +605,7 @@ final class AppViewModel: ObservableObject {
     private var searchIndexBuildTask: Task<Void, Never>?
     private var lastReadySearchIndexSignature: String?
     private var searchDatabaseQueryTask: Task<Void, Never>?
+    private var searchDatabaseQueryGeneration = 0
     private var searchDatabaseMatchesByPath: [String: MeetingHistorySearchMatch] = [:]
     private var searchDatabaseMatchQuery = ""
     private let historySearchDebounceDelayNanoseconds: UInt64 = 300_000_000
@@ -661,33 +716,24 @@ final class AppViewModel: ObservableObject {
         _ results: [MeetingHistorySearchResult],
         queryIsEmpty: Bool
     ) -> [MeetingHistorySearchResult] {
-        results
-            .sorted { lhs, rhs in
-                if historySortOrder == .newest || queryIsEmpty {
-                    if lhs.item.modificationDate == rhs.item.modificationDate {
-                        let lhsScore = lhs.match?.score ?? 0
-                        let rhsScore = rhs.match?.score ?? 0
-                        if lhsScore == rhsScore {
-                            return lhs.item.title.localizedStandardCompare(rhs.item.title) == .orderedAscending
-                        }
-                        return lhsScore > rhsScore
-                    }
-                    return lhs.item.modificationDate > rhs.item.modificationDate
-                }
-                let lhsScore = lhs.match?.score ?? 0
-                let rhsScore = rhs.match?.score ?? 0
-                if lhsScore == rhsScore {
-                    if lhs.item.modificationDate == rhs.item.modificationDate {
-                        return lhs.item.title.localizedStandardCompare(rhs.item.title) == .orderedAscending
-                    }
-                    return lhs.item.modificationDate > rhs.item.modificationDate
-                }
-                return lhsScore > rhsScore
-            }
+        sortMeetingHistorySearchResults(
+            results,
+            sortOrder: historySortOrder,
+            queryIsEmpty: queryIsEmpty
+        )
     }
 
     private func refreshFilteredMeetingHistoryResults() {
-        filteredMeetingHistorySearchResults = makeFilteredMeetingHistorySearchResults()
+        let trimmed = debouncedHistorySearchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            searchDatabaseQueryGeneration += 1
+            searchDatabaseQueryTask?.cancel()
+            searchDatabaseMatchesByPath = [:]
+            searchDatabaseMatchQuery = ""
+            filteredMeetingHistorySearchResults = makeFilteredMeetingHistorySearchResults()
+            return
+        }
+        refreshSearchDatabaseMatches(for: trimmed)
     }
 
     private func scheduleHistorySearchRefresh(for query: String) {
@@ -707,36 +753,61 @@ final class AppViewModel: ObservableObject {
                 return
             }
             debouncedHistorySearchText = query
-            refreshFilteredMeetingHistoryResults()
             refreshSearchDatabaseMatches(for: query)
         }
     }
 
     private func refreshSearchDatabaseMatches(for query: String) {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, let searchDatabase, searchIndexProgress.isReady else {
+        guard !trimmed.isEmpty else {
             searchDatabaseMatchesByPath = [:]
             searchDatabaseMatchQuery = trimmed
             return
         }
 
+        let items = meetingHistoryItems
+        let facetSelection = historyFacetSelection
+        let sortOrder = historySortOrder
+        let databaseIsReady = searchIndexProgress.isReady
+        searchDatabaseQueryGeneration += 1
+        let generation = searchDatabaseQueryGeneration
+
         searchDatabaseQueryTask?.cancel()
-        searchDatabaseQueryTask = Task { [weak self, searchDatabase, trimmed] in
-            let results = await Task.detached(priority: .userInitiated) {
-                (try? searchDatabase.search(query: trimmed)) ?? []
+        searchDatabaseQueryTask = Task(priority: .utility) { [weak self, searchDatabase, trimmed, items, facetSelection, sortOrder, databaseIsReady, generation] in
+            let results: ([String: MeetingHistorySearchMatch], [MeetingHistorySearchResult]) = await Task.detached(priority: .utility) {
+                let databaseResults: [MeetingSearchDatabaseResult] = if databaseIsReady, let searchDatabase {
+                    (try? searchDatabase.search(query: trimmed)) ?? []
+                } else {
+                    []
+                }
+                guard !Task.isCancelled else {
+                    return ([:], [])
+                }
+                let databaseMatchesByPath = Dictionary(
+                    uniqueKeysWithValues: databaseResults.map { ($0.path, $0.match) }
+                )
+                let filteredResults = buildMeetingHistorySearchResults(
+                    items: items,
+                    query: trimmed,
+                    facetSelection: facetSelection,
+                    sortOrder: sortOrder,
+                    databaseMatchesByPath: databaseMatchesByPath
+                )
+                return (databaseMatchesByPath, filteredResults)
             }
             .value
             await MainActor.run {
                 guard let self,
                       !Task.isCancelled,
-                      self.debouncedHistorySearchText.trimmingCharacters(in: .whitespacesAndNewlines) == trimmed else {
+                      self.searchDatabaseQueryGeneration == generation,
+                      self.debouncedHistorySearchText.trimmingCharacters(in: .whitespacesAndNewlines) == trimmed,
+                      self.historyFacetSelection == facetSelection,
+                      self.historySortOrder == sortOrder else {
                     return
                 }
-                self.searchDatabaseMatchesByPath = Dictionary(
-                    uniqueKeysWithValues: results.map { ($0.path, $0.match) }
-                )
+                self.searchDatabaseMatchesByPath = results.0
                 self.searchDatabaseMatchQuery = trimmed
-                self.refreshFilteredMeetingHistoryResults()
+                self.filteredMeetingHistorySearchResults = results.1
             }
         }
     }

@@ -99,4 +99,33 @@ struct MeetingHistorySearchTests {
         #expect(anchorMatch?.field == .rawTranscript)
         #expect(anchorMatch?.timestamp == "09:04")
     }
+
+    @Test("local semantic vector connects related meeting terms without exact keyword")
+    func localSemanticVectorMatchesRelatedTerms() {
+        let vector = MeetingHistorySearch.semanticVectorString(
+            for: "브랜드 캠페인 비용을 다음 분기에는 축소하기로 결정했다"
+        )
+
+        let relatedScore = MeetingHistorySearch.semanticScore(
+            query: "마케팅 예산 줄인 결정",
+            vectorString: vector
+        )
+        let unrelatedScore = MeetingHistorySearch.semanticScore(
+            query: "회의록 검색 성능",
+            vectorString: vector
+        )
+
+        #expect(relatedScore > 0)
+        #expect(relatedScore > unrelatedScore)
+    }
+
+    @Test("semantic vector serialization is deterministic")
+    func semanticVectorSerializationIsDeterministic() {
+        let first = MeetingHistorySearch.semanticVectorString(for: "검색 품질 개선")
+        let second = MeetingHistorySearch.semanticVectorString(for: "검색 품질 개선")
+
+        #expect(!first.isEmpty)
+        #expect(first == second)
+        #expect(MeetingHistorySearch.semanticSimilarity(lhs: first, rhs: second) > 0.99)
+    }
 }

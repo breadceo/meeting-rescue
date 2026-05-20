@@ -93,6 +93,8 @@ public struct MeetingHistorySearchMatch: Equatable, Sendable {
 }
 
 public enum MeetingHistorySearch {
+    public static let semanticProviderName = "local-semantic-v2"
+
     public static func match(
         sections: [MeetingHistorySearchSection],
         query: String
@@ -195,6 +197,62 @@ public enum MeetingHistorySearch {
             values.append(compact)
         }
         return Array(Set(values)).sorted()
+    }
+
+    public static func semanticVectorString(for value: String) -> String {
+        let terms = semanticTerms(for: value)
+        guard !terms.isEmpty else {
+            return ""
+        }
+        var buckets: [Int: Double] = [:]
+        for term in terms {
+            let bucket = stableHash(term) % semanticDimensions
+            buckets[bucket, default: 0] += semanticWeight(for: term)
+        }
+        let magnitude = sqrt(buckets.values.reduce(0) { $0 + ($1 * $1) })
+        guard magnitude > 0 else {
+            return ""
+        }
+        return buckets
+            .map { key, value in (key, value / magnitude) }
+            .sorted { $0.0 < $1.0 }
+            .map { "\($0.0):\(String(format: "%.5f", $0.1))" }
+            .joined(separator: ",")
+    }
+
+    public static func semanticScore(query: String, vectorString: String) -> Int {
+        semanticScore(queryVector: semanticVector(for: query), vectorString: vectorString)
+    }
+
+    public static func semanticScore(queryVector: [Int: Double], vectorString: String) -> Int {
+        let similarity = semanticSimilarity(lhsVector: queryVector, rhs: vectorString)
+        guard similarity >= 0.12 else {
+            return 0
+        }
+        return Int((similarity * 140).rounded())
+    }
+
+    public static func semanticVector(for value: String) -> [Int: Double] {
+        parseSemanticVector(semanticVectorString(for: value))
+    }
+
+    public static func semanticSimilarity(lhs: String, rhs: String) -> Double {
+        semanticSimilarity(lhsVector: parseSemanticVector(lhs), rhs: rhs)
+    }
+
+    public static func semanticSimilarity(lhsVector: [Int: Double], rhs: String) -> Double {
+        let rhsVector = parseSemanticVector(rhs)
+        guard !lhsVector.isEmpty, !rhsVector.isEmpty else {
+            return 0
+        }
+        if lhsVector.count <= rhsVector.count {
+            return lhsVector.reduce(0) { partial, element in
+                partial + (element.value * (rhsVector[element.key] ?? 0))
+            }
+        }
+        return rhsVector.reduce(0) { partial, element in
+            partial + (element.value * (lhsVector[element.key] ?? 0))
+        }
     }
 
     private static func bestMatch(
@@ -300,6 +358,48 @@ public enum MeetingHistorySearch {
         return tokens
     }
 
+    private static func semanticTerms(for value: String) -> [String] {
+        let normalized = normalize(value)
+        let compact = compactNormalize(value)
+        var terms = Set(expandedTokens(value))
+        if compact.count >= 3 {
+            terms.formUnion(characterNGrams(compact, sizes: 2...4))
+        }
+        for concept in semanticConcepts where concept.matches(normalized: normalized, compact: compact, tokens: terms) {
+            terms.formUnion(concept.aliases)
+        }
+        return terms
+            .map(normalize)
+            .filter { $0.count >= 2 }
+    }
+
+    private static func semanticWeight(for term: String) -> Double {
+        term.count <= 2 ? 0.7 : 1.0
+    }
+
+    private static func parseSemanticVector(_ value: String) -> [Int: Double] {
+        var vector: [Int: Double] = [:]
+        for component in value.split(separator: ",") {
+            let parts = component.split(separator: ":", maxSplits: 1)
+            guard parts.count == 2,
+                  let index = Int(parts[0]),
+                  let weight = Double(parts[1]) else {
+                continue
+            }
+            vector[index] = weight
+        }
+        return vector
+    }
+
+    private static func stableHash(_ value: String) -> Int {
+        var hash: UInt64 = 14_695_981_039_346_656_037
+        for byte in value.utf8 {
+            hash ^= UInt64(byte)
+            hash &*= 1_099_511_628_211
+        }
+        return Int(hash % UInt64(Int.max))
+    }
+
     private static func characterNGrams(_ value: String, size: Int) -> [String] {
         let characters = Array(value)
         guard characters.count >= size else {
@@ -361,6 +461,35 @@ public enum MeetingHistorySearch {
         return Double(overlap * 2) / Double(lhsGrams.count + rhsGrams.count)
     }
 }
+
+private let semanticDimensions = 256
+
+private struct SemanticConcept {
+    let aliases: Set<String>
+
+    func matches(normalized: String, compact: String, tokens: Set<String>) -> Bool {
+        aliases.contains { alias in
+            let normalizedAlias = MeetingHistorySearch.normalize(alias)
+            let compactAlias = MeetingHistorySearch.compactNormalize(alias)
+            return tokens.contains(normalizedAlias)
+                || normalized.contains(normalizedAlias)
+                || (!compactAlias.isEmpty && compact.contains(compactAlias))
+        }
+    }
+}
+
+private let semanticConcepts: [SemanticConcept] = [
+    SemanticConcept(aliases: ["결정", "확정", "의사결정", "합의", "정했다", "결론", "decision"]),
+    SemanticConcept(aliases: ["액션", "할일", "후속", "담당", "todo", "action", "followup"]),
+    SemanticConcept(aliases: ["예산", "비용", "금액", "가격", "단가", "budget", "cost", "price"]),
+    SemanticConcept(aliases: ["축소", "감소", "절감", "줄이다", "줄인", "낮추다", "cut", "reduce"]),
+    SemanticConcept(aliases: ["증가", "확대", "늘리다", "높이다", "increase", "expand"]),
+    SemanticConcept(aliases: ["지연", "느림", "버벅", "성능", "latency", "slow", "performance"]),
+    SemanticConcept(aliases: ["검색", "탐색", "찾기", "search", "find"]),
+    SemanticConcept(aliases: ["업데이트", "배포", "릴리즈", "release", "deploy", "update"]),
+    SemanticConcept(aliases: ["회의록", "원문", "transcript", "script", "recording"]),
+    SemanticConcept(aliases: ["마케팅", "브랜드", "캠페인", "광고", "marketing", "brand", "campaign"])
+]
 
 private extension String {
     var containsHangul: Bool {
