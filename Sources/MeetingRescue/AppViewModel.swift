@@ -1466,9 +1466,15 @@ final class AppViewModel: ObservableObject {
         let stateStore = stateStore
         let lineLimit = rawTranscriptSearchLineLimit
         searchIndexProgress = MeetingSearchIndexProgress(state: .checking, completed: 0, total: meetingHistoryItems.count)
-        searchIndexBuildTask = Task { [weak self, searchDatabase, stateStore, lineLimit, folderURL, fileSignature, excludedURL] in
+        searchIndexBuildTask = Task(priority: .background) { [weak self, searchDatabase, stateStore, lineLimit, folderURL, fileSignature, excludedURL] in
             do {
-                if try searchDatabase.storedSignature() == fileSignature {
+                let storedSignature = try await Task.detached(priority: .background) {
+                    try searchDatabase.storedSignature()
+                }
+                .value
+                try Task.checkCancellation()
+
+                if storedSignature == fileSignature {
                     await MainActor.run {
                         guard let self, self.selectedFolderURL == folderURL else {
                             return
@@ -1487,7 +1493,7 @@ final class AppViewModel: ObservableObject {
                     return
                 }
 
-                let rawResult = await Task.detached(priority: .utility) {
+                let rawResult = await Task.detached(priority: .background) {
                     MeetingHistoryBuilder(
                         stateStore: stateStore,
                         rawTranscriptSearchLineLimit: lineLimit,
@@ -1497,6 +1503,7 @@ final class AppViewModel: ObservableObject {
                     .build(folderURL: folderURL)
                 }
                 .value
+                try Task.checkCancellation()
                 let indexedItems = if let excludedURL {
                     rawResult.items.filter { $0.url != excludedURL }
                 } else {
@@ -1521,9 +1528,12 @@ final class AppViewModel: ObservableObject {
                     }
                 }
                 try Task.checkCancellation()
-                try searchDatabase.rebuild(items: indexedItems, signature: rawResult.searchIndexFileSignature) { completed, total in
-                    progressBox.update(completed: completed, total: total)
+                try await Task.detached(priority: .background) {
+                    try searchDatabase.rebuild(items: indexedItems, signature: rawResult.searchIndexFileSignature) { completed, total in
+                        progressBox.update(completed: completed, total: total)
+                    }
                 }
+                .value
                 progressTask.cancel()
 
                 await MainActor.run {

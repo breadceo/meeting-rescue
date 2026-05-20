@@ -43,6 +43,7 @@ final class MeetingSearchDatabase: @unchecked Sendable {
             let total = max(items.count, 1)
             progress?(0, total)
             for (index, item) in items.enumerated() {
+                try Task.checkCancellation()
                 try insert(item: item, in: db)
                 progress?(index + 1, total)
             }
@@ -250,6 +251,7 @@ final class MeetingSearchDatabase: @unchecked Sendable {
         defer { sqlite3_finalize(semanticStatement) }
 
         for section in item.searchSections {
+            try Task.checkCancellation()
             sqlite3_reset(ftsStatement)
             sqlite3_clear_bindings(ftsStatement)
             bindText(item.url.path, at: 1, in: ftsStatement)
