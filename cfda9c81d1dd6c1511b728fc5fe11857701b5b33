@@ -1,0 +1,17 @@
+Sources/MeetingRescue/ContentView.swift
+  h_d82ccb34241a0d 67-69,1370-1377,1545
+Sources/MeetingRescue/SparkleUpdater.swift
+  h_d82ccb34241a0d 5-8,10-11,19,22-58
+VERSION
+  h_d82ccb34241a0d 1
+---
+{
+  "schema_version": "zax-attestation/1.1.0",
+  "base_commit_sha": "cfda9c81d1dd6c1511b728fc5fe11857701b5b33",
+  "prompts": {},
+  "humans": {
+    "h_d82ccb34241a0d": {
+      "author": "ethan@zigbang.com"
+    }
+  }
+}
