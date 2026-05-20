@@ -753,9 +753,6 @@ final class AppViewModel: ObservableObject {
                 return
             }
             debouncedHistorySearchText = query
-            if !historyIncludesRawTranscriptSearch {
-                refreshMeetingHistory(force: true, includeRawTranscriptSearch: true)
-            }
             refreshSearchDatabaseMatches(for: query)
         }
     }
@@ -779,7 +776,7 @@ final class AppViewModel: ObservableObject {
         searchDatabaseQueryTask = Task(priority: .utility) { [weak self, searchDatabase, trimmed, items, facetSelection, sortOrder, databaseIsReady, generation] in
             let results: ([String: MeetingHistorySearchMatch], [MeetingHistorySearchResult]) = await Task.detached(priority: .utility) {
                 let databaseResults: [MeetingSearchDatabaseResult] = if databaseIsReady, let searchDatabase {
-                    (try? searchDatabase.search(query: trimmed)) ?? []
+                    (try? searchDatabase.search(query: trimmed, includeSemantic: false)) ?? []
                 } else {
                     []
                 }

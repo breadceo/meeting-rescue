@@ -59,7 +59,11 @@ final class MeetingSearchDatabase: @unchecked Sendable {
         }
     }
 
-    func search(query: String, limit: Int = 240) throws -> [MeetingSearchDatabaseResult] {
+    func search(
+        query: String,
+        limit: Int = 240,
+        includeSemantic: Bool = false
+    ) throws -> [MeetingSearchDatabaseResult] {
         let startedAt = Date()
         let terms = MeetingHistorySearch.indexQueryTerms(for: query)
         guard !terms.isEmpty else {
@@ -71,8 +75,14 @@ final class MeetingSearchDatabase: @unchecked Sendable {
         try createSchema(in: db)
         var bestByPath: [String: MeetingSearchDatabaseResult] = [:]
         try keywordSearch(query: query, terms: terms, limit: limit, db: db, bestByPath: &bestByPath)
-        try semanticSearch(query: query, limit: limit, db: db, bestByPath: &bestByPath)
-        try upsertMetadata(key: "lastSearchDiagnostics", value: searchDiagnosticsJSON(query: query, startedAt: startedAt), in: db)
+        if includeSemantic {
+            try semanticSearch(query: query, limit: limit, db: db, bestByPath: &bestByPath)
+        }
+        try upsertMetadata(
+            key: "lastSearchDiagnostics",
+            value: searchDiagnosticsJSON(query: query, startedAt: startedAt, includeSemantic: includeSemantic),
+            in: db
+        )
         return bestByPath.values.sorted {
             if $0.match.score == $1.match.score {
                 return $0.path.localizedStandardCompare($1.path) == .orderedAscending
@@ -348,11 +358,11 @@ final class MeetingSearchDatabase: @unchecked Sendable {
         "\"\(value.replacingOccurrences(of: "\"", with: "\"\""))\""
     }
 
-    private func searchDiagnosticsJSON(query: String, startedAt: Date) -> String {
+    private func searchDiagnosticsJSON(query: String, startedAt: Date, includeSemantic: Bool) -> String {
         let elapsedMilliseconds = Int(Date().timeIntervalSince(startedAt) * 1000)
         let escapedQuery = query.replacingOccurrences(of: "\"", with: "\\\"")
         return """
-        {"query":"\(escapedQuery)","provider":"\(MeetingHistorySearch.semanticProviderName)","estimatedCostUSD":0,"elapsedMilliseconds":\(elapsedMilliseconds)}
+        {"query":"\(escapedQuery)","provider":"\(MeetingHistorySearch.semanticProviderName)","estimatedCostUSD":0,"elapsedMilliseconds":\(elapsedMilliseconds),"semanticEnabled":\(includeSemantic)}
         """
     }
 
