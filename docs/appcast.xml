@@ -8,23 +8,23 @@
     <description>Meeting Rescue release updates.</description>
     <language>ko</language>
     <item>
-      <title>Meeting Rescue 0.1.7</title>
+      <title>Meeting Rescue 0.1.8</title>
       <description><![CDATA[
-        <p>Meeting Rescue 0.1.7 release.</p>
-        <p><a href="https://github.com/breadceo/meeting-rescue/releases/tag/v0.1.7">Release notes</a></p>
+        <p>Meeting Rescue 0.1.8 release.</p>
+        <p><a href="https://github.com/breadceo/meeting-rescue/releases/tag/v0.1.8">Release notes</a></p>
       ]]></description>
-      <pubDate>Wed, 20 May 2026 12:22:34 +0900</pubDate>
-      <sparkle:version>23</sparkle:version>
-      <sparkle:shortVersionString>0.1.7</sparkle:shortVersionString>
+      <pubDate>Wed, 20 May 2026 14:21:21 +0900</pubDate>
+      <sparkle:version>26</sparkle:version>
+      <sparkle:shortVersionString>0.1.8</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
       <enclosure
-        url="https://github.com/breadceo/meeting-rescue/releases/download/v0.1.7/Meeting-Rescue-v0.1.7-notarized.dmg"
-        sparkle:edSignature="6eh8vymEmszsgIw4nfpaLJL4l2Ya0yDSoYaVbU44p7rjCZdvl45uTcQ6lTXHToRp+5yJrQ2uN2KM8Sie9qjyAA==" length="5936538"
+        url="https://github.com/breadceo/meeting-rescue/releases/download/v0.1.8/Meeting-Rescue-v0.1.8-notarized.dmg"
+        sparkle:edSignature="r2xc/J4XYWY2wXPJ86mKc25dO7vp4qcT2417HY922OTbJ9vCvL8ZgFqCGA/6oj362u9QdOYNj6hlB3P2KN5HCg==" length="5959574"
         type="application/x-apple-diskimage" />
     </item>
   </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: tqYzkj048lfbZ+Lg9HCHytip/c3+/9wQ+S1F5FZBUUgks9F3X5EMeOGiQZc+qru6QARKRhJjI0EuwSXnXEigAQ==
+edSignature: cYQjjxEDBly+9c5jlCChGgy1ZoM0aBoZTGEVJz9zCS+aDZ8BJRpytvyZnDksKuGHM2uGApwbnebSm46i4j0sBw==
 length: 1241
 -->
