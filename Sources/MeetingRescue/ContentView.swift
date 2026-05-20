@@ -73,10 +73,27 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .top, spacing: 16) {
                 VStack(alignment: .leading, spacing: 7) {
-                    Text(AppVersion.displayTitle)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(Color.smoothAccent)
-                        .textCase(.uppercase)
+                    HStack(spacing: 8) {
+                        Text(AppVersion.displayTitle)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(Color.smoothAccent)
+                            .textCase(.uppercase)
+
+                        if let availableUpdate = sparkleUpdater.availableUpdate {
+                            Button {
+                                sparkleUpdater.showAvailableUpdate()
+                            } label: {
+                                Label("업데이트 \(availableUpdate.version)", systemImage: "arrow.down.circle.fill")
+                                    .font(.caption.weight(.semibold))
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(Color.smoothOnAccent)
+                            .background(Color.smoothAccent, in: Capsule())
+                            .help("다운로드 및 설치 화면 열기")
+                        }
+                    }
                     Text(viewModel.metadata.displayTitle)
                         .font(.system(size: 26, weight: .bold))
                         .foregroundStyle(Color.smoothInk)
