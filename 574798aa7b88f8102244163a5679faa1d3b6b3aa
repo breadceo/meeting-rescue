@@ -1,0 +1,15 @@
+Sources/MeetingRescue/AppViewModel.swift
+  h_d82ccb34241a0d 3,50-92,1179-1196,1229-1294
+Sources/MeetingRescue/ContentView.swift
+  h_d82ccb34241a0d 116-117,1393-1411
+---
+{
+  "schema_version": "zax-attestation/1.1.0",
+  "base_commit_sha": "574798aa7b88f8102244163a5679faa1d3b6b3aa",
+  "prompts": {},
+  "humans": {
+    "h_d82ccb34241a0d": {
+      "author": "ethan@zigbang.com"
+    }
+  }
+}
