@@ -113,6 +113,8 @@ struct ContentView: View {
                     }
                     .disabled(viewModel.activeTranscriptURL == nil || viewModel.rawTranscript.isEmpty || viewModel.isAnalysisRunning)
 
+                    issueDraftMenu
+
                     headerButton("Markdown", systemImage: "square.and.arrow.down") {
                         viewModel.exportCurrentIntelligenceMarkdown()
                     }
@@ -1386,6 +1388,25 @@ struct ContentView: View {
         }
         .buttonStyle(SmoothActionButtonStyle())
         .controlSize(.regular)
+    }
+
+    private var issueDraftMenu: some View {
+        Menu {
+            ForEach(GitHubIssueDraftKind.allCases) { kind in
+                Button {
+                    viewModel.openGitHubIssueDraft(kind: kind)
+                } label: {
+                    Label(kind.displayName, systemImage: kind.systemImage)
+                }
+            }
+        } label: {
+            Label("이슈", systemImage: "exclamationmark.bubble")
+                .font(.callout.weight(.semibold))
+        }
+        .buttonStyle(SmoothActionButtonStyle())
+        .menuStyle(.button)
+        .controlSize(.regular)
+        .help("GitHub issue 작성 화면을 브라우저로 열기")
     }
 
     private func dismissBlockingSheetsForUpdate() {

@@ -1,5 +1,6 @@
 import Foundation
 import MeetingRescueCore
+import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -43,6 +44,49 @@ enum AnalysisRuntimeStatus: Equatable {
             return oneLine
         }
         return String(oneLine.prefix(limit - 1)) + "…"
+    }
+}
+
+enum GitHubIssueDraftKind: String, CaseIterable, Identifiable {
+    case bug
+    case feature
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .bug:
+            return "버그 신고"
+        case .feature:
+            return "기능 제안"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .bug:
+            return "exclamationmark.triangle"
+        case .feature:
+            return "lightbulb"
+        }
+    }
+
+    var githubLabel: String {
+        switch self {
+        case .bug:
+            return "bug"
+        case .feature:
+            return "enhancement"
+        }
+    }
+
+    var titlePrefix: String {
+        switch self {
+        case .bug:
+            return "[Bug]"
+        case .feature:
+            return "[Feature]"
+        }
     }
 }
 
@@ -1132,6 +1176,24 @@ final class AppViewModel: ObservableObject {
         triggerAnalysis(reason: "manual")
     }
 
+    func openGitHubIssueDraft(kind: GitHubIssueDraftKind) {
+        let title = "\(kind.titlePrefix) "
+        let body = githubIssueDraftBody(kind: kind)
+        var components = URLComponents(string: "https://github.com/breadceo/meeting-rescue/issues/new")
+        components?.queryItems = [
+            URLQueryItem(name: "title", value: title),
+            URLQueryItem(name: "labels", value: kind.githubLabel),
+            URLQueryItem(name: "body", value: body)
+        ]
+
+        guard let url = components?.url else {
+            statusMessage = "GitHub issue URL 생성에 실패했습니다."
+            return
+        }
+        NSWorkspace.shared.open(url)
+        statusMessage = "\(kind.displayName) issue 작성 화면을 브라우저로 열었습니다."
+    }
+
     func exportCurrentIntelligenceMarkdown() {
         guard let activeTranscriptURL, analysisState.latestSnapshot != nil else {
             statusMessage = "저장할 Meeting Intelligence가 아직 없습니다."
@@ -1162,6 +1224,72 @@ final class AppViewModel: ObservableObject {
         } catch {
             statusMessage = "Markdown 저장 실패: \(error.localizedDescription)"
         }
+    }
+
+    private func githubIssueDraftBody(kind: GitHubIssueDraftKind) -> String {
+        let latestAttempt = analysisState.attemptLogs.last
+        let usage = analysisState.usageSummary
+        let appVersion = AppVersion.shortVersion ?? "-"
+        let buildNumber = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "-"
+        let sourceFile = activeTranscriptURL?.lastPathComponent ?? "-"
+        let latestAttemptLines: [String]
+        if let latestAttempt {
+            latestAttemptLines = [
+                "- Reason: \(latestAttempt.reason)",
+                "- Status: \(latestAttempt.status.rawValue)",
+                "- Model: \(latestAttempt.modelName) / \(latestAttempt.modelPreset.displayName)",
+                "- Tokens: \(latestAttempt.inputTokens) in / \(latestAttempt.outputTokens) out",
+                "- Duration: \(latestAttempt.elapsedMilliseconds.map { "\($0)ms" } ?? "-")",
+                "- Message: \(compactIssueText(latestAttempt.message ?? "-", limit: 280))"
+            ]
+        } else {
+            latestAttemptLines = ["- 없음"]
+        }
+
+        return """
+        ## 종류
+        - \(kind.displayName)
+
+        ## 설명
+        <!-- 어떤 문제가 있었는지, 또는 어떤 기능을 원하는지 적어주세요. -->
+
+        ## 기대 동작
+        <!-- 기대한 동작을 적어주세요. -->
+
+        ## 실제 동작
+        <!-- 버그인 경우 실제로 발생한 동작을 적어주세요. -->
+
+        ## 앱 상태
+        - App: Meeting Rescue \(appVersion) (\(buildNumber))
+        - Mode: \(transcriptRunMode.displayText)
+        - Source file: \(sourceFile)
+        - Meeting title: \(compactIssueText(metadata.displayTitle, limit: 120))
+        - Analysis status: \(compactIssueText(analysisStatus.displayText, limit: 160))
+        - Provider: \(settings.selectedProvider.displayName) / \(settings.modelPreset.displayName)
+        - Auto analysis: \(settings.automaticAnalysisEnabled ? "on" : "off")
+        - Search DB: \(compactIssueText(searchIndexProgress.displayText, limit: 160))
+        - Lines: \(rawTranscriptLineCount)
+        - Usage: \(usage.totalInputTokens) in / \(usage.totalOutputTokens) out / \(String(format: "$%.4f", usage.totalEstimatedCostUSD))
+
+        ## 최근 Analysis attempt
+        \(latestAttemptLines.joined(separator: "\n"))
+
+        ## 참고
+        - 회의 원문, 참석자 전체 목록, 로컬 전체 경로는 기본으로 첨부하지 않았습니다.
+        - 필요하면 민감정보를 제거한 뒤 로그/스크린샷을 추가해주세요.
+        """
+    }
+
+    private func compactIssueText(_ text: String, limit: Int) -> String {
+        let oneLine = text
+            .components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+        guard oneLine.count > limit else {
+            return oneLine
+        }
+        return String(oneLine.prefix(limit - 1)) + "…"
     }
 
     func confirmDecision(_ id: String) {
