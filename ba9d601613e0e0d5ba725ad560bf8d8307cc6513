@@ -1,0 +1,13 @@
+VERSION
+  h_d82ccb34241a0d 1
+---
+{
+  "schema_version": "zax-attestation/1.1.0",
+  "base_commit_sha": "ba9d601613e0e0d5ba725ad560bf8d8307cc6513",
+  "prompts": {},
+  "humans": {
+    "h_d82ccb34241a0d": {
+      "author": "ethan@zigbang.com"
+    }
+  }
+}
