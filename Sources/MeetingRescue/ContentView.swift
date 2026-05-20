@@ -181,7 +181,7 @@ struct ContentView: View {
 
             HStack(alignment: .top, spacing: 22) {
                 metadataRow("일시", viewModel.metadata.dateTime ?? "-")
-                metadataRow("참석자", viewModel.metadata.participants.isEmpty ? "-" : viewModel.metadata.participants.joined(separator: ", "))
+                participantMetadataRow(viewModel.metadata.participants)
                 metadataRow("파일", viewModel.activeTranscriptURL?.lastPathComponent ?? "-", monospaced: true)
             }
             .font(.callout)
@@ -784,12 +784,12 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 12) {
             currentIssue(snapshot.currentIssue)
             metricsRow(snapshot)
-            usageSummary()
-            analysisDiagnostics()
             decisions(snapshot.decisionCandidates, compact: true)
             actionItems(snapshot.actionItemCandidates, compact: true)
             timeline(Array(snapshot.topicTimeline.suffix(4)), full: false)
             notes(Array(snapshot.risksOrNotes.prefix(2)))
+            usageSummary()
+            analysisDiagnostics()
         }
     }
 
@@ -1460,6 +1460,51 @@ struct ContentView: View {
                 .foregroundStyle(Color.smoothInk)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func participantMetadataRow(_ participants: [String]) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("참석자")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(Color.smoothMuted)
+
+            if participants.isEmpty {
+                Text("-")
+                    .foregroundStyle(Color.smoothInk)
+            } else {
+                Menu {
+                    ForEach(Array(participants.enumerated()), id: \.offset) { _, participant in
+                        Button(participant) {}
+                    }
+                } label: {
+                    HStack(spacing: 5) {
+                        Text(participantsSummary(participants))
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        Image(systemName: "chevron.down")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(Color.smoothMuted)
+                    }
+                    .foregroundStyle(Color.smoothInk)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .menuStyle(.borderlessButton)
+                .help(participants.joined(separator: "\n"))
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func participantsSummary(_ participants: [String]) -> String {
+        guard let first = participants.first else {
+            return "-"
+        }
+        let remainingCount = participants.count - 1
+        guard remainingCount > 0 else {
+            return first
+        }
+        return "\(first) 외 \(remainingCount)명"
     }
 
     private func emptyState(_ title: String, systemImage: String, description: String) -> some View {
