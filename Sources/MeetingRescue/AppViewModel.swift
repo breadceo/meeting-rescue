@@ -555,6 +555,7 @@ final class AppViewModel: ObservableObject {
     @Published var liveMeetingUpdated = false
     @Published var rawTranscript = ""
     @Published var rawTranscriptPreviewLines: [String] = []
+    @Published private(set) var transcriptSpeakers: [String] = []
     @Published var rawTranscriptRevision = 0
     @Published var transcriptFocusRequest: TranscriptFocusRequest?
     @Published var highlightedTranscriptLineID: Int?
@@ -997,6 +998,7 @@ final class AppViewModel: ObservableObject {
             liveActiveTranscriptURL = nil
             rawTranscript = ""
             rawTranscriptPreviewLines = []
+            transcriptSpeakers = []
             transcriptFocusRequest = nil
             highlightedTranscriptLineID = nil
             rawTranscriptLineCount = 0
@@ -1094,6 +1096,7 @@ final class AppViewModel: ObservableObject {
         historyLiveBaselineCandidate = nil
         rawTranscript = ""
         rawTranscriptPreviewLines = []
+        transcriptSpeakers = []
         transcriptFocusRequest = nil
         highlightedTranscriptLineID = nil
         rawTranscriptLineCount = 0
@@ -1228,6 +1231,7 @@ final class AppViewModel: ObservableObject {
             activeTranscriptURL = fileURL
             rawTranscript = ""
             rawTranscriptPreviewLines = []
+            transcriptSpeakers = []
             transcriptFocusRequest = nil
             highlightedTranscriptLineID = nil
             rawTranscriptLineCount = 0
@@ -1779,6 +1783,7 @@ final class AppViewModel: ObservableObject {
                 activeTranscriptURL = nil
                 rawTranscript = ""
                 rawTranscriptPreviewLines = []
+                transcriptSpeakers = []
                 transcriptFocusRequest = nil
                 highlightedTranscriptLineID = nil
                 rawTranscriptLineCount = 0
@@ -1830,6 +1835,7 @@ final class AppViewModel: ObservableObject {
         activeTranscriptURL = url
         rawTranscript = ""
         rawTranscriptPreviewLines = []
+        transcriptSpeakers = []
         transcriptFocusRequest = nil
         highlightedTranscriptLineID = nil
         rawTranscriptLineCount = 0
@@ -2498,6 +2504,7 @@ final class AppViewModel: ObservableObject {
         let lines = rawTranscript.components(separatedBy: .newlines)
         rawTranscriptLineCount = lines.count
         rawTranscriptPreviewLines = lines
+        transcriptSpeakers = transcriptSpeakerList(from: lines)
         rawTranscriptRevision += 1
     }
 
@@ -2515,7 +2522,59 @@ final class AppViewModel: ObservableObject {
             }
         }
         rawTranscriptLineCount = rawTranscriptPreviewLines.count
+        transcriptSpeakers = transcriptSpeakerList(from: rawTranscriptPreviewLines)
         rawTranscriptRevision += 1
+    }
+
+    private func transcriptSpeakerList(from lines: [String]) -> [String] {
+        var seen = Set<String>()
+        var speakers: [String] = []
+        for line in lines {
+            guard let speaker = transcriptSpeakerName(in: line) else {
+                continue
+            }
+            let key = speaker.lowercased()
+            guard !seen.contains(key) else {
+                continue
+            }
+            seen.insert(key)
+            speakers.append(speaker)
+        }
+        return speakers
+    }
+
+    private func transcriptSpeakerName(in line: String) -> String? {
+        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return nil
+        }
+
+        let remainder: Substring
+        if trimmed.hasPrefix("["),
+           let closing = trimmed.firstIndex(of: "]") {
+            remainder = trimmed[trimmed.index(after: closing)...]
+        } else if trimmed.hasPrefix("("),
+                  let closing = trimmed.firstIndex(of: ")") {
+            remainder = trimmed[trimmed.index(after: closing)...]
+        } else if let firstSpace = trimmed.firstIndex(where: { $0.isWhitespace }) {
+            let timestampCandidate = trimmed[..<firstSpace]
+            guard timestampCandidate.contains(":") else {
+                return nil
+            }
+            remainder = trimmed[trimmed.index(after: firstSpace)...]
+        } else {
+            return nil
+        }
+
+        guard let separator = remainder.firstIndex(where: { $0 == ":" || $0 == "：" }) else {
+            return nil
+        }
+        let speaker = remainder[..<separator].trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !speaker.isEmpty,
+              speaker.trimmingCharacters(in: CharacterSet(charactersIn: "[] ")).caseInsensitiveCompare("SYSTEM") != .orderedSame else {
+            return nil
+        }
+        return speaker
     }
 
     private func rawTranscriptSearchSections(from rawPreview: String) -> [MeetingHistorySearchSection] {

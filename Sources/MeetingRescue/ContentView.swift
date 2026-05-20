@@ -32,6 +32,7 @@ struct ContentView: View {
     @State private var actionDraftDeadline = ""
     @State private var selectedAnalysisAttempt: AnalysisAttemptLog?
     @State private var isAnalysisDiagnosticsExpanded = false
+    @State private var isParticipantsPopoverPresented = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -181,7 +182,10 @@ struct ContentView: View {
 
             HStack(alignment: .top, spacing: 22) {
                 metadataRow("일시", viewModel.metadata.dateTime ?? "-")
-                participantMetadataRow(viewModel.metadata.participants)
+                participantMetadataRow(
+                    participants: viewModel.metadata.participants,
+                    speakers: viewModel.transcriptSpeakers
+                )
                 metadataRow("파일", viewModel.activeTranscriptURL?.lastPathComponent ?? "-", monospaced: true)
             }
             .font(.callout)
@@ -1462,23 +1466,21 @@ struct ContentView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func participantMetadataRow(_ participants: [String]) -> some View {
+    private func participantMetadataRow(participants: [String], speakers: [String]) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("참석자")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(Color.smoothMuted)
 
-            if participants.isEmpty {
+            if participants.isEmpty && speakers.isEmpty {
                 Text("-")
                     .foregroundStyle(Color.smoothInk)
             } else {
-                Menu {
-                    ForEach(Array(participants.enumerated()), id: \.offset) { _, participant in
-                        Button(participant) {}
-                    }
+                Button {
+                    isParticipantsPopoverPresented.toggle()
                 } label: {
                     HStack(spacing: 5) {
-                        Text(participantsSummary(participants))
+                        Text(participantMetadataSummary(participants: participants, speakers: speakers))
                             .lineLimit(1)
                             .truncationMode(.middle)
                         Image(systemName: "chevron.down")
@@ -1489,22 +1491,117 @@ struct ContentView: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .menuStyle(.borderlessButton)
-                .help(participants.joined(separator: "\n"))
+                .popover(isPresented: $isParticipantsPopoverPresented, arrowEdge: .bottom) {
+                    participantsPopover(participants: participants, speakers: speakers)
+                }
+                .help("발화자와 참석자 전체 목록 보기")
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func participantsSummary(_ participants: [String]) -> String {
-        guard let first = participants.first else {
+    private func participantMetadataSummary(participants: [String], speakers: [String]) -> String {
+        if !speakers.isEmpty {
+            let participantText = participants.isEmpty ? "참석자 없음" : "참석자 \(participants.count)명"
+            return "\(peopleSummary(speakers)) 발화 · \(participantText)"
+        }
+        guard !participants.isEmpty else {
             return "-"
         }
-        let remainingCount = participants.count - 1
+        return peopleSummary(participants)
+    }
+
+    private func peopleSummary(_ people: [String]) -> String {
+        guard let first = people.first else {
+            return "-"
+        }
+        let remainingCount = people.count - 1
         guard remainingCount > 0 else {
             return first
         }
         return "\(first) 외 \(remainingCount)명"
+    }
+
+    private func participantsPopover(participants: [String], speakers: [String]) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                Text("회의 인원")
+                    .font(.headline)
+                    .foregroundStyle(Color.smoothInk)
+                Spacer()
+                Text("발화자 \(speakers.count)명 · 참석자 \(participants.count)명")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.smoothMuted)
+            }
+
+            Divider().overlay(Color.smoothLine)
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    participantPopoverSection(
+                        title: "발화자",
+                        count: speakers.count,
+                        people: speakers,
+                        emptyText: "아직 감지된 발화자가 없습니다."
+                    )
+                    participantPopoverSection(
+                        title: "참석자",
+                        count: participants.count,
+                        people: participants,
+                        emptyText: "회의록 metadata에 참석자 목록이 없습니다."
+                    )
+                }
+            }
+            .frame(maxHeight: 340)
+        }
+        .padding(16)
+        .frame(width: 360)
+        .background(Color.smoothCanvas)
+    }
+
+    private func participantPopoverSection(
+        title: String,
+        count: Int,
+        people: [String],
+        emptyText: String
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Text(title)
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(Color.smoothAccent)
+                Text("\(count)")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(Color.smoothMuted)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Color.smoothSurface, in: Capsule())
+                Spacer()
+            }
+
+            if people.isEmpty {
+                Text(emptyText)
+                    .font(.caption)
+                    .foregroundStyle(Color.smoothMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(Array(people.enumerated()), id: \.offset) { _, person in
+                        Label(person, systemImage: "person.crop.circle")
+                            .font(.callout)
+                            .foregroundStyle(Color.smoothInk)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                }
+            }
+        }
+        .padding(10)
+        .background(Color.smoothSurface, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.smoothLine, lineWidth: 1)
+        )
     }
 
     private func emptyState(_ title: String, systemImage: String, description: String) -> some View {
