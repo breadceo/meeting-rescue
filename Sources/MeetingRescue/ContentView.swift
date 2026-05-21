@@ -52,6 +52,34 @@ private enum AdaptivePane: CaseIterable, Hashable {
     }
 }
 
+private enum AdaptiveLayoutMode {
+    case wide
+    case split
+    case rawPrimary
+    case compactOverlay
+
+    init(width: CGFloat) {
+        if width >= 1120 {
+            self = .wide
+        } else if width >= 1040 {
+            self = .split
+        } else if width >= 820 {
+            self = .rawPrimary
+        } else {
+            self = .compactOverlay
+        }
+    }
+
+    var usesOverlayDrawers: Bool {
+        switch self {
+        case .rawPrimary, .compactOverlay:
+            return true
+        case .wide, .split:
+            return false
+        }
+    }
+}
+
 struct ContentView: View {
     @EnvironmentObject private var viewModel: AppViewModel
     @EnvironmentObject private var sparkleUpdater: SparkleUpdater
@@ -66,7 +94,7 @@ struct ContentView: View {
     @State private var isAnalysisDiagnosticsExpanded = false
     @State private var isParticipantsPopoverPresented = false
     @State private var manuallyCollapsedPanes: Set<AdaptivePane> = []
-    @State private var temporarilyExpandedPane: AdaptivePane?
+    @State private var activeOverlayPane: AdaptivePane?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -101,50 +129,70 @@ struct ContentView: View {
 
     @ViewBuilder
     private func adaptivePaneContent(availableWidth: CGFloat) -> some View {
-        let collapsedPanes = adaptiveCollapsedPanes(for: availableWidth)
-        HStack(spacing: 10) {
-            if collapsedPanes.contains(.meetings) {
-                collapsedPaneRail(.meetings)
-                    .frame(minWidth: 46, idealWidth: 46, maxWidth: 46, maxHeight: .infinity)
-            } else {
-                historySidebar
-                    .frame(minWidth: 250, idealWidth: 300, maxWidth: 360, maxHeight: .infinity)
-            }
+        let mode = AdaptiveLayoutMode(width: availableWidth)
+        ZStack {
+            adaptivePaneBaseContent(mode: mode, availableWidth: availableWidth)
 
-            transcriptContent
-                .frame(minWidth: transcriptMinimumWidth(for: availableWidth), maxWidth: .infinity, maxHeight: .infinity)
+            if mode.usesOverlayDrawers, let activeOverlayPane {
+                Color.black.opacity(0.08)
+                    .ignoresSafeArea()
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        withAnimation(.easeInOut(duration: 0.16)) {
+                            self.activeOverlayPane = nil
+                        }
+                    }
+                    .zIndex(1)
 
-            if collapsedPanes.contains(.intelligence) {
-                collapsedPaneRail(.intelligence)
-                    .frame(minWidth: 46, idealWidth: 46, maxWidth: 46, maxHeight: .infinity)
-            } else {
-                intelligenceContent
-                    .frame(minWidth: 330, idealWidth: 460, maxWidth: .infinity, maxHeight: .infinity)
+                overlayDrawer(activeOverlayPane, availableWidth: availableWidth)
+                    .zIndex(2)
             }
         }
     }
 
-    private func adaptiveCollapsedPanes(for width: CGFloat) -> Set<AdaptivePane> {
-        var collapsedPanes = manuallyCollapsedPanes
-        if width < 1120 {
-            collapsedPanes.insert(.meetings)
-        }
-        if width < 900 {
-            collapsedPanes.insert(.intelligence)
-        }
-        if let temporarilyExpandedPane {
-            collapsedPanes.remove(temporarilyExpandedPane)
-            if width < 900 {
-                AdaptivePane.allCases
-                    .filter { $0 != temporarilyExpandedPane }
-                    .forEach { collapsedPanes.insert($0) }
+    @ViewBuilder
+    private func adaptivePaneBaseContent(mode: AdaptiveLayoutMode, availableWidth: CGFloat) -> some View {
+        if mode.usesOverlayDrawers {
+            VStack(spacing: 10) {
+                overlayPaneToggleBar
+                transcriptContent
+                    .frame(minWidth: transcriptMinimumWidth(for: availableWidth), maxWidth: .infinity, maxHeight: .infinity)
             }
+        } else {
+            let collapsedPanes = adaptiveCollapsedPanes(for: mode)
+            HStack(spacing: 10) {
+                if collapsedPanes.contains(.meetings) {
+                    collapsedPaneRail(.meetings)
+                        .frame(minWidth: 46, idealWidth: 46, maxWidth: 46, maxHeight: .infinity)
+                } else {
+                    historySidebar
+                        .frame(minWidth: 250, idealWidth: 300, maxWidth: 360, maxHeight: .infinity)
+                }
+
+                transcriptContent
+                    .frame(minWidth: transcriptMinimumWidth(for: availableWidth), maxWidth: .infinity, maxHeight: .infinity)
+
+                if collapsedPanes.contains(.intelligence) {
+                    collapsedPaneRail(.intelligence)
+                        .frame(minWidth: 46, idealWidth: 46, maxWidth: 46, maxHeight: .infinity)
+                } else {
+                    intelligenceContent
+                        .frame(minWidth: 330, idealWidth: 460, maxWidth: .infinity, maxHeight: .infinity)
+                }
+            }
+        }
+    }
+
+    private func adaptiveCollapsedPanes(for mode: AdaptiveLayoutMode) -> Set<AdaptivePane> {
+        var collapsedPanes = manuallyCollapsedPanes
+        if mode != .wide {
+            collapsedPanes.insert(.meetings)
         }
         return collapsedPanes
     }
 
     private func transcriptMinimumWidth(for width: CGFloat) -> CGFloat {
-        width < 900 ? 330 : 360
+        width < 820 ? 300 : 330
     }
 
     private var header: some View {
@@ -184,82 +232,10 @@ struct ContentView: View {
 
                 Spacer(minLength: 12)
 
-                HStack(spacing: 8) {
-                    headerButton("분석", systemImage: "sparkles") {
-                        viewModel.triggerManualAnalysis()
-                    }
-                    .disabled(viewModel.activeTranscriptURL == nil || viewModel.rawTranscript.isEmpty || viewModel.isAnalysisRunning)
-
-                    issueDraftMenu
-
-                    headerButton("Markdown", systemImage: "square.and.arrow.down") {
-                        viewModel.exportCurrentIntelligenceMarkdown()
-                    }
-                    .disabled(viewModel.analysisState.latestSnapshot == nil)
-
-                    if viewModel.isTestRunActive {
-                        headerButton(
-                            viewModel.testRunPlaybackStatus == .paused ? "재개" : "일시정지",
-                            systemImage: viewModel.testRunPlaybackStatus == .paused ? "play.fill" : "pause.fill"
-                        ) {
-                            viewModel.toggleTestRunPause()
-                        }
-                        .disabled(!viewModel.canPauseOrResumeTestRun)
-
-                        Menu {
-                            Button("1x") { viewModel.updateTestRunSpeed(1) }
-                            Button("2x") { viewModel.updateTestRunSpeed(2) }
-                            Button("4x") { viewModel.updateTestRunSpeed(4) }
-                            Button("8x") { viewModel.updateTestRunSpeed(8) }
-                        } label: {
-                            Label(viewModel.testRunSpeedText, systemImage: "speedometer")
-                                .font(.callout.weight(.semibold))
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                        }
-                        .menuStyle(.button)
-                        .controlSize(.regular)
-
-                        headerButton("Live", systemImage: "dot.radiowaves.left.and.right") {
-                            viewModel.stopTestRunAndReturnToLive()
-                        }
-                    }
-
-                    if viewModel.isHistoryMode || viewModel.liveMeetingUpdated {
-                        headerButton("Live", systemImage: "dot.radiowaves.left.and.right") {
-                            viewModel.returnToLiveWatch()
-                        }
-                        .disabled(viewModel.liveActiveTranscriptURL == nil && viewModel.selectedFolderURL == nil)
-                    }
-
-                    headerButton("설정", systemImage: "gearshape") {
-                        showingSettings = true
-                    }
-
-                    headerButton("폴더", systemImage: "folder") {
-                        viewModel.chooseFolder()
-                    }
-                }
+                headerActions
             }
 
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    statusChip("mode", viewModel.transcriptRunMode.displayText, systemImage: "switch.2")
-                    if viewModel.isTestRunActive {
-                        statusChip(viewModel.testRunPlaybackStatus.displayText, viewModel.testRunProgressText, systemImage: "play.circle")
-                        statusChip("speed", viewModel.testRunSpeedText, systemImage: "speedometer")
-                    }
-                    if viewModel.liveMeetingUpdated {
-                        statusChip("live", "updated", systemImage: "bell.badge")
-                    }
-                    statusChip("상태", viewModel.analysisStatus.displayText, systemImage: statusIcon)
-                    statusChip("provider", providerSummary, systemImage: "cpu")
-                    statusChip("usage", usageSummaryText, systemImage: "chart.bar.doc.horizontal")
-                    statusChip("업데이트", viewModel.transcriptUpdatedAt?.formatted(date: .omitted, time: .standard) ?? "-", systemImage: "clock")
-                    statusChip("lines", "\(viewModel.rawTranscriptLineCount)", systemImage: "text.alignleft")
-                }
-            }
-            .scrollClipDisabled()
+            statusChipRows
 
             HStack(alignment: .top, spacing: 22) {
                 metadataRow("일시", viewModel.metadata.dateTime ?? "-")
@@ -1415,6 +1391,196 @@ struct ContentView: View {
         return "\(provider) · \(viewModel.settings.modelPreset.displayName)"
     }
 
+    private var headerActions: some View {
+        ViewThatFits(in: .horizontal) {
+            fullHeaderActions
+            compactHeaderActions
+            iconHeaderActions
+        }
+    }
+
+    private var fullHeaderActions: some View {
+        HStack(spacing: 8) {
+            analysisHeaderButton
+            issueDraftMenu
+            markdownHeaderButton
+            testRunHeaderActions
+            liveHeaderAction
+            settingsHeaderButton
+            folderHeaderButton
+        }
+        .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private var compactHeaderActions: some View {
+        HStack(spacing: 8) {
+            analysisHeaderButton
+            compactActionsMenu(label: "더보기", systemImage: "ellipsis.circle")
+        }
+        .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private var iconHeaderActions: some View {
+        HStack(spacing: 6) {
+            headerIconButton("분석", systemImage: "sparkles") {
+                viewModel.triggerManualAnalysis()
+            }
+            .disabled(viewModel.activeTranscriptURL == nil || viewModel.rawTranscript.isEmpty || viewModel.isAnalysisRunning)
+            compactActionsMenu(label: "", systemImage: "ellipsis.circle")
+        }
+        .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private var analysisHeaderButton: some View {
+        headerButton("분석", systemImage: "sparkles") {
+            viewModel.triggerManualAnalysis()
+        }
+        .disabled(viewModel.activeTranscriptURL == nil || viewModel.rawTranscript.isEmpty || viewModel.isAnalysisRunning)
+    }
+
+    private var markdownHeaderButton: some View {
+        headerButton("Markdown", systemImage: "square.and.arrow.down") {
+            viewModel.exportCurrentIntelligenceMarkdown()
+        }
+        .disabled(viewModel.analysisState.latestSnapshot == nil)
+    }
+
+    private var settingsHeaderButton: some View {
+        headerButton("설정", systemImage: "gearshape") {
+            showingSettings = true
+        }
+    }
+
+    private var folderHeaderButton: some View {
+        headerButton("폴더", systemImage: "folder") {
+            viewModel.chooseFolder()
+        }
+    }
+
+    @ViewBuilder
+    private var testRunHeaderActions: some View {
+        if viewModel.isTestRunActive {
+            headerButton(
+                viewModel.testRunPlaybackStatus == .paused ? "재개" : "일시정지",
+                systemImage: viewModel.testRunPlaybackStatus == .paused ? "play.fill" : "pause.fill"
+            ) {
+                viewModel.toggleTestRunPause()
+            }
+            .disabled(!viewModel.canPauseOrResumeTestRun)
+
+            Menu {
+                Button("1x") { viewModel.updateTestRunSpeed(1) }
+                Button("2x") { viewModel.updateTestRunSpeed(2) }
+                Button("4x") { viewModel.updateTestRunSpeed(4) }
+                Button("8x") { viewModel.updateTestRunSpeed(8) }
+            } label: {
+                Label(viewModel.testRunSpeedText, systemImage: "speedometer")
+                    .font(.callout.weight(.semibold))
+                    .lineLimit(1)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+            }
+            .menuStyle(.button)
+            .controlSize(.regular)
+
+            headerButton("Live", systemImage: "dot.radiowaves.left.and.right") {
+                viewModel.stopTestRunAndReturnToLive()
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var liveHeaderAction: some View {
+        if viewModel.isHistoryMode || viewModel.liveMeetingUpdated {
+            headerButton("Live", systemImage: "dot.radiowaves.left.and.right") {
+                viewModel.returnToLiveWatch()
+            }
+            .disabled(viewModel.liveActiveTranscriptURL == nil && viewModel.selectedFolderURL == nil)
+        }
+    }
+
+    private func compactActionsMenu(label: String, systemImage: String) -> some View {
+        Menu {
+            ForEach(GitHubIssueDraftKind.allCases) { kind in
+                Button {
+                    viewModel.openGitHubIssueDraft(kind: kind)
+                } label: {
+                    Label(kind.displayName, systemImage: kind.systemImage)
+                }
+            }
+
+            Divider()
+
+            Button {
+                viewModel.exportCurrentIntelligenceMarkdown()
+            } label: {
+                Label("Markdown", systemImage: "square.and.arrow.down")
+            }
+            .disabled(viewModel.analysisState.latestSnapshot == nil)
+
+            if viewModel.isTestRunActive {
+                Button {
+                    viewModel.toggleTestRunPause()
+                } label: {
+                    Label(
+                        viewModel.testRunPlaybackStatus == .paused ? "재개" : "일시정지",
+                        systemImage: viewModel.testRunPlaybackStatus == .paused ? "play.fill" : "pause.fill"
+                    )
+                }
+                .disabled(!viewModel.canPauseOrResumeTestRun)
+
+                Menu("배속") {
+                    Button("1x") { viewModel.updateTestRunSpeed(1) }
+                    Button("2x") { viewModel.updateTestRunSpeed(2) }
+                    Button("4x") { viewModel.updateTestRunSpeed(4) }
+                    Button("8x") { viewModel.updateTestRunSpeed(8) }
+                }
+
+                Button {
+                    viewModel.stopTestRunAndReturnToLive()
+                } label: {
+                    Label("Live", systemImage: "dot.radiowaves.left.and.right")
+                }
+            }
+
+            if viewModel.isHistoryMode || viewModel.liveMeetingUpdated {
+                Button {
+                    viewModel.returnToLiveWatch()
+                } label: {
+                    Label("Live", systemImage: "dot.radiowaves.left.and.right")
+                }
+                .disabled(viewModel.liveActiveTranscriptURL == nil && viewModel.selectedFolderURL == nil)
+            }
+
+            Divider()
+
+            Button {
+                showingSettings = true
+            } label: {
+                Label("설정", systemImage: "gearshape")
+            }
+
+            Button {
+                viewModel.chooseFolder()
+            } label: {
+                Label("폴더", systemImage: "folder")
+            }
+        } label: {
+            if label.isEmpty {
+                Image(systemName: systemImage)
+                    .font(.callout.weight(.semibold))
+            } else {
+                Label(label, systemImage: systemImage)
+                    .font(.callout.weight(.semibold))
+                    .lineLimit(1)
+            }
+        }
+        .buttonStyle(SmoothActionButtonStyle())
+        .menuStyle(.button)
+        .controlSize(.regular)
+        .help("추가 작업")
+    }
+
     private var usageSummaryText: String {
         let summary = viewModel.analysisState.usageSummary
         guard summary.totalInputTokens + summary.totalOutputTokens > 0 else {
@@ -1464,9 +1630,21 @@ struct ContentView: View {
         Button(action: action) {
             Label(title, systemImage: systemImage)
                 .font(.callout.weight(.semibold))
+                .lineLimit(1)
         }
         .buttonStyle(SmoothActionButtonStyle())
         .controlSize(.regular)
+    }
+
+    private func headerIconButton(_ help: String, systemImage: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.callout.weight(.semibold))
+                .frame(width: 18, height: 18)
+        }
+        .buttonStyle(SmoothActionButtonStyle())
+        .controlSize(.regular)
+        .help(help)
     }
 
     private var issueDraftMenu: some View {
@@ -1493,6 +1671,45 @@ struct ContentView: View {
         selectedAnalysisAttempt = nil
         if viewModel.isShowingOnboarding {
             viewModel.completeOnboarding()
+        }
+    }
+
+    private var statusChipRows: some View {
+        ViewThatFits(in: .horizontal) {
+            statusChipRow(.full)
+            statusChipRow(.medium)
+            statusChipRow(.compact)
+        }
+    }
+
+    private enum StatusChipDensity {
+        case full
+        case medium
+        case compact
+    }
+
+    @ViewBuilder
+    private func statusChipRow(_ density: StatusChipDensity) -> some View {
+        HStack(spacing: 8) {
+            statusChip("mode", viewModel.transcriptRunMode.displayText, systemImage: "switch.2")
+            if viewModel.isTestRunActive {
+                statusChip(viewModel.testRunPlaybackStatus.displayText, viewModel.testRunProgressText, systemImage: "play.circle")
+            }
+            if viewModel.liveMeetingUpdated {
+                statusChip("live", "updated", systemImage: "bell.badge")
+            }
+            statusChip("상태", viewModel.analysisStatus.displayText, systemImage: statusIcon)
+            if density != .compact {
+                statusChip("provider", providerSummary, systemImage: "cpu")
+            }
+            if density == .full {
+                if viewModel.isTestRunActive {
+                    statusChip("speed", viewModel.testRunSpeedText, systemImage: "speedometer")
+                }
+                statusChip("usage", usageSummaryText, systemImage: "chart.bar.doc.horizontal")
+                statusChip("업데이트", viewModel.transcriptUpdatedAt?.formatted(date: .omitted, time: .standard) ?? "-", systemImage: "clock")
+                statusChip("lines", "\(viewModel.rawTranscriptLineCount)", systemImage: "text.alignleft")
+            }
         }
     }
 
@@ -1553,6 +1770,83 @@ struct ContentView: View {
         .padding(.vertical, compact ? 11 : 12)
     }
 
+    private var overlayPaneToggleBar: some View {
+        HStack(spacing: 8) {
+            overlayPaneToggle(.meetings)
+            overlayPaneToggle(.intelligence)
+            Spacer(minLength: 0)
+            Text("Raw Transcript")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(Color.smoothMuted)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(Color.smoothSurface, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.smoothLine, lineWidth: 1)
+        )
+    }
+
+    private func overlayPaneToggle(_ pane: AdaptivePane) -> some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.16)) {
+                activeOverlayPane = activeOverlayPane == pane ? nil : pane
+            }
+        } label: {
+            Label(pane.title, systemImage: pane.systemImage)
+                .font(.caption.weight(.semibold))
+                .lineLimit(1)
+                .foregroundStyle(activeOverlayPane == pane ? Color.smoothOnAccent : Color.smoothInk)
+                .padding(.horizontal, 9)
+                .padding(.vertical, 6)
+                .background(
+                    activeOverlayPane == pane ? Color.smoothAccent : Color.smoothControl,
+                    in: RoundedRectangle(cornerRadius: 7, style: .continuous)
+                )
+        }
+        .buttonStyle(.plain)
+        .help("\(pane.title) 열기")
+    }
+
+    private func overlayDrawer(_ pane: AdaptivePane, availableWidth: CGFloat) -> some View {
+        HStack(spacing: 0) {
+            if pane == .intelligence {
+                Spacer(minLength: 0)
+            }
+
+            overlayDrawerContent(pane)
+                .frame(
+                    minWidth: overlayDrawerWidth(for: availableWidth),
+                    idealWidth: overlayDrawerWidth(for: availableWidth),
+                    maxWidth: overlayDrawerWidth(for: availableWidth),
+                    maxHeight: .infinity
+                )
+                .transition(.move(edge: pane == .meetings ? .leading : .trailing).combined(with: .opacity))
+                .shadow(color: Color.black.opacity(0.16), radius: 18, y: 8)
+
+            if pane == .meetings {
+                Spacer(minLength: 0)
+            }
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    @ViewBuilder
+    private func overlayDrawerContent(_ pane: AdaptivePane) -> some View {
+        switch pane {
+        case .meetings:
+            historySidebar
+        case .intelligence:
+            intelligenceContent
+        }
+    }
+
+    private func overlayDrawerWidth(for availableWidth: CGFloat) -> CGFloat {
+        min(430, max(300, availableWidth - 32))
+    }
+
     private func collapsedPaneRail(_ pane: AdaptivePane) -> some View {
         Button {
             expand(pane)
@@ -1593,16 +1887,15 @@ struct ContentView: View {
     private func collapse(_ pane: AdaptivePane) {
         withAnimation(.easeInOut(duration: 0.16)) {
             manuallyCollapsedPanes.insert(pane)
-            if temporarilyExpandedPane == pane {
-                temporarilyExpandedPane = nil
+            if activeOverlayPane == pane {
+                activeOverlayPane = nil
             }
         }
     }
 
     private func expand(_ pane: AdaptivePane) {
         withAnimation(.easeInOut(duration: 0.16)) {
-            manuallyCollapsedPanes.remove(pane)
-            temporarilyExpandedPane = pane
+            _ = manuallyCollapsedPanes.remove(pane)
         }
     }
 
