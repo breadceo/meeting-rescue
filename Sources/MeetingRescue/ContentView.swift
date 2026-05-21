@@ -20,6 +20,38 @@ private struct EditingCandidate: Equatable {
     var id: String
 }
 
+private enum AdaptivePane: CaseIterable, Hashable {
+    case meetings
+    case intelligence
+
+    var title: String {
+        switch self {
+        case .meetings:
+            return "Meetings"
+        case .intelligence:
+            return "Intelligence"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .meetings:
+            return "sidebar.left"
+        case .intelligence:
+            return "sparkles"
+        }
+    }
+
+    var collapsedSubtitle: String {
+        switch self {
+        case .meetings:
+            return "history"
+        case .intelligence:
+            return "summary"
+        }
+    }
+}
+
 struct ContentView: View {
     @EnvironmentObject private var viewModel: AppViewModel
     @EnvironmentObject private var sparkleUpdater: SparkleUpdater
@@ -33,23 +65,20 @@ struct ContentView: View {
     @State private var selectedAnalysisAttempt: AnalysisAttemptLog?
     @State private var isAnalysisDiagnosticsExpanded = false
     @State private var isParticipantsPopoverPresented = false
+    @State private var manuallyCollapsedPanes: Set<AdaptivePane> = []
+    @State private var temporarilyExpandedPane: AdaptivePane?
 
     var body: some View {
         VStack(spacing: 0) {
             header
-            HSplitView {
-                historySidebar
-                    .frame(minWidth: 250, idealWidth: 300, maxWidth: 360, maxHeight: .infinity)
-                transcriptContent
-                    .frame(minWidth: 320, maxWidth: .infinity, maxHeight: .infinity)
-                intelligenceContent
-                    .frame(minWidth: 340, idealWidth: 480, maxWidth: .infinity, maxHeight: .infinity)
+            GeometryReader { proxy in
+                adaptivePaneContent(availableWidth: proxy.size.width)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .padding(.horizontal, 14)
             .padding(.bottom, 14)
         }
-        .frame(minWidth: 1180, minHeight: 680)
+        .frame(minWidth: 760, minHeight: 680)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(Color.smoothCanvas)
         .tint(Color.smoothAccent)
@@ -68,6 +97,54 @@ struct ContentView: View {
         .onChange(of: sparkleUpdater.blockingSheetDismissalRequestID) {
             dismissBlockingSheetsForUpdate()
         }
+    }
+
+    @ViewBuilder
+    private func adaptivePaneContent(availableWidth: CGFloat) -> some View {
+        let collapsedPanes = adaptiveCollapsedPanes(for: availableWidth)
+        HStack(spacing: 10) {
+            if collapsedPanes.contains(.meetings) {
+                collapsedPaneRail(.meetings)
+                    .frame(minWidth: 46, idealWidth: 46, maxWidth: 46, maxHeight: .infinity)
+            } else {
+                historySidebar
+                    .frame(minWidth: 250, idealWidth: 300, maxWidth: 360, maxHeight: .infinity)
+            }
+
+            transcriptContent
+                .frame(minWidth: transcriptMinimumWidth(for: availableWidth), maxWidth: .infinity, maxHeight: .infinity)
+
+            if collapsedPanes.contains(.intelligence) {
+                collapsedPaneRail(.intelligence)
+                    .frame(minWidth: 46, idealWidth: 46, maxWidth: 46, maxHeight: .infinity)
+            } else {
+                intelligenceContent
+                    .frame(minWidth: 330, idealWidth: 460, maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+    }
+
+    private func adaptiveCollapsedPanes(for width: CGFloat) -> Set<AdaptivePane> {
+        var collapsedPanes = manuallyCollapsedPanes
+        if width < 1120 {
+            collapsedPanes.insert(.meetings)
+        }
+        if width < 900 {
+            collapsedPanes.insert(.intelligence)
+        }
+        if let temporarilyExpandedPane {
+            collapsedPanes.remove(temporarilyExpandedPane)
+            if width < 900 {
+                AdaptivePane.allCases
+                    .filter { $0 != temporarilyExpandedPane }
+                    .forEach { collapsedPanes.insert($0) }
+            }
+        }
+        return collapsedPanes
+    }
+
+    private func transcriptMinimumWidth(for width: CGFloat) -> CGFloat {
+        width < 900 ? 330 : 360
     }
 
     private var header: some View {
@@ -165,22 +242,24 @@ struct ContentView: View {
                 }
             }
 
-            HStack(spacing: 8) {
-                statusChip("mode", viewModel.transcriptRunMode.displayText, systemImage: "switch.2")
-                if viewModel.isTestRunActive {
-                    statusChip(viewModel.testRunPlaybackStatus.displayText, viewModel.testRunProgressText, systemImage: "play.circle")
-                    statusChip("speed", viewModel.testRunSpeedText, systemImage: "speedometer")
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    statusChip("mode", viewModel.transcriptRunMode.displayText, systemImage: "switch.2")
+                    if viewModel.isTestRunActive {
+                        statusChip(viewModel.testRunPlaybackStatus.displayText, viewModel.testRunProgressText, systemImage: "play.circle")
+                        statusChip("speed", viewModel.testRunSpeedText, systemImage: "speedometer")
+                    }
+                    if viewModel.liveMeetingUpdated {
+                        statusChip("live", "updated", systemImage: "bell.badge")
+                    }
+                    statusChip("상태", viewModel.analysisStatus.displayText, systemImage: statusIcon)
+                    statusChip("provider", providerSummary, systemImage: "cpu")
+                    statusChip("usage", usageSummaryText, systemImage: "chart.bar.doc.horizontal")
+                    statusChip("업데이트", viewModel.transcriptUpdatedAt?.formatted(date: .omitted, time: .standard) ?? "-", systemImage: "clock")
+                    statusChip("lines", "\(viewModel.rawTranscriptLineCount)", systemImage: "text.alignleft")
                 }
-                if viewModel.liveMeetingUpdated {
-                    statusChip("live", "updated", systemImage: "bell.badge")
-                }
-                statusChip("상태", viewModel.analysisStatus.displayText, systemImage: statusIcon)
-                statusChip("provider", providerSummary, systemImage: "cpu")
-                statusChip("usage", usageSummaryText, systemImage: "chart.bar.doc.horizontal")
-                statusChip("업데이트", viewModel.transcriptUpdatedAt?.formatted(date: .omitted, time: .standard) ?? "-", systemImage: "clock")
-                statusChip("lines", "\(viewModel.rawTranscriptLineCount)", systemImage: "text.alignleft")
-                Spacer(minLength: 0)
             }
+            .scrollClipDisabled()
 
             HStack(alignment: .top, spacing: 22) {
                 metadataRow("일시", viewModel.metadata.dateTime ?? "-")
@@ -199,7 +278,7 @@ struct ContentView: View {
 
     private var historySidebar: some View {
         VStack(alignment: .leading, spacing: 0) {
-            paneTitle("Meetings", systemImage: "sidebar.left")
+            paneTitle("Meetings", systemImage: "sidebar.left", collapsePane: .meetings)
             Divider().overlay(Color.smoothLine)
 
             VStack(alignment: .leading, spacing: 14) {
@@ -739,7 +818,7 @@ struct ContentView: View {
     private var intelligenceContent: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 12) {
-                paneTitle("Meeting Intelligence", systemImage: "sparkles", compact: true)
+                paneTitle("Meeting Intelligence", systemImage: "sparkles", compact: true, collapsePane: .intelligence)
                 Spacer()
                 Picker("view", selection: $intelligenceMode) {
                     ForEach(IntelligenceMode.allCases) { mode in
@@ -1439,7 +1518,13 @@ struct ContentView: View {
         .frame(maxWidth: 260, alignment: .leading)
     }
 
-    private func paneTitle(_ text: String, systemImage: String, trailing: String? = nil, compact: Bool = false) -> some View {
+    private func paneTitle(
+        _ text: String,
+        systemImage: String,
+        trailing: String? = nil,
+        compact: Bool = false,
+        collapsePane: AdaptivePane? = nil
+    ) -> some View {
         HStack {
             Label(text, systemImage: systemImage)
                 .font(.headline)
@@ -1450,9 +1535,75 @@ struct ContentView: View {
                     .font(.caption)
                     .foregroundStyle(Color.smoothMuted)
             }
+            if let collapsePane {
+                Button {
+                    collapse(collapsePane)
+                } label: {
+                    Image(systemName: collapsePane == .meetings ? "sidebar.left" : "sidebar.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color.smoothMuted)
+                        .frame(width: 24, height: 24)
+                        .background(Color.smoothControl, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .help("\(collapsePane.title) 접기")
+            }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, compact ? 11 : 12)
+    }
+
+    private func collapsedPaneRail(_ pane: AdaptivePane) -> some View {
+        Button {
+            expand(pane)
+        } label: {
+            VStack(spacing: 8) {
+                Image(systemName: pane.systemImage)
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(Color.smoothAccent)
+                    .frame(width: 30, height: 30)
+                    .background(Color.smoothMint, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                Text(pane.title)
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(Color.smoothInk)
+                    .rotationEffect(.degrees(-90))
+                    .fixedSize()
+                    .frame(width: 30, height: 82)
+                Text(pane.collapsedSubtitle)
+                    .font(.caption2)
+                    .foregroundStyle(Color.smoothMuted)
+                    .rotationEffect(.degrees(-90))
+                    .fixedSize()
+                    .frame(width: 30, height: 58)
+                Spacer(minLength: 0)
+            }
+            .padding(.vertical, 12)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .background(Color.smoothSurface, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.smoothLine, lineWidth: 1)
+        )
+        .help("\(pane.title) 펼치기")
+    }
+
+    private func collapse(_ pane: AdaptivePane) {
+        withAnimation(.easeInOut(duration: 0.16)) {
+            manuallyCollapsedPanes.insert(pane)
+            if temporarilyExpandedPane == pane {
+                temporarilyExpandedPane = nil
+            }
+        }
+    }
+
+    private func expand(_ pane: AdaptivePane) {
+        withAnimation(.easeInOut(duration: 0.16)) {
+            manuallyCollapsedPanes.remove(pane)
+            temporarilyExpandedPane = pane
+        }
     }
 
     private func sectionHeader(_ text: String, systemImage: String) -> some View {
