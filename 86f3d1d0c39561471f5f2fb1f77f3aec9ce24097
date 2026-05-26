@@ -1,0 +1,15 @@
+Sources/MeetingRescueCore/LiveTranscriptIndex.swift
+  h_d82ccb34241a0d 76-77,81-87,179-184,188-229
+Tests/MeetingRescueCoreTests/LiveAnalysisContextPipelineTests.swift
+  h_d82ccb34241a0d 29-59
+---
+{
+  "schema_version": "zax-attestation/1.1.0",
+  "base_commit_sha": "86f3d1d0c39561471f5f2fb1f77f3aec9ce24097",
+  "prompts": {},
+  "humans": {
+    "h_d82ccb34241a0d": {
+      "author": "ethan@zigbang.com"
+    }
+  }
+}
