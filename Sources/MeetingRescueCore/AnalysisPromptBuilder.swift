@@ -19,6 +19,7 @@ public enum AnalysisPromptBuilder {
             providerKind: request.providerKind.rawValue,
             modelPreset: request.modelPreset.rawValue,
             transcriptContext: transcriptContext,
+            contextPlan: request.contextPlan,
             previousAnalysisSnapshot: compactSnapshot(from: request.previousSnapshot),
             confirmedCandidateIDs: Array(request.confirmedCandidateIDs).sorted(),
             deletedCandidateIDs: Array(request.deletedCandidateIDs).sorted()
@@ -41,6 +42,7 @@ public enum AnalysisPromptBuilder {
         아래 JSON payload를 읽고 지정된 JSON schema에 맞는 하나의 JSON 객체만 반환하세요.
         previousAnalysisSnapshot은 누적 회의 상태를 압축한 compact state입니다.
         transcriptContext.newTranscriptChunk가 있으면 그것을 이번 refresh의 primary source로 사용하고, recentTranscriptContext는 연결 맥락으로만 사용하세요.
+        transcriptContext.relatedTranscriptChunks는 현재 live/test run 회의에서 검색된 관련 과거 맥락입니다. 새 발화와 직접 연결될 때만 보조 근거로 사용하고, 그 자체를 새 결정처럼 반복하지 마세요.
         transcriptContext.fullTranscript가 있으면 아직 성공적으로 분석된 구간이 없다는 뜻이므로 제공된 transcript 전체를 기준으로 snapshot을 만드세요.
         기존 compact state의 결정/action 후보와 timeline은 새 transcript chunk에서 반박되거나 갱신할 필요가 있을 때만 바꾸고, 유지할 수 있으면 유지하세요.
         topicTimeline은 사용자가 회의 흐름을 스캔하기 위한 breakdown입니다. 하나의 topic에 모든 내용을 합치지 말고, 3-6분 이상 이어지는 장문 발제라도 하위 agenda, 논점, 대상, 실행 방향이 바뀌면 별도 topic item으로 나누세요.
@@ -65,6 +67,7 @@ public enum AnalysisPromptBuilder {
         아래 JSON payload를 읽고 지정된 JSON schema에 맞는 하나의 JSON patch 객체만 반환하세요.
         이 요청은 incremental patch refresh입니다. live automatic 또는 final catch-up 중이며, previousAnalysisSnapshot은 이미 앱에 저장된 compact state입니다.
         transcriptContext.newTranscriptChunk가 있으면 그것을 이번 refresh의 primary source로 사용하세요. incremental refresh에서는 fullTranscript 재전송을 피하고 compact state와 새 chunk만 기준으로 판단하세요.
+        transcriptContext.relatedTranscriptChunks는 현재 회의의 관련 과거 chunk입니다. 새 transcript chunk의 생략된 맥락을 연결하는 용도로만 사용하고, 관련성이 낮으면 무시하세요.
         전체 AnalysisSnapshot을 다시 쓰지 마세요. 제공된 transcript 때문에 추가/수정이 필요한 항목만 patch 배열에 넣으세요.
         바뀐 current issue가 있으면 currentIssue를 채우고, 변화가 거의 없으면 currentIssue는 null로 두세요.
         topicTimelineUpserts에는 새 topic 또는 실제로 수정해야 하는 기존 topic만 넣으세요. 기존 topic을 닫아야 하면 endTimestamp가 반영된 topic item을 upsert하고 closeTopicIDs에도 id를 넣으세요.
@@ -87,6 +90,7 @@ public enum AnalysisPromptBuilder {
         var providerKind: String
         var modelPreset: String
         var transcriptContext: TranscriptContext
+        var contextPlan: AnalysisContextPlan?
         var previousAnalysisSnapshot: AnalysisSnapshot?
         var confirmedCandidateIDs: [String]
         var deletedCandidateIDs: [String]
@@ -97,6 +101,7 @@ public enum AnalysisPromptBuilder {
         var fullTranscript: String?
         var newTranscriptChunk: String?
         var recentTranscriptContext: String?
+        var relatedTranscriptChunks: [RetrievedTranscriptChunk]
         var omittedTranscriptNote: String?
         var rawTranscriptCharacterCount: Int
         var lastAnalyzedTranscriptCharacterCount: Int
@@ -120,6 +125,7 @@ public enum AnalysisPromptBuilder {
                     fullTranscript: nil,
                     newTranscriptChunk: newTranscriptChunk.isEmpty ? nil : newTranscriptChunk,
                     recentTranscriptContext: nil,
+                    relatedTranscriptChunks: relatedTranscriptChunks(for: request),
                     omittedTranscriptNote: omitted,
                     rawTranscriptCharacterCount: rawCount,
                     lastAnalyzedTranscriptCharacterCount: 0
@@ -137,6 +143,7 @@ public enum AnalysisPromptBuilder {
                 fullTranscript: fullTranscript,
                 newTranscriptChunk: nil,
                 recentTranscriptContext: nil,
+                relatedTranscriptChunks: relatedTranscriptChunks(for: request),
                 omittedTranscriptNote: omitted,
                 rawTranscriptCharacterCount: rawCount,
                 lastAnalyzedTranscriptCharacterCount: 0
@@ -166,10 +173,15 @@ public enum AnalysisPromptBuilder {
             fullTranscript: nil,
             newTranscriptChunk: newTranscript.isEmpty ? nil : cappedNewTranscript,
             recentTranscriptContext: recentContext.isEmpty ? nil : recentContext,
+            relatedTranscriptChunks: relatedTranscriptChunks(for: request),
             omittedTranscriptNote: omittedParts.isEmpty ? nil : omittedParts.joined(separator: " "),
             rawTranscriptCharacterCount: rawCount,
             lastAnalyzedTranscriptCharacterCount: clampedAnalyzedCount
         )
+    }
+
+    private static func relatedTranscriptChunks(for request: AnalysisRequest) -> [RetrievedTranscriptChunk] {
+        request.contextPlan?.retrievedChunks ?? []
     }
 
     private static func compactSnapshot(from snapshot: AnalysisSnapshot?) -> AnalysisSnapshot? {
@@ -192,7 +204,8 @@ public enum AnalysisPromptBuilder {
             in: [
                 transcriptContext.fullTranscript,
                 transcriptContext.newTranscriptChunk,
-                transcriptContext.recentTranscriptContext
+                transcriptContext.recentTranscriptContext,
+                transcriptContext.relatedTranscriptChunks.map(\.text).joined(separator: "\n")
             ]
             .compactMap { $0 }
             .joined(separator: "\n")

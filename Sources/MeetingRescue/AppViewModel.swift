@@ -626,6 +626,7 @@ final class AppViewModel: ObservableObject {
     private let stateStore: ApplicationStateStore
     private let searchDatabase: MeetingSearchDatabase?
     private let scheduler = AnalysisScheduler()
+    private var liveTranscriptIndex = LiveTranscriptIndex()
     private var timer: Timer?
     private var replayTimer: Timer?
     private var replayCursor: TranscriptReplayCursor?
@@ -705,6 +706,36 @@ final class AppViewModel: ObservableObject {
 
     var isHistoryMode: Bool {
         transcriptRunMode == .history
+    }
+
+    var nextAutomaticAnalysisSummary: String {
+        guard settings.automaticAnalysisEnabled else {
+            return "auto off"
+        }
+        guard activeTranscriptURL != nil,
+              transcriptRunMode != .history,
+              !analysisState.isCompleted else {
+            return "-"
+        }
+        if isAnalysisRunning {
+            return "running"
+        }
+        let config = settings.analysisTriggerPreset.configuration.withMinimumMeetingElapsedSeconds(
+            minimumAutomaticAnalysisElapsedSeconds
+        )
+        let lastAnalyzedCount = analysisState.analyzedTranscriptCharacterCount
+        let newText = transcriptSlice(rawTranscript, from: lastAnalyzedCount, to: rawTranscript.count)
+        let newLines = TranscriptParser.parse(newText).dialogueLines.count
+        let remainingLines = max(0, config.minNewDialogueLines - newLines)
+        let remainingCharacters = max(0, config.minNewTranscriptCharacters - max(0, rawTranscript.count - lastAnalyzedCount))
+        let latestElapsedSeconds = latestTranscriptElapsedSeconds()
+        if latestElapsedSeconds < config.minimumMeetingElapsedSeconds {
+            return "초기 \(config.minimumMeetingElapsedSeconds - latestElapsedSeconds)초 skip"
+        }
+        let now = automaticTriggerReferenceDate(now: Date(), latestTranscriptElapsedSeconds: latestElapsedSeconds)
+        let elapsedSinceLast = lastAutomaticAnalysisAt.map { max(0, Int(now.timeIntervalSince($0))) } ?? 0
+        let waitRemaining = max(0, config.maxBatchWaitSeconds - elapsedSinceLast)
+        return "새 \(remainingLines)줄/\(remainingCharacters)자 또는 \(formatDuration(waitRemaining))"
     }
 
     var filteredMeetingHistoryItems: [MeetingHistoryItem] {
@@ -921,6 +952,7 @@ final class AppViewModel: ObservableObject {
     func startWatching(folderURL: URL) {
         stopReplayTimer()
         transcriptRunMode = .liveWatch
+        liveTranscriptIndex.reset()
         testRunPlaybackStatus = .idle
         testRunProgressText = ""
         liveMeetingUpdated = false
@@ -1012,6 +1044,7 @@ final class AppViewModel: ObservableObject {
         replayCursor = nil
         replaySourceURL = nil
         transcriptRunMode = .history
+        liveTranscriptIndex.reset()
         testRunPlaybackStatus = .idle
         testRunProgressText = ""
         captureHistoryLiveBaseline()
@@ -1029,6 +1062,7 @@ final class AppViewModel: ObservableObject {
         replayCursor = nil
         replaySourceURL = nil
         transcriptRunMode = .liveWatch
+        liveTranscriptIndex.reset()
         testRunPlaybackStatus = .idle
         testRunProgressText = ""
         liveMeetingUpdated = false
@@ -1070,6 +1104,7 @@ final class AppViewModel: ObservableObject {
             analysisTriggerPreset: settings.analysisTriggerPreset,
             analysisCadenceSeconds: settings.analysisCadenceSeconds,
             providerTimeoutSeconds: settings.providerTimeoutSeconds,
+            liveContextRetrievalMode: settings.liveContextRetrievalMode,
             customProviderCommand: settings.customProviderCommand
         )
         try? stateStore.saveSettings(settings)
@@ -1099,6 +1134,11 @@ final class AppViewModel: ObservableObject {
         saveSettings()
     }
 
+    func updateLiveContextRetrievalMode(_ mode: LiveContextRetrievalMode) {
+        settings.liveContextRetrievalMode = mode
+        saveSettings()
+    }
+
     func completeOnboarding() {
         settings.hasCompletedOnboarding = true
         isShowingOnboarding = false
@@ -1119,6 +1159,7 @@ final class AppViewModel: ObservableObject {
         activeAnalysisAttemptID = nil
         searchIndexBuildTask?.cancel()
         searchDatabaseQueryTask?.cancel()
+        liveTranscriptIndex.reset()
         if securityScopeActive {
             selectedFolderURL?.stopAccessingSecurityScopedResource()
         }
@@ -1345,6 +1386,7 @@ final class AppViewModel: ObservableObject {
         activeAnalysisRequest = nil
         activeAnalysisAttemptID = nil
         latestSnapshotIsLocalFallback = false
+        liveTranscriptIndex.reset()
 
         do {
             let data = try Data(contentsOf: fileURL)
@@ -1448,6 +1490,7 @@ final class AppViewModel: ObservableObject {
     private func applyReplayFrame(_ frame: TranscriptReplayFrame, sourceURL: URL) {
         rawTranscript += frame.text
         rawReadOffset += UInt64(frame.text.data(using: .utf8)?.count ?? frame.text.count)
+        liveTranscriptIndex.append(frame.text)
         appendTranscriptPreview(frame.text)
         transcriptUpdatedAt = Date()
         refreshParsedState(
@@ -1919,6 +1962,7 @@ final class AppViewModel: ObservableObject {
                 analysisState = MeetingAnalysisState()
                 analysisStatus = .idle
                 rawReadOffset = 0
+                liveTranscriptIndex.reset()
                 transcriptUpdatedAt = nil
                 statusMessage = "선택한 폴더에서 `.txt` transcript를 기다리는 중입니다."
             }
@@ -1954,6 +1998,7 @@ final class AppViewModel: ObservableObject {
         activeAnalysisAttemptID = nil
         latestSnapshotIsLocalFallback = false
         lastAutomaticAnalysisAt = Date()
+        liveTranscriptIndex.reset()
         loadTranscriptForViewing(url, statusPrefix: "활성 transcript")
         liveMeetingUpdated = false
         historyLiveBaselineCandidate = nil
@@ -1997,6 +2042,9 @@ final class AppViewModel: ObservableObject {
         do {
             let data = try Data(contentsOf: url)
             rawTranscript = TranscriptTextDecoder.decode(data)
+            if transcriptRunMode != .history {
+                liveTranscriptIndex.rebuild(from: rawTranscript)
+            }
             updateTranscriptPreview()
             rawReadOffset = UInt64(data.count)
             transcriptUpdatedAt = Date()
@@ -2035,6 +2083,9 @@ final class AppViewModel: ObservableObject {
 
             let appendedText = TranscriptTextDecoder.decode(data)
             rawTranscript += appendedText
+            if transcriptRunMode != .history {
+                liveTranscriptIndex.append(appendedText)
+            }
             appendTranscriptPreview(appendedText)
             rawReadOffset = fileSize
             transcriptUpdatedAt = Date()
@@ -2173,7 +2224,7 @@ final class AppViewModel: ObservableObject {
             reason: reason,
             maxAutomaticCatchUpCharacters: automaticCatchUpChunkCharacters
         )
-        let request = AnalysisRequest(
+        var request = AnalysisRequest(
             meetingID: meetingID,
             metadata: metadata,
             rawTranscript: transcriptWindow.rawTranscript,
@@ -2185,11 +2236,25 @@ final class AppViewModel: ObservableObject {
             reason: reason,
             lastAnalyzedTranscriptCharacterCount: transcriptWindow.lastAnalyzedTranscriptCharacterCount
         )
+        let contextPlan = AnalysisContextPlanner.makePlan(
+            for: request,
+            retrievalMode: liveContextRetrievalMode(for: reason),
+            liveIndex: liveTranscriptIndex
+        )
+        request.contextPlan = contextPlan
 
         let timeoutSeconds = effectiveAnalysisTimeoutSeconds(for: reason)
         let provider = makeProvider(timeoutSeconds: timeoutSeconds)
         activeAnalysisRequest = request
         activeAnalysisWindow = transcriptWindow
+        let draftPrompt = (try? AnalysisPromptBuilder.buildPrompt(for: request)) ?? rawTranscript
+        let draftInputTokens = TokenEstimator.estimateTokens(in: draftPrompt)
+        let finalContextPlan = AnalysisContextPlanner.planByUpdatingEstimatedTokens(
+            contextPlan,
+            estimatedPromptTokens: draftInputTokens
+        )
+        request.contextPlan = finalContextPlan
+        activeAnalysisRequest = request
         let prompt = (try? AnalysisPromptBuilder.buildPrompt(for: request)) ?? rawTranscript
         let inputTokens = TokenEstimator.estimateTokens(in: prompt)
         let attemptMessage = ["timeout \(timeoutSeconds)초", transcriptWindow.messageSuffix]
@@ -2204,7 +2269,8 @@ final class AppViewModel: ObservableObject {
             inputTokens: inputTokens,
             message: attemptMessage,
             prompt: prompt,
-            batchStats: makeAttemptBatchStats(for: transcriptWindow, reason: reason)
+            batchStats: makeAttemptBatchStats(for: transcriptWindow, reason: reason),
+            contextPlan: finalContextPlan
         )
         activeAnalysisAttemptID = attempt.id
         analysisState.appendAttempt(attempt)
@@ -2229,6 +2295,15 @@ final class AppViewModel: ObservableObject {
                 self.applyAnalysisResult(result, for: activeTranscriptURL, reason: reason)
             }
         }
+    }
+
+    private func liveContextRetrievalMode(for reason: String) -> LiveContextRetrievalMode {
+        guard transcriptRunMode != .history,
+              !reason.hasPrefix("repair"),
+              !reason.hasPrefix("full-refresh") else {
+            return .off
+        }
+        return settings.liveContextRetrievalMode
     }
 
     private func latestTranscriptElapsedSeconds() -> Int {
@@ -2370,6 +2445,12 @@ final class AppViewModel: ObservableObject {
         let startIndex = text.index(text.startIndex, offsetBy: lower)
         let endIndex = text.index(text.startIndex, offsetBy: upper)
         return String(text[startIndex..<endIndex])
+    }
+
+    private func formatDuration(_ seconds: Int) -> String {
+        let minutes = seconds / 60
+        let seconds = seconds % 60
+        return "\(minutes):\(String(format: "%02d", seconds))"
     }
 
     private func triggerDescription(for reason: String) -> String {

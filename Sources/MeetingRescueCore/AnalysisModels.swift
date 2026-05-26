@@ -141,6 +141,31 @@ public enum AnalysisTriggerPreset: String, Codable, CaseIterable, Identifiable, 
     }
 }
 
+public enum LiveContextRetrievalMode: String, Codable, CaseIterable, Identifiable, Sendable {
+    case off
+    case memoryLiveIndex
+
+    public var id: String { rawValue }
+
+    public var displayName: String {
+        switch self {
+        case .off:
+            return "Off"
+        case .memoryLiveIndex:
+            return "Memory live index"
+        }
+    }
+
+    public var detail: String {
+        switch self {
+        case .off:
+            return "기존 방식처럼 새 transcript chunk와 짧은 recent context만 사용합니다."
+        case .memoryLiveIndex:
+            return "현재 live/test run 회의의 메모리 index에서 관련 과거 chunk를 최대 0-3개 추가합니다."
+        }
+    }
+}
+
 public struct AppSettings: Codable, Equatable, Sendable {
     public var selectedProvider: LLMProviderKind
     public var modelPreset: LLMModelPreset
@@ -149,6 +174,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var analysisTriggerPreset: AnalysisTriggerPreset
     public var analysisCadenceSeconds: Int
     public var providerTimeoutSeconds: Int
+    public var liveContextRetrievalMode: LiveContextRetrievalMode
     public var customProviderCommand: String
 
     public init(
@@ -159,6 +185,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         analysisTriggerPreset: AnalysisTriggerPreset = .balanced,
         analysisCadenceSeconds: Int = 45,
         providerTimeoutSeconds: Int = 60,
+        liveContextRetrievalMode: LiveContextRetrievalMode = .memoryLiveIndex,
         customProviderCommand: String = ""
     ) {
         self.selectedProvider = selectedProvider
@@ -168,6 +195,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         self.analysisTriggerPreset = analysisTriggerPreset
         self.analysisCadenceSeconds = min(max(analysisCadenceSeconds, 30), 300)
         self.providerTimeoutSeconds = AnalysisTimeoutPolicy.normalizedConfiguredTimeout(providerTimeoutSeconds)
+        self.liveContextRetrievalMode = liveContextRetrievalMode
         self.customProviderCommand = customProviderCommand
     }
 
@@ -179,6 +207,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         case analysisTriggerPreset
         case analysisCadenceSeconds
         case providerTimeoutSeconds
+        case liveContextRetrievalMode
         case customProviderCommand
     }
 
@@ -192,6 +221,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
             analysisTriggerPreset: (try? container.decode(AnalysisTriggerPreset.self, forKey: .analysisTriggerPreset)) ?? .balanced,
             analysisCadenceSeconds: (try? container.decode(Int.self, forKey: .analysisCadenceSeconds)) ?? 45,
             providerTimeoutSeconds: (try? container.decode(Int.self, forKey: .providerTimeoutSeconds)) ?? 60,
+            liveContextRetrievalMode: (try? container.decode(LiveContextRetrievalMode.self, forKey: .liveContextRetrievalMode)) ?? .memoryLiveIndex,
             customProviderCommand: (try? container.decode(String.self, forKey: .customProviderCommand)) ?? ""
         )
     }
@@ -655,6 +685,69 @@ public struct AnalysisAttemptBatchStats: Codable, Equatable, Sendable {
     }
 }
 
+public struct AnalysisContextPlan: Codable, Equatable, Sendable {
+    public var retrievalMode: LiveContextRetrievalMode
+    public var retrievalTopK: Int
+    public var retrievalLatencyMilliseconds: Int
+    public var retrievedChunks: [RetrievedTranscriptChunk]
+    public var speakingParticipantCount: Int
+    public var metadataParticipantCount: Int
+    public var omittedParticipantCount: Int
+    public var newTranscriptCharacters: Int
+    public var newDialogueLines: Int
+    public var recentContextCharacters: Int
+    public var estimatedPromptTokens: Int
+
+    public init(
+        retrievalMode: LiveContextRetrievalMode,
+        retrievalTopK: Int = 0,
+        retrievalLatencyMilliseconds: Int = 0,
+        retrievedChunks: [RetrievedTranscriptChunk] = [],
+        speakingParticipantCount: Int = 0,
+        metadataParticipantCount: Int = 0,
+        omittedParticipantCount: Int = 0,
+        newTranscriptCharacters: Int = 0,
+        newDialogueLines: Int = 0,
+        recentContextCharacters: Int = 0,
+        estimatedPromptTokens: Int = 0
+    ) {
+        self.retrievalMode = retrievalMode
+        self.retrievalTopK = retrievalTopK
+        self.retrievalLatencyMilliseconds = retrievalLatencyMilliseconds
+        self.retrievedChunks = retrievedChunks
+        self.speakingParticipantCount = speakingParticipantCount
+        self.metadataParticipantCount = metadataParticipantCount
+        self.omittedParticipantCount = omittedParticipantCount
+        self.newTranscriptCharacters = newTranscriptCharacters
+        self.newDialogueLines = newDialogueLines
+        self.recentContextCharacters = recentContextCharacters
+        self.estimatedPromptTokens = estimatedPromptTokens
+    }
+
+    public var compactSummary: String {
+        let ranges = retrievedChunks
+            .map(\.timeRange)
+            .filter { !$0.isEmpty }
+            .joined(separator: ", ")
+        let chunkSummary = ranges.isEmpty ? "\(retrievedChunks.count) chunks" : ranges
+        return "\(retrievalMode.displayName) · top \(retrievalTopK) · \(chunkSummary) · \(retrievalLatencyMilliseconds)ms"
+    }
+}
+
+public struct RetrievedTranscriptChunk: Codable, Equatable, Sendable, Identifiable {
+    public var id: String
+    public var timeRange: String
+    public var text: String
+    public var score: Double
+
+    public init(id: String, timeRange: String, text: String, score: Double) {
+        self.id = id
+        self.timeRange = timeRange
+        self.text = text
+        self.score = score
+    }
+}
+
 public struct AnalysisRunTraceEvent: Codable, Equatable, Sendable, Identifiable {
     public var id: String
     public var name: String
@@ -730,6 +823,7 @@ public struct AnalysisAttemptLog: Codable, Equatable, Sendable, Identifiable {
     public var prompt: String?
     public var providerOutput: String?
     public var batchStats: AnalysisAttemptBatchStats?
+    public var contextPlan: AnalysisContextPlan?
     public var runTrace: AnalysisRunTrace?
 
     public init(
@@ -748,6 +842,7 @@ public struct AnalysisAttemptLog: Codable, Equatable, Sendable, Identifiable {
         prompt: String? = nil,
         providerOutput: String? = nil,
         batchStats: AnalysisAttemptBatchStats? = nil,
+        contextPlan: AnalysisContextPlan? = nil,
         runTrace: AnalysisRunTrace? = nil
     ) {
         self.id = id
@@ -765,6 +860,7 @@ public struct AnalysisAttemptLog: Codable, Equatable, Sendable, Identifiable {
         self.prompt = prompt
         self.providerOutput = providerOutput
         self.batchStats = batchStats
+        self.contextPlan = contextPlan
         self.runTrace = runTrace
     }
 
@@ -1038,6 +1134,7 @@ public struct AnalysisRequest: Equatable, Sendable {
     public var modelPreset: LLMModelPreset
     public var reason: String
     public var lastAnalyzedTranscriptCharacterCount: Int
+    public var contextPlan: AnalysisContextPlan?
 
     public init(
         meetingID: String,
@@ -1049,7 +1146,8 @@ public struct AnalysisRequest: Equatable, Sendable {
         providerKind: LLMProviderKind = .codexExec,
         modelPreset: LLMModelPreset = .economy,
         reason: String = "",
-        lastAnalyzedTranscriptCharacterCount: Int = 0
+        lastAnalyzedTranscriptCharacterCount: Int = 0,
+        contextPlan: AnalysisContextPlan? = nil
     ) {
         self.meetingID = meetingID
         self.metadata = metadata
@@ -1061,14 +1159,15 @@ public struct AnalysisRequest: Equatable, Sendable {
         self.modelPreset = modelPreset
         self.reason = reason
         self.lastAnalyzedTranscriptCharacterCount = lastAnalyzedTranscriptCharacterCount
+        self.contextPlan = contextPlan
     }
 
     public var outputMode: AnalysisOutputMode {
-        Self.usesPatchOutput(reason) && previousSnapshot != nil ? .livePatch : .fullSnapshot
+        previousSnapshot != nil && !Self.usesFullSnapshotOutput(reason) ? .livePatch : .fullSnapshot
     }
 
-    public static func usesPatchOutput(_ reason: String) -> Bool {
-        isAutomaticReason(reason) || reason.hasPrefix("final")
+    public static func usesFullSnapshotOutput(_ reason: String) -> Bool {
+        reason.hasPrefix("repair") || reason.hasPrefix("full-refresh")
     }
 
     public static func isAutomaticReason(_ reason: String) -> Bool {

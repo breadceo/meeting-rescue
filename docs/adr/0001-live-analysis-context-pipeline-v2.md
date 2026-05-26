@@ -34,6 +34,8 @@ live analysis prompt 보강에는 active meeting 전용 ephemeral `LiveTranscrip
 
 기존 SQLite FTS5 history search DB는 과거 회의 검색과 회의 종료 후 안정 indexing에 사용한다. live analysis 중 history DB를 조회하거나 갱신하는 흐름은 이번 scope에 포함하지 않는다.
 
+Test Run도 live analysis와 같은 provider/request path를 사용하므로 `Memory live index`를 적용한다. 단, trigger wait 계산은 기존처럼 wall-clock이 아니라 transcript 경과 시간 기준을 유지한다.
+
 ### 4. 기존 방식과 병립한다
 
 고급 설정에 `Live context retrieval` 옵션을 둔다.

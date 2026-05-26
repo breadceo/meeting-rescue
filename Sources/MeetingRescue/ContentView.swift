@@ -1700,6 +1700,7 @@ struct ContentView: View {
             }
             statusChip("상태", viewModel.analysisStatus.displayText, systemImage: statusIcon)
             if density != .compact {
+                statusChip("다음 분석", viewModel.nextAutomaticAnalysisSummary, systemImage: "timer")
                 statusChip("provider", providerSummary, systemImage: "cpu")
             }
             if density == .full {
@@ -2149,6 +2150,16 @@ struct SettingsView: View {
                     .foregroundStyle(Color.smoothMuted)
                     .fixedSize(horizontal: false, vertical: true)
 
+                Picker("live context retrieval", selection: liveContextRetrievalModeBinding) {
+                    ForEach(LiveContextRetrievalMode.allCases) { mode in
+                        Text(mode.displayName).tag(mode)
+                    }
+                }
+                Text(viewModel.settings.liveContextRetrievalMode.detail)
+                    .font(.caption)
+                    .foregroundStyle(Color.smoothMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+
                 TextField("custom command", text: customCommandBinding)
                     .disabled(viewModel.settings.selectedProvider != .customCommand)
             }
@@ -2244,6 +2255,14 @@ struct SettingsView: View {
             viewModel.settings.automaticAnalysisEnabled
         } set: { value in
             viewModel.setAutomaticAnalysisEnabled(value)
+        }
+    }
+
+    private var liveContextRetrievalModeBinding: Binding<LiveContextRetrievalMode> {
+        Binding {
+            viewModel.settings.liveContextRetrievalMode
+        } set: { value in
+            viewModel.updateLiveContextRetrievalMode(value)
         }
     }
 
@@ -2541,6 +2560,10 @@ private struct AnalysisAttemptDetailView: View {
                 }
             }
 
+            if let contextPlan = attempt.contextPlan {
+                contextPlanView(contextPlan)
+            }
+
             if let message = attempt.message, !message.isEmpty {
                 Text(message)
                     .font(.caption)
@@ -2646,6 +2669,56 @@ private struct AnalysisAttemptDetailView: View {
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.smoothSurface, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.smoothLine, lineWidth: 1)
+        )
+    }
+
+    private func contextPlanView(_ plan: AnalysisContextPlan) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Context Plan")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(Color.smoothAccent)
+                Spacer()
+                Text(plan.compactSummary)
+                    .font(.caption)
+                    .foregroundStyle(Color.smoothMuted)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            HStack(spacing: 8) {
+                detailMetric("\(plan.speakingParticipantCount)/\(plan.metadataParticipantCount)", "speakers")
+                detailMetric("\(plan.omittedParticipantCount)", "omitted people")
+                detailMetric("\(plan.newDialogueLines)", "new lines")
+                detailMetric("\(plan.recentContextCharacters)", "recent chars")
+                detailMetric("\(plan.estimatedPromptTokens)", "est prompt tokens")
+            }
+            if !plan.retrievedChunks.isEmpty {
+                VStack(alignment: .leading, spacing: 5) {
+                    ForEach(plan.retrievedChunks) { chunk in
+                        HStack(spacing: 8) {
+                            Text(chunk.timeRange.isEmpty ? chunk.id : chunk.timeRange)
+                                .font(.caption.monospacedDigit())
+                                .foregroundStyle(Color.smoothAccent)
+                                .frame(width: 112, alignment: .leading)
+                            Text(String(format: "%.2f", chunk.score))
+                                .font(.caption.monospacedDigit())
+                                .foregroundStyle(Color.smoothMuted)
+                                .frame(width: 42, alignment: .trailing)
+                            Text(chunk.text)
+                                .font(.caption)
+                                .foregroundStyle(Color.smoothInk)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                        }
+                    }
+                }
+            }
+        }
+        .padding(10)
         .background(Color.smoothSurface, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
