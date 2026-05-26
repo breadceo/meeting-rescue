@@ -24,4 +24,19 @@ struct LocalAnalysisFallbackTests {
         #expect(!snapshot.topicTimeline.isEmpty)
         #expect(snapshot.risksOrNotes.contains { $0.contains("schema failed") })
     }
+
+    @Test("local fallback snapshot은 provider previous snapshot으로 재사용하지 않도록 판별한다")
+    func detectsFallbackSnapshot() {
+        let request = AnalysisRequest(
+            meetingID: "meeting",
+            metadata: MeetingMetadata(room: "Room"),
+            rawTranscript: "[00:01] Alex: 아직 provider 결과를 기다립니다."
+        )
+        let fallback = LocalAnalysisFallback.snapshot(for: request, message: "running")
+        let real = AnalysisSnapshot(currentIssue: CurrentIssue(summary: "실제 provider 요약입니다."))
+
+        #expect(LocalAnalysisFallback.isFallbackSnapshot(fallback))
+        #expect(!LocalAnalysisFallback.isFallbackSnapshot(real))
+        #expect(!LocalAnalysisFallback.isFallbackSnapshot(nil))
+    }
 }

@@ -1523,7 +1523,7 @@ final class AppViewModel: ObservableObject {
             meetingID: meetingID(for: activeTranscriptURL),
             metadata: metadata,
             rawTranscript: rawTranscript,
-            previousSnapshot: analysisState.latestSnapshot,
+            previousSnapshot: providerPreviousSnapshot(),
             confirmedCandidateIDs: analysisState.confirmedCandidateIDs,
             deletedCandidateIDs: analysisState.deletedCandidateIDs,
             providerKind: settings.selectedProvider,
@@ -2020,6 +2020,7 @@ final class AppViewModel: ObservableObject {
         ) {
             try? stateStore.saveAnalysisState(analysisState, for: url)
         }
+        latestSnapshotIsLocalFallback = LocalAnalysisFallback.isFallbackSnapshot(analysisState.latestSnapshot)
         analysisStatus = analysisState.isCompleted ? .completed : .idle
 
         if let session = stateStore.loadSession(for: url) {
@@ -2029,9 +2030,10 @@ final class AppViewModel: ObservableObject {
         }
 
         let id = meetingID(for: url)
+        let seedSnapshot = providerPreviousSnapshot()
         Task {
             await scheduler.setActiveMeetingID(id)
-            await scheduler.seedSnapshot(analysisState.latestSnapshot, for: id)
+            await scheduler.seedSnapshot(seedSnapshot, for: id)
         }
 
         readFullContent(from: url, allowFinalTrigger: false)
@@ -2217,7 +2219,7 @@ final class AppViewModel: ObservableObject {
         }
 
         let meetingID = meetingID(for: activeTranscriptURL)
-        let previousSnapshot = automaticPreviousSnapshotIfNeeded(reason: reason)
+        let previousSnapshot = providerPreviousSnapshot()
         let transcriptWindow = AnalysisTranscriptWindow.make(
             rawTranscript: rawTranscript,
             lastAnalyzedTranscriptCharacterCount: analysisState.analyzedTranscriptCharacterCount,
@@ -2313,25 +2315,13 @@ final class AppViewModel: ObservableObject {
             .first ?? 0
     }
 
-    private func automaticPreviousSnapshotIfNeeded(reason: String) -> AnalysisSnapshot? {
-        guard AnalysisRequest.isAutomaticReason(reason) else {
-            return analysisState.latestSnapshot
+    private func providerPreviousSnapshot() -> AnalysisSnapshot? {
+        guard let latestSnapshot = analysisState.latestSnapshot,
+              !latestSnapshotIsLocalFallback,
+              !LocalAnalysisFallback.isFallbackSnapshot(latestSnapshot) else {
+            return nil
         }
-        if let latestSnapshot = analysisState.latestSnapshot {
-            return latestSnapshot
-        }
-
-        let fallbackSnapshot = AnalysisSnapshot(
-            currentIssue: CurrentIssue(summary: "초기 1분 이후 live patch 분석을 기다리는 중입니다."),
-            provider: settings.selectedProvider
-        )
-        analysisState.latestSnapshot = analysisState.applyingCandidateState(to: fallbackSnapshot)
-        analysisState.updatedAt = Date()
-        latestSnapshotIsLocalFallback = true
-        if let activeTranscriptURL {
-            try? stateStore.saveAnalysisState(analysisState, for: activeTranscriptURL)
-        }
-        return analysisState.latestSnapshot
+        return latestSnapshot
     }
 
     private func applyAnalysisResult(_ result: AnalysisRunResult, for sourceURL: URL, reason: String) {

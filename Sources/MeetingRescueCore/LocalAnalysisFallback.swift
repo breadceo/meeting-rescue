@@ -1,6 +1,19 @@
 import Foundation
 
 public enum LocalAnalysisFallback {
+    public static func isFallbackSnapshot(_ snapshot: AnalysisSnapshot?) -> Bool {
+        guard let snapshot else {
+            return false
+        }
+        if snapshot.currentIssue.summary.hasPrefix("LLM provider 결과를 아직 받지 못해 로컬 fallback") {
+            return true
+        }
+        if snapshot.currentIssue.summary.hasPrefix("초기 1분 이후 live patch 분석을 기다리는 중입니다.") {
+            return true
+        }
+        return snapshot.risksOrNotes.contains { $0.hasPrefix("Fallback reason:") }
+    }
+
     public static func snapshot(for request: AnalysisRequest, message: String) -> AnalysisSnapshot {
         let parsed = TranscriptParser.parse(request.rawTranscript)
         let dialogue = parsed.dialogueLines
