@@ -2499,125 +2499,193 @@ private extension View {
 
 private struct AnalysisAttemptDetailView: View {
     @Environment(\.dismiss) private var dismiss
+    @State private var isSummaryExpanded = true
+    @State private var isBatchExpanded = true
+    @State private var isContextExpanded = true
+    @State private var isMessageExpanded = true
+    @State private var isTraceExpanded = false
+    @State private var isPromptExpanded = true
+    @State private var isOutputExpanded = true
 
     let attempt: AnalysisAttemptLog
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Analysis 실행 상세")
-                        .font(.title3.weight(.bold))
-                        .foregroundStyle(Color.smoothInk)
-                    Text("\(attempt.reason) · \(attempt.status.rawValue) · \(attempt.modelName)")
-                        .font(.callout)
-                        .foregroundStyle(Color.smoothMuted)
-                }
-                Spacer()
-                HStack(spacing: 8) {
-                    Text(attempt.completedAt?.formatted(date: .numeric, time: .standard) ?? "running")
-                        .font(.caption)
-                        .foregroundStyle(Color.smoothMuted)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 5)
-                        .background(Color.smoothCanvas, in: Capsule())
+        VStack(alignment: .leading, spacing: 0) {
+            header
+                .padding(.horizontal, 18)
+                .padding(.top, 18)
+                .padding(.bottom, 12)
+                .background(Color.smoothCanvas)
 
-                    Button {
-                        dismiss()
-                    } label: {
-                        Label("닫기", systemImage: "xmark")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(Color.smoothInk)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
-                            .background(Color.smoothSurface, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                    .stroke(Color.smoothLine, lineWidth: 1)
-                            )
+            ScrollView {
+                VStack(alignment: .leading, spacing: 10) {
+                    collapsibleSection(
+                        title: "Summary",
+                        subtitle: "\(attempt.inputTokens) in · \(attempt.outputTokens) out · \(attempt.elapsedMilliseconds.map { "\($0)ms" } ?? "running")",
+                        isExpanded: $isSummaryExpanded
+                    ) {
+                        metricGrid {
+                            detailMetric("\(attempt.inputTokens)", "input tokens")
+                            detailMetric("\(attempt.outputTokens)", "output tokens")
+                            detailMetric(attempt.elapsedMilliseconds.map { "\($0)ms" } ?? "running", "duration")
+                            detailMetric(attempt.modelPreset.displayName, "preset")
+                            detailMetric(attempt.provider.displayName, "provider")
+                        }
                     }
-                    .buttonStyle(.plain)
-                    .keyboardShortcut(.cancelAction)
-                    .help("상세 화면 닫기")
+
+                    if let stats = attempt.batchStats {
+                        collapsibleSection(
+                            title: "Batch",
+                            subtitle: stats.compactSummary,
+                            isExpanded: $isBatchExpanded
+                        ) {
+                            metricGrid {
+                                detailMetric("\(stats.newDialogueLines)", "new lines")
+                                detailMetric("\(stats.newTranscriptCharacters)", "new chars")
+                                detailMetric("\(stats.includedDialogueLines)", "included lines")
+                                detailMetric("\(stats.includedTranscriptCharacters)", "included chars")
+                                detailMetric(stats.triggerReason, "trigger")
+                            }
+                        }
+                    }
+
+                    if let contextPlan = attempt.contextPlan {
+                        collapsibleSection(
+                            title: "Context Plan",
+                            subtitle: contextPlan.compactSummary,
+                            isExpanded: $isContextExpanded
+                        ) {
+                            contextPlanContent(contextPlan)
+                        }
+                    }
+
+                    if let message = attempt.message, !message.isEmpty {
+                        collapsibleSection(
+                            title: "Message",
+                            subtitle: message,
+                            isExpanded: $isMessageExpanded
+                        ) {
+                            messageView(message)
+                        }
+                    }
+
+                    if let trace = attempt.runTrace {
+                        collapsibleSection(
+                            title: "Run Trace",
+                            subtitle: "stdout \(trace.outputBytes)B · stderr \(trace.stderrBytes)B · exit \(trace.exitCode.map(String.init) ?? "-")",
+                            isExpanded: $isTraceExpanded
+                        ) {
+                            runTraceContent(trace)
+                        }
+                    }
+
+                    HSplitView {
+                        collapsibleSection(
+                            title: "Prompt",
+                            subtitle: "\(attempt.prompt?.count ?? 0)자",
+                            isExpanded: $isPromptExpanded
+                        ) {
+                            detailTextPanel(text: attempt.prompt ?? "저장된 prompt가 없습니다. 이 버전 이후 실행부터 기록됩니다.")
+                                .frame(minHeight: 340, maxHeight: .infinity)
+                        }
+                        .frame(minWidth: 360, maxWidth: .infinity, maxHeight: .infinity)
+
+                        collapsibleSection(
+                            title: "Provider Output",
+                            subtitle: "\(attempt.providerOutput?.count ?? 0)자",
+                            isExpanded: $isOutputExpanded
+                        ) {
+                            detailTextPanel(text: attempt.providerOutput ?? "저장된 provider output이 없습니다. 성공한 run은 이 버전 이후 raw JSON output을 기록합니다.")
+                                .frame(minHeight: 340, maxHeight: .infinity)
+                        }
+                        .frame(minWidth: 360, maxWidth: .infinity, maxHeight: .infinity)
+                    }
+                    .frame(minHeight: 380)
                 }
-            }
-
-            HStack(spacing: 8) {
-                detailMetric("\(attempt.inputTokens)", "input tokens")
-                detailMetric("\(attempt.outputTokens)", "output tokens")
-                detailMetric(attempt.elapsedMilliseconds.map { "\($0)ms" } ?? "running", "duration")
-                detailMetric(attempt.modelPreset.displayName, "preset")
-                detailMetric(attempt.provider.displayName, "provider")
-            }
-
-            if let stats = attempt.batchStats {
-                HStack(spacing: 8) {
-                    detailMetric("\(stats.newDialogueLines)", "new lines")
-                    detailMetric("\(stats.newTranscriptCharacters)", "new chars")
-                    detailMetric("\(stats.includedDialogueLines)", "included lines")
-                    detailMetric("\(stats.includedTranscriptCharacters)", "included chars")
-                    detailMetric(stats.triggerReason, "trigger")
-                }
-            }
-
-            if let contextPlan = attempt.contextPlan {
-                contextPlanView(contextPlan)
-            }
-
-            if let message = attempt.message, !message.isEmpty {
-                Text(message)
-                    .font(.caption)
-                    .foregroundStyle(attempt.status == .failed ? Color.orange : Color.smoothMuted)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(10)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.smoothSurface, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .stroke(Color.smoothLine, lineWidth: 1)
-                    )
-            }
-
-            if let trace = attempt.runTrace {
-                runTraceView(trace)
-            }
-
-            HSplitView {
-                detailTextPanel(title: "Prompt", text: attempt.prompt ?? "저장된 prompt가 없습니다. 이 버전 이후 실행부터 기록됩니다.")
-                    .frame(minWidth: 360, maxWidth: .infinity, maxHeight: .infinity)
-                detailTextPanel(title: "Provider Output", text: attempt.providerOutput ?? "저장된 provider output이 없습니다. 성공한 run은 이 버전 이후 raw JSON output을 기록합니다.")
-                    .frame(minWidth: 360, maxWidth: .infinity, maxHeight: .infinity)
-            }
-            .frame(minHeight: 420)
-
-            HStack {
-                Spacer()
-                Button {
-                    dismiss()
-                } label: {
-                    Label("닫기", systemImage: "xmark")
-                        .font(.callout.weight(.semibold))
-                }
-                .buttonStyle(SmoothActionButtonStyle(kind: .primary))
-                .keyboardShortcut(.defaultAction)
+                .padding(.horizontal, 18)
+                .padding(.bottom, 18)
             }
         }
-        .padding(18)
         .frame(minWidth: 920, minHeight: 620)
         .background(Color.smoothCanvas)
     }
 
-    private func runTraceView(_ trace: AnalysisRunTrace) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text("Run Trace")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(Color.smoothAccent)
-                Spacer()
-                Text("stdout \(trace.outputBytes)B · stderr \(trace.stderrBytes)B · exit \(trace.exitCode.map(String.init) ?? "-")")
-                    .font(.caption)
+    private var header: some View {
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Analysis 실행 상세")
+                    .font(.title3.weight(.bold))
+                    .foregroundStyle(Color.smoothInk)
+                Text("\(attempt.reason) · \(attempt.status.rawValue) · \(attempt.modelName)")
+                    .font(.callout)
                     .foregroundStyle(Color.smoothMuted)
             }
+            Spacer()
+            HStack(spacing: 8) {
+                Text(attempt.completedAt?.formatted(date: .numeric, time: .standard) ?? "running")
+                    .font(.caption)
+                    .foregroundStyle(Color.smoothMuted)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 5)
+                    .background(Color.smoothCanvas, in: Capsule())
+
+                Button {
+                    dismiss()
+                } label: {
+                    Label("닫기", systemImage: "xmark")
+                        .font(.caption.weight(.semibold))
+                }
+                .buttonStyle(SmoothActionButtonStyle())
+                .keyboardShortcut(.cancelAction)
+                .help("상세 화면 닫기")
+            }
+        }
+    }
+
+    private func collapsibleSection<Content: View>(
+        title: String,
+        subtitle: String? = nil,
+        isExpanded: Binding<Bool>,
+        @ViewBuilder content: @escaping () -> Content
+    ) -> some View {
+        DisclosureGroup(isExpanded: isExpanded) {
+            content()
+                .padding(.top, 8)
+        } label: {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(title)
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(Color.smoothAccent)
+                if let subtitle, !subtitle.isEmpty {
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundStyle(Color.smoothMuted)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                Spacer(minLength: 0)
+            }
+            .contentShape(Rectangle())
+        }
+        .padding(10)
+        .background(Color.smoothSurface, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.smoothLine, lineWidth: 1)
+        )
+    }
+
+    private func metricGrid<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        LazyVGrid(
+            columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 5),
+            alignment: .leading,
+            spacing: 8,
+            content: content
+        )
+    }
+
+    private func runTraceContent(_ trace: AnalysisRunTrace) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
             Text("\(trace.providerExecutable) \(trace.argumentsSummary)")
                 .font(.caption.monospaced())
                 .foregroundStyle(Color.smoothMuted)
@@ -2648,12 +2716,6 @@ private struct AnalysisAttemptDetailView: View {
                 }
             }
         }
-        .padding(10)
-        .background(Color.smoothSurface, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(Color.smoothLine, lineWidth: 1)
-        )
     }
 
     private func detailMetric(_ value: String, _ label: String) -> some View {
@@ -2676,20 +2738,9 @@ private struct AnalysisAttemptDetailView: View {
         )
     }
 
-    private func contextPlanView(_ plan: AnalysisContextPlan) -> some View {
+    private func contextPlanContent(_ plan: AnalysisContextPlan) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text("Context Plan")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(Color.smoothAccent)
-                Spacer()
-                Text(plan.compactSummary)
-                    .font(.caption)
-                    .foregroundStyle(Color.smoothMuted)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-            }
-            HStack(spacing: 8) {
+            metricGrid {
                 detailMetric("\(plan.speakingParticipantCount)/\(plan.metadataParticipantCount)", "speakers")
                 detailMetric("\(plan.omittedParticipantCount)", "omitted people")
                 detailMetric("\(plan.newDialogueLines)", "new lines")
@@ -2718,25 +2769,18 @@ private struct AnalysisAttemptDetailView: View {
                 }
             }
         }
-        .padding(10)
-        .background(Color.smoothSurface, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(Color.smoothLine, lineWidth: 1)
-        )
     }
 
-    private func detailTextPanel(title: String, text: String) -> some View {
+    private func messageView(_ message: String) -> some View {
+        Text(message)
+            .font(.caption)
+            .foregroundStyle(attempt.status == .failed ? Color.orange : Color.smoothMuted)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func detailTextPanel(text: String) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(title)
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(Color.smoothAccent)
-                Spacer()
-                Text("\(text.count)자")
-                    .font(.caption2)
-                    .foregroundStyle(Color.smoothMuted)
-            }
             AnalysisAttemptTextView(text: text)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Color.smoothSurface, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
