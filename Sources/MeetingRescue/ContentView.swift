@@ -2552,7 +2552,7 @@ private struct AnalysisAttemptDetailView: View {
                     if let contextPlan = attempt.contextPlan {
                         collapsibleSection(
                             title: "Context Plan",
-                            subtitle: contextPlan.compactSummary,
+                            subtitle: contextPlanSubtitle(contextPlan),
                             isExpanded: $isContextExpanded
                         ) {
                             contextPlanContent(contextPlan)
@@ -2739,36 +2739,83 @@ private struct AnalysisAttemptDetailView: View {
     }
 
     private func contextPlanContent(_ plan: AnalysisContextPlan) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
             metricGrid {
+                detailMetric(plan.retrievalMode.displayName, "retrieval mode")
+                detailMetric("\(plan.retrievalTopK)", "retrieval topK")
+                detailMetric("\(plan.retrievalLatencyMilliseconds)ms", "retrieval latency")
+                detailMetric("\(plan.retrievedChunks.count)", "retrieved chunks")
+                detailMetric("\(plan.estimatedPromptTokens)", "est prompt tokens")
                 detailMetric("\(plan.speakingParticipantCount)/\(plan.metadataParticipantCount)", "speakers")
                 detailMetric("\(plan.omittedParticipantCount)", "omitted people")
                 detailMetric("\(plan.newDialogueLines)", "new lines")
+                detailMetric("\(plan.newTranscriptCharacters)", "new chars")
                 detailMetric("\(plan.recentContextCharacters)", "recent chars")
-                detailMetric("\(plan.estimatedPromptTokens)", "est prompt tokens")
             }
+
             if !plan.retrievedChunks.isEmpty {
-                VStack(alignment: .leading, spacing: 5) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Retrieved Chunks")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(Color.smoothAccent)
                     ForEach(plan.retrievedChunks) { chunk in
-                        HStack(spacing: 8) {
-                            Text(chunk.timeRange.isEmpty ? chunk.id : chunk.timeRange)
-                                .font(.caption.monospacedDigit())
-                                .foregroundStyle(Color.smoothAccent)
-                                .frame(width: 112, alignment: .leading)
-                            Text(String(format: "%.2f", chunk.score))
-                                .font(.caption.monospacedDigit())
-                                .foregroundStyle(Color.smoothMuted)
-                                .frame(width: 42, alignment: .trailing)
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                Text(chunk.timeRange.isEmpty ? chunk.id : chunk.timeRange)
+                                    .font(.caption.monospacedDigit().weight(.semibold))
+                                    .foregroundStyle(Color.smoothAccent)
+                                Text("score \(String(format: "%.3f", chunk.score))")
+                                    .font(.caption.monospacedDigit())
+                                    .foregroundStyle(Color.smoothMuted)
+                                Text("\(chunk.text.count)자")
+                                    .font(.caption)
+                                    .foregroundStyle(Color.smoothMuted)
+                                Spacer(minLength: 0)
+                            }
                             Text(chunk.text)
-                                .font(.caption)
+                                .font(.caption.monospaced())
                                 .foregroundStyle(Color.smoothInk)
-                                .lineLimit(1)
-                                .truncationMode(.tail)
+                                .textSelection(.enabled)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
+                        .padding(8)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color.smoothCanvas.opacity(0.72), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                .stroke(Color.smoothLine.opacity(0.8), lineWidth: 1)
+                        )
                     }
                 }
+            } else {
+                Text("retrieval mode가 Off이거나 score threshold를 넘은 관련 chunk가 없어 prompt에 추가된 과거 맥락이 없습니다.")
+                    .font(.caption)
+                    .foregroundStyle(Color.smoothMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Raw Context Plan")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(Color.smoothAccent)
+                detailTextPanel(text: contextPlanDebugText(plan))
+                    .frame(height: 180)
             }
         }
+    }
+
+    private func contextPlanSubtitle(_ plan: AnalysisContextPlan) -> String {
+        "\(plan.retrievalMode.displayName) · top \(plan.retrievalTopK) · \(plan.retrievedChunks.count) chunks · \(plan.retrievalLatencyMilliseconds)ms · est \(plan.estimatedPromptTokens) tokens"
+    }
+
+    private func contextPlanDebugText(_ plan: AnalysisContextPlan) -> String {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        guard let data = try? encoder.encode(plan),
+              let text = String(data: data, encoding: .utf8) else {
+            return plan.compactSummary
+        }
+        return text
     }
 
     private func messageView(_ message: String) -> some View {
