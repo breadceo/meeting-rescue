@@ -1,0 +1,21 @@
+Sources/MeetingRescue/AppViewModel.swift
+  h_d82ccb34241a0d 1101,1128-1132,2644-2668
+Sources/MeetingRescue/ContentView.swift
+  h_d82ccb34241a0d 1385,2119-2130,2249-2256
+Sources/MeetingRescueCore/AnalysisModels.swift
+  h_d82ccb34241a0d 94-118,196,208,219,232,247
+Sources/MeetingRescueCore/LLMProvider.swift
+  h_d82ccb34241a0d 169-548
+Tests/MeetingRescueCoreTests/LLMProviderConfigurationTests.swift
+  h_d82ccb34241a0d 21,30-38,127-146
+---
+{
+  "schema_version": "zax-attestation/1.1.0",
+  "base_commit_sha": "3a87d6291af6f9902f0c3506d03d493798f0d388",
+  "prompts": {},
+  "humans": {
+    "h_d82ccb34241a0d": {
+      "author": "ethan@zigbang.com"
+    }
+  }
+}
