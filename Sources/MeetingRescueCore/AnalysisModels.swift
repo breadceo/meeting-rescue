@@ -91,6 +91,31 @@ public enum LLMModelPreset: String, Codable, CaseIterable, Identifiable, Sendabl
     }
 }
 
+public enum CodexExecutionMode: String, Codable, CaseIterable, Identifiable, Sendable {
+    case cliExec
+    case appServerExperimental
+
+    public var id: String { rawValue }
+
+    public var displayName: String {
+        switch self {
+        case .cliExec:
+            return "CLI exec"
+        case .appServerExperimental:
+            return "App Server experimental"
+        }
+    }
+
+    public var detail: String {
+        switch self {
+        case .cliExec:
+            return "현재 안정 경로입니다. 매 analysis마다 codex exec --ephemeral을 실행합니다."
+        case .appServerExperimental:
+            return "Codex app-server protocol을 사용합니다. 실험 기능이며 실패하거나 느리면 CLI exec로 되돌려 사용하세요."
+        }
+    }
+}
+
 public enum AnalysisTriggerPreset: String, Codable, CaseIterable, Identifiable, Sendable {
     case responsive
     case balanced
@@ -168,6 +193,7 @@ public enum LiveContextRetrievalMode: String, Codable, CaseIterable, Identifiabl
 
 public struct AppSettings: Codable, Equatable, Sendable {
     public var selectedProvider: LLMProviderKind
+    public var codexExecutionMode: CodexExecutionMode
     public var modelPreset: LLMModelPreset
     public var automaticAnalysisEnabled: Bool
     public var hasCompletedOnboarding: Bool
@@ -179,6 +205,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
 
     public init(
         selectedProvider: LLMProviderKind = .codexExec,
+        codexExecutionMode: CodexExecutionMode = .cliExec,
         modelPreset: LLMModelPreset = .economy,
         automaticAnalysisEnabled: Bool = true,
         hasCompletedOnboarding: Bool = false,
@@ -189,6 +216,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         customProviderCommand: String = ""
     ) {
         self.selectedProvider = selectedProvider
+        self.codexExecutionMode = codexExecutionMode
         self.modelPreset = modelPreset
         self.automaticAnalysisEnabled = automaticAnalysisEnabled
         self.hasCompletedOnboarding = hasCompletedOnboarding
@@ -201,6 +229,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case selectedProvider
+        case codexExecutionMode
         case modelPreset
         case automaticAnalysisEnabled
         case hasCompletedOnboarding
@@ -215,6 +244,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.init(
             selectedProvider: (try? container.decode(LLMProviderKind.self, forKey: .selectedProvider)) ?? .codexExec,
+            codexExecutionMode: (try? container.decode(CodexExecutionMode.self, forKey: .codexExecutionMode)) ?? .cliExec,
             modelPreset: (try? container.decode(LLMModelPreset.self, forKey: .modelPreset)) ?? .economy,
             automaticAnalysisEnabled: (try? container.decode(Bool.self, forKey: .automaticAnalysisEnabled)) ?? true,
             hasCompletedOnboarding: (try? container.decode(Bool.self, forKey: .hasCompletedOnboarding)) ?? false,

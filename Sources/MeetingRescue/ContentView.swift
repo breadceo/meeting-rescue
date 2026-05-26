@@ -1382,7 +1382,7 @@ struct ContentView: View {
     private var providerSummary: String {
         let provider = switch viewModel.selectedProvider {
         case .codexExec:
-            "Codex"
+            viewModel.settings.codexExecutionMode == .cliExec ? "Codex" : "Codex App Server"
         case .claudeCode:
             "Claude"
         case .customCommand:
@@ -2116,6 +2116,18 @@ struct SettingsView: View {
                     }
                 }
 
+                if viewModel.settings.selectedProvider == .codexExec {
+                    Picker("Codex execution", selection: codexExecutionModeBinding) {
+                        ForEach(CodexExecutionMode.allCases) { mode in
+                            Text(mode.displayName).tag(mode)
+                        }
+                    }
+                    Text(viewModel.settings.codexExecutionMode.detail)
+                        .font(.caption)
+                        .foregroundStyle(Color.smoothMuted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
                 Picker("model preset", selection: modelPresetBinding) {
                     ForEach(LLMModelPreset.allCases) { preset in
                         Text(preset.displayName).tag(preset)
@@ -2231,6 +2243,14 @@ struct SettingsView: View {
             viewModel.settings.selectedProvider
         } set: { value in
             viewModel.updateProvider(value)
+        }
+    }
+
+    private var codexExecutionModeBinding: Binding<CodexExecutionMode> {
+        Binding {
+            viewModel.settings.codexExecutionMode
+        } set: { value in
+            viewModel.updateCodexExecutionMode(value)
         }
     }
 

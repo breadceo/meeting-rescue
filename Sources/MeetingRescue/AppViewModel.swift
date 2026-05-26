@@ -1098,6 +1098,7 @@ final class AppViewModel: ObservableObject {
     func saveSettings() {
         settings = AppSettings(
             selectedProvider: settings.selectedProvider,
+            codexExecutionMode: settings.codexExecutionMode,
             modelPreset: settings.modelPreset,
             automaticAnalysisEnabled: settings.automaticAnalysisEnabled,
             hasCompletedOnboarding: settings.hasCompletedOnboarding,
@@ -1121,6 +1122,11 @@ final class AppViewModel: ObservableObject {
 
     func updateProvider(_ provider: LLMProviderKind) {
         settings.selectedProvider = provider
+        saveSettings()
+    }
+
+    func updateCodexExecutionMode(_ mode: CodexExecutionMode) {
+        settings.codexExecutionMode = mode
         saveSettings()
     }
 
@@ -2635,13 +2641,31 @@ final class AppViewModel: ObservableObject {
     private func makeProvider(timeoutSeconds: Int) -> LLMProvider {
         switch settings.selectedProvider {
         case .codexExec:
-            return CodexExecProvider(
-                schemaURL: analysisSchemaURL(),
-                patchSchemaURL: analysisPatchSchemaURL(),
-                timeoutSeconds: timeoutSeconds,
-                workingDirectoryURL: URL(fileURLWithPath: FileManager.default.currentDirectoryPath),
-                modelPreset: settings.modelPreset
-            )
+            switch settings.codexExecutionMode {
+            case .cliExec:
+                return CodexExecProvider(
+                    schemaURL: analysisSchemaURL(),
+                    patchSchemaURL: analysisPatchSchemaURL(),
+                    timeoutSeconds: timeoutSeconds,
+                    workingDirectoryURL: URL(fileURLWithPath: FileManager.default.currentDirectoryPath),
+                    modelPreset: settings.modelPreset
+                )
+            case .appServerExperimental:
+                return CodexAppServerProvider(
+                    schemaURL: analysisSchemaURL(),
+                    patchSchemaURL: analysisPatchSchemaURL(),
+                    timeoutSeconds: timeoutSeconds,
+                    workingDirectoryURL: URL(fileURLWithPath: FileManager.default.currentDirectoryPath),
+                    modelPreset: settings.modelPreset,
+                    fallbackProvider: CodexExecProvider(
+                        schemaURL: analysisSchemaURL(),
+                        patchSchemaURL: analysisPatchSchemaURL(),
+                        timeoutSeconds: timeoutSeconds,
+                        workingDirectoryURL: URL(fileURLWithPath: FileManager.default.currentDirectoryPath),
+                        modelPreset: settings.modelPreset
+                    )
+                )
+            }
         case .claudeCode:
             return ClaudeCodeProvider(
                 schemaURL: analysisSchemaURL(),

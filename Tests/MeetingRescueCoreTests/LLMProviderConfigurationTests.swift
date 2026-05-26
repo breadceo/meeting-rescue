@@ -18,12 +18,22 @@ struct LLMProviderConfigurationTests {
         let settings = try JSONDecoder().decode(AppSettings.self, from: Data(json.utf8))
 
         #expect(settings.selectedProvider == .customCommand)
+        #expect(settings.codexExecutionMode == .cliExec)
         #expect(settings.modelPreset == .economy)
         #expect(settings.automaticAnalysisEnabled)
         #expect(settings.analysisTriggerPreset == .balanced)
         #expect(settings.analysisCadenceSeconds == 90)
         #expect(settings.providerTimeoutSeconds == 10)
         #expect(settings.customProviderCommand == "run-llm")
+    }
+
+    @Test("Codex execution mode를 저장하고 불러온다")
+    func encodesCodexExecutionMode() throws {
+        let settings = AppSettings(codexExecutionMode: .appServerExperimental)
+        let data = try JSONEncoder().encode(settings)
+        let decoded = try JSONDecoder().decode(AppSettings.self, from: data)
+
+        #expect(decoded.codexExecutionMode == .appServerExperimental)
     }
 
     @Test("automatic analysis 설정을 저장하고 불러온다")
@@ -113,6 +123,26 @@ struct LLMProviderConfigurationTests {
 
         #expect(!arguments.contains("--model"))
     }
+
+    @Test("Codex app-server provider는 stdio app-server와 minimal disables를 사용한다")
+    func codexAppServerArgumentsUseStdioAndDisableOptionalTools() {
+        let arguments = CodexAppServerProvider.arguments(modelPreset: .economy)
+
+        #expect(arguments.starts(with: ["codex", "app-server"]))
+        #expect(arguments.contains("--listen"))
+        #expect(arguments.contains("stdio://"))
+        #expect(disabledFeatures(in: arguments).isSuperset(of: [
+            "hooks",
+            "plugins",
+            "memories",
+            "apps",
+            "browser_use",
+            "computer_use",
+            "multi_agent",
+            "tool_search"
+        ]))
+    }
+
 
     @Test("Claude Code provider는 print mode와 JSON schema를 사용한다")
     func claudeCodeArgumentsUsePrintModeAndSchema() throws {
