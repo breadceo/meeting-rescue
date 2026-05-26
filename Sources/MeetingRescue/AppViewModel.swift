@@ -724,10 +724,9 @@ final class AppViewModel: ObservableObject {
             minimumAutomaticAnalysisElapsedSeconds
         )
         let lastAnalyzedCount = analysisState.analyzedTranscriptCharacterCount
+        let newCharacterCount = max(0, rawTranscript.count - lastAnalyzedCount)
         let newText = transcriptSlice(rawTranscript, from: lastAnalyzedCount, to: rawTranscript.count)
         let newLines = TranscriptParser.parse(newText).dialogueLines.count
-        let remainingLines = max(0, config.minNewDialogueLines - newLines)
-        let remainingCharacters = max(0, config.minNewTranscriptCharacters - max(0, rawTranscript.count - lastAnalyzedCount))
         let latestElapsedSeconds = latestTranscriptElapsedSeconds()
         if latestElapsedSeconds < config.minimumMeetingElapsedSeconds {
             return "초기 \(config.minimumMeetingElapsedSeconds - latestElapsedSeconds)초 skip"
@@ -735,7 +734,7 @@ final class AppViewModel: ObservableObject {
         let now = automaticTriggerReferenceDate(now: Date(), latestTranscriptElapsedSeconds: latestElapsedSeconds)
         let elapsedSinceLast = lastAutomaticAnalysisAt.map { max(0, Int(now.timeIntervalSince($0))) } ?? 0
         let waitRemaining = max(0, config.maxBatchWaitSeconds - elapsedSinceLast)
-        return "새 \(remainingLines)줄/\(remainingCharacters)자 또는 \(formatDuration(waitRemaining))"
+        return "새 \(newLines)/\(config.minNewDialogueLines)줄 · \(newCharacterCount)/\(config.minNewTranscriptCharacters)자 또는 \(formatDuration(waitRemaining))"
     }
 
     var filteredMeetingHistoryItems: [MeetingHistoryItem] {
