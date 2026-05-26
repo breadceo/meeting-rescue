@@ -26,6 +26,37 @@ struct LiveAnalysisContextPipelineTests {
         #expect(chunks[0].text.contains("광고 상품"))
     }
 
+    @Test("live memory index excludes chunks already covered by new transcript chunk")
+    func liveIndexExcludesChunksCoveredByNewTranscript() {
+        var index = LiveTranscriptIndex(
+            configuration: .init(maxDialogueLinesPerSegment: 4, scoreThreshold: 0.05)
+        )
+        index.append("""
+        [08:57] Chance Bok: 저희가 프로젝트 구축하는 게 먼저네요 그러면.
+        [09:00] Glen Lee: 근데 지금 테스트는?
+        [09:02] Chance Bok: 아 잘 되는지 테스트.
+        [09:07] Glen Lee: 지금 했던 그 뒤단에 사용자용 테스트라고 보면 되지 않을까?
+        [12:00] Glen Lee: 프리뷰 빌드의 API 기준을 다시 확인합니다.
+        [12:10] Chance Bok: 대부와 프리뷰 버킷 분리도 이어서 보겠습니다.
+        """)
+
+        let chunks = index.retrieve(
+            queryText: "[12:30] Glen Lee: 프리뷰 빌드와 대부 버킷 기준을 다시 정리하죠.",
+            excludingText: """
+            [08:50] Chance Bok: 앞에서 테스트 순서를 다시 봅니다.
+            [08:57] Chance Bok: 저희가 프로젝트 구축하는 게 먼저네요 그러면.
+            [09:00] Glen Lee: 근데 지금 테스트는?
+            [09:02] Chance Bok: 아 잘 되는지 테스트.
+            [09:07] Glen Lee: 지금 했던 그 뒤단에 사용자용 테스트라고 보면 되지 않을까?
+            [12:30] Glen Lee: 프리뷰 빌드와 대부 버킷 기준을 다시 정리하죠.
+            """,
+            topK: 2
+        )
+
+        #expect(!chunks.contains { $0.timeRange == "[08:57]-[09:07]" })
+        #expect(chunks.contains { $0.timeRange == "[12:00]-[12:10]" })
+    }
+
     @Test("context planner keeps retrieval off compatible with existing prompt path")
     func retrievalOffProducesNoChunks() throws {
         var index = LiveTranscriptIndex()

@@ -73,10 +73,18 @@ public struct LiveTranscriptIndex: Equatable, Sendable {
             return []
         }
         let excludedFingerprint = Self.fingerprint(excludedText)
+        let excludedNormalizedText = Self.normalizedText(excludedText)
+        let excludedLineFingerprints = Self.dialogueLineFingerprints(in: excludedText)
         return allSegments()
             .compactMap { segment -> RetrievedTranscriptChunk? in
                 let text = segment.text
-                guard !text.isEmpty, Self.fingerprint(text) != excludedFingerprint else {
+                guard !text.isEmpty,
+                      !Self.overlapsExcludedText(
+                          text,
+                          excludedFingerprint: excludedFingerprint,
+                          excludedNormalizedText: excludedNormalizedText,
+                          excludedLineFingerprints: excludedLineFingerprints
+                      ) else {
                     return nil
                 }
                 let segmentTokens = Self.tokens(in: text)
@@ -168,11 +176,57 @@ public struct LiveTranscriptIndex: Equatable, Sendable {
     }
 
     private static func fingerprint(_ text: String) -> String {
+        normalizedText(text)
+            .prefix(1_000)
+            .description
+    }
+
+    private static func normalizedText(_ text: String) -> String {
         text
             .lowercased()
             .filter { !$0.isWhitespace }
-            .prefix(1_000)
-            .description
+    }
+
+    private static func overlapsExcludedText(
+        _ text: String,
+        excludedFingerprint: String,
+        excludedNormalizedText: String,
+        excludedLineFingerprints: Set<String>
+    ) -> Bool {
+        let segmentFingerprint = fingerprint(text)
+        if segmentFingerprint == excludedFingerprint {
+            return true
+        }
+
+        let segmentNormalizedText = normalizedText(text)
+        if segmentNormalizedText.count >= 80,
+           excludedNormalizedText.contains(segmentNormalizedText) {
+            return true
+        }
+
+        let segmentLineFingerprints = dialogueLineFingerprints(in: text)
+        guard !segmentLineFingerprints.isEmpty else {
+            return false
+        }
+        let overlapCount = segmentLineFingerprints.intersection(excludedLineFingerprints).count
+        guard overlapCount > 0 else {
+            return false
+        }
+        let overlapRatio = Double(overlapCount) / Double(segmentLineFingerprints.count)
+        return overlapRatio >= 0.5 && overlapCount >= min(2, segmentLineFingerprints.count)
+    }
+
+    private static func dialogueLineFingerprints(in text: String) -> Set<String> {
+        Set(
+            text.components(separatedBy: .newlines)
+                .compactMap { line -> String? in
+                    guard let dialogue = dialogueLine(from: line) else {
+                        return nil
+                    }
+                    let fingerprint = normalizedText(dialogue.normalizedLine)
+                    return fingerprint.count >= 12 ? fingerprint : nil
+                }
+        )
     }
 
     private static func timeRange(start: String?, end: String?) -> String {
