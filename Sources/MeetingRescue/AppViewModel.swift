@@ -2271,6 +2271,7 @@ final class AppViewModel: ObservableObject {
             reason: reason,
             status: .running,
             provider: settings.selectedProvider,
+            codexExecutionMode: currentCodexExecutionModeForAttempt(),
             modelPreset: settings.modelPreset,
             modelName: currentModelName(),
             inputTokens: inputTokens,
@@ -2575,6 +2576,7 @@ final class AppViewModel: ObservableObject {
             reason: reason,
             status: .retryScheduled,
             provider: settings.selectedProvider,
+            codexExecutionMode: currentCodexExecutionModeForAttempt(),
             modelPreset: settings.modelPreset,
             modelName: currentModelName(),
             startedAt: Date(),
@@ -2598,6 +2600,7 @@ final class AppViewModel: ObservableObject {
             reason: "automatic-\(reason)",
             status: .skipped,
             provider: settings.selectedProvider,
+            codexExecutionMode: currentCodexExecutionModeForAttempt(),
             modelPreset: settings.modelPreset,
             modelName: currentModelName(),
             startedAt: now,
@@ -2696,6 +2699,10 @@ final class AppViewModel: ObservableObject {
         case .customCommand:
             return settings.modelPreset.codexModelName ?? "custom provider default"
         }
+    }
+
+    private func currentCodexExecutionModeForAttempt() -> CodexExecutionMode? {
+        settings.selectedProvider == .codexExec ? settings.codexExecutionMode : nil
     }
 
     private func analysisSchemaURL() -> URL {

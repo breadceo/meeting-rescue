@@ -1034,6 +1034,7 @@ struct ContentView: View {
 
     private func attemptSummaryLine(_ attempt: AnalysisAttemptLog) -> String {
         [
+            attempt.executionProviderDisplayName,
             "\(attempt.modelName)",
             "input \(attempt.inputTokens)",
             "output \(attempt.outputTokens)",
@@ -2549,7 +2550,7 @@ private struct AnalysisAttemptDetailView: View {
                             detailMetric("\(attempt.outputTokens)", "output tokens")
                             detailMetric(attempt.elapsedMilliseconds.map { "\($0)ms" } ?? "running", "duration")
                             detailMetric(attempt.modelPreset.displayName, "preset")
-                            detailMetric(attempt.provider.displayName, "provider")
+                            detailMetric(attempt.executionProviderDisplayName, "provider")
                         }
                     }
 
@@ -2636,7 +2637,7 @@ private struct AnalysisAttemptDetailView: View {
                 Text("Analysis 실행 상세")
                     .font(.title3.weight(.bold))
                     .foregroundStyle(Color.smoothInk)
-                Text("\(attempt.reason) · \(attempt.status.rawValue) · \(attempt.modelName)")
+                Text("\(attempt.reason) · \(attempt.status.rawValue) · \(attempt.executionProviderDisplayName) · \(attempt.modelName)")
                     .font(.callout)
                     .foregroundStyle(Color.smoothMuted)
             }

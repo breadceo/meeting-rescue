@@ -842,6 +842,7 @@ public struct AnalysisAttemptLog: Codable, Equatable, Sendable, Identifiable {
     public var reason: String
     public var status: AnalysisAttemptStatus
     public var provider: LLMProviderKind
+    public var codexExecutionMode: CodexExecutionMode?
     public var modelPreset: LLMModelPreset
     public var modelName: String
     public var startedAt: Date
@@ -861,6 +862,7 @@ public struct AnalysisAttemptLog: Codable, Equatable, Sendable, Identifiable {
         reason: String,
         status: AnalysisAttemptStatus,
         provider: LLMProviderKind,
+        codexExecutionMode: CodexExecutionMode? = nil,
         modelPreset: LLMModelPreset,
         modelName: String,
         startedAt: Date = Date(),
@@ -879,6 +881,7 @@ public struct AnalysisAttemptLog: Codable, Equatable, Sendable, Identifiable {
         self.reason = reason
         self.status = status
         self.provider = provider
+        self.codexExecutionMode = codexExecutionMode
         self.modelPreset = modelPreset
         self.modelName = modelName
         self.startedAt = startedAt
@@ -902,6 +905,32 @@ public struct AnalysisAttemptLog: Codable, Equatable, Sendable, Identifiable {
             return nil
         }
         return max(0, Int((completedAt.timeIntervalSince(startedAt) * 1000).rounded()))
+    }
+
+    public var executionProviderDisplayName: String {
+        guard provider == .codexExec else {
+            return provider.displayName
+        }
+        switch inferredCodexExecutionMode {
+        case .appServerExperimental:
+            return "Codex App Server"
+        case .cliExec:
+            return "Codex CLI exec"
+        }
+    }
+
+    private var inferredCodexExecutionMode: CodexExecutionMode {
+        if let codexExecutionMode {
+            return codexExecutionMode
+        }
+        if let argumentsSummary = runTrace?.argumentsSummary,
+           argumentsSummary.contains("app-server") {
+            return .appServerExperimental
+        }
+        if runTrace?.events.contains(where: { $0.name.contains("app-server") }) == true {
+            return .appServerExperimental
+        }
+        return .cliExec
     }
 }
 
