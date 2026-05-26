@@ -1,0 +1,27 @@
+Sources/MeetingRescue/AppViewModel.swift
+  h_d82ccb34241a0d 629,711-740,955,1047,1065,1107,1137-1141,1162,1389,1493,1965,2001,2045-2047,2086-2088,2227,2239-2244,2250-2257,2272-2273,2300-2308,2450-2455
+Sources/MeetingRescue/ContentView.swift
+  h_d82ccb34241a0d 1703,2153-2162,2261-2268,2563-2566,2677-2726
+Sources/MeetingRescueCore/AnalysisContextPlanner.swift
+  h_d82ccb34241a0d 1-160
+Sources/MeetingRescueCore/AnalysisModels.swift
+  h_d82ccb34241a0d 144-168,177,188,198,210,224,688-750,826,845,863,1137,1149-1150,1162,1166,1169-1170
+Sources/MeetingRescueCore/AnalysisPromptBuilder.swift
+  h_d82ccb34241a0d 22,45,70,93,104,128,146,176,183-186,207-208
+Sources/MeetingRescueCore/LiveTranscriptIndex.swift
+  h_d82ccb34241a0d 1-190
+Tests/MeetingRescueCoreTests/LiveAnalysisContextPipelineTests.swift
+  h_d82ccb34241a0d 1-109
+docs/adr/0001-live-analysis-context-pipeline-v2.md
+  h_d82ccb34241a0d 37-38
+---
+{
+  "schema_version": "zax-attestation/1.1.0",
+  "base_commit_sha": "773cd64ad736b4534e0e9dad9fa3cee421f9efa4",
+  "prompts": {},
+  "humans": {
+    "h_d82ccb34241a0d": {
+      "author": "ethan@zigbang.com"
+    }
+  }
+}
