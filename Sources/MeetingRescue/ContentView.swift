@@ -2593,7 +2593,7 @@ private struct AnalysisAttemptDetailView: View {
                     if let trace = attempt.runTrace {
                         collapsibleSection(
                             title: "Run Trace",
-                            subtitle: "stdout \(trace.outputBytes)B · stderr \(trace.stderrBytes)B · exit \(trace.exitCode.map(String.init) ?? "-")",
+                            subtitle: runTraceSubtitle(trace),
                             isExpanded: $isTraceExpanded
                         ) {
                             runTraceContent(trace)
@@ -2737,6 +2737,22 @@ private struct AnalysisAttemptDetailView: View {
                 }
             }
         }
+    }
+
+    private func runTraceSubtitle(_ trace: AnalysisRunTrace) -> String {
+        let process = trace.events.first(where: { $0.name == "app-server process" })?.detail
+        let thread = trace.events.first(where: { $0.name == "thread/start" })?.detail?.split(separator: " ").first.map(String.init)
+        let firstDelta = trace.events.first(where: { $0.name == "first delta latency" })?.durationMilliseconds
+        return [
+            process.map { "process \($0)" },
+            thread.map { "thread \($0)" },
+            firstDelta.map { "first delta \($0)ms" },
+            "stdout \(trace.outputBytes)B",
+            "stderr \(trace.stderrBytes)B",
+            "exit \(trace.exitCode.map(String.init) ?? "-")"
+        ]
+        .compactMap { $0 }
+        .joined(separator: " · ")
     }
 
     private func detailMetric(_ value: String, _ label: String) -> some View {

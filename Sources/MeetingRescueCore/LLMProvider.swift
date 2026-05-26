@@ -34,7 +34,7 @@ public enum LLMProviderError: Error, LocalizedError, Equatable {
     }
 }
 
-private struct ProcessRunOutput: Sendable {
+struct ProcessRunOutput: Sendable {
     var output: String
     var trace: AnalysisRunTrace
 }
@@ -175,6 +175,7 @@ public struct CodexAppServerProvider: LLMProvider {
     private let workingDirectoryURL: URL
     private let modelPreset: LLMModelPreset
     private let fallbackProvider: CodexExecProvider?
+    private let service: CodexAppServerService
 
     public init(
         executableURL: URL = URL(fileURLWithPath: "/usr/bin/env"),
@@ -185,6 +186,28 @@ public struct CodexAppServerProvider: LLMProvider {
         modelPreset: LLMModelPreset = .economy,
         fallbackProvider: CodexExecProvider? = nil
     ) {
+        self.init(
+            executableURL: executableURL,
+            schemaURL: schemaURL,
+            patchSchemaURL: patchSchemaURL,
+            timeoutSeconds: timeoutSeconds,
+            workingDirectoryURL: workingDirectoryURL,
+            modelPreset: modelPreset,
+            fallbackProvider: fallbackProvider,
+            service: .shared
+        )
+    }
+
+    init(
+        executableURL: URL = URL(fileURLWithPath: "/usr/bin/env"),
+        schemaURL: URL,
+        patchSchemaURL: URL? = nil,
+        timeoutSeconds: Int,
+        workingDirectoryURL: URL,
+        modelPreset: LLMModelPreset = .economy,
+        fallbackProvider: CodexExecProvider? = nil,
+        service: CodexAppServerService
+    ) {
         self.executableURL = executableURL
         self.schemaURL = schemaURL
         self.patchSchemaURL = patchSchemaURL
@@ -192,6 +215,7 @@ public struct CodexAppServerProvider: LLMProvider {
         self.workingDirectoryURL = workingDirectoryURL
         self.modelPreset = modelPreset
         self.fallbackProvider = fallbackProvider
+        self.service = service
     }
 
     public func analyze(_ request: AnalysisRequest) async throws -> AnalysisProviderResult {
@@ -224,7 +248,8 @@ public struct CodexAppServerProvider: LLMProvider {
         let prompt = try AnalysisPromptBuilder.buildPrompt(for: request)
         let output = try await runAppServerTurn(
             prompt: prompt,
-            schemaURL: schemaURL(for: request)
+            schemaURL: schemaURL(for: request),
+            meetingID: request.meetingID
         )
         var runTrace = output.trace
         let snapshot = try decodeProviderOutput(from: output.output, request: request, provider: kind)
@@ -243,255 +268,17 @@ public struct CodexAppServerProvider: LLMProvider {
         request.outputMode == .livePatch ? (patchSchemaURL ?? schemaURL) : schemaURL
     }
 
-    private func runAppServerTurn(prompt: String, schemaURL: URL) async throws -> ProcessRunOutput {
-        let processBox = ProcessBox()
-        let runner = Task.detached(priority: .utility) {
-            let traceStart = Date()
-            var events: [AnalysisRunTraceEvent] = []
-            func elapsedMilliseconds() -> Int {
-                max(0, Int((Date().timeIntervalSince(traceStart) * 1000).rounded()))
-            }
-            func appendEvent(_ name: String, startedAt: Int, detail: String? = nil) {
-                events.append(AnalysisRunTraceEvent(
-                    name: name,
-                    startedAtMilliseconds: startedAt,
-                    durationMilliseconds: max(0, elapsedMilliseconds() - startedAt),
-                    detail: detail
-                ))
-            }
-            func makeTrace(
-                outputBytes: Int = 0,
-                stderrBytes: Int = 0,
-                exitCode: Int32? = nil,
-                timedOut: Bool = false
-            ) -> AnalysisRunTrace {
-                AnalysisRunTrace(
-                    providerExecutable: executableURL.path,
-                    argumentsSummary: Self.sanitizedArgumentsSummary(Self.arguments(modelPreset: modelPreset)),
-                    workingDirectory: workingDirectoryURL.path,
-                    inputBytes: Data(prompt.utf8).count,
-                    outputBytes: outputBytes,
-                    stderrBytes: stderrBytes,
-                    exitCode: exitCode,
-                    timedOut: timedOut,
-                    startedAtUnixMilliseconds: Int(traceStart.timeIntervalSince1970 * 1000),
-                    events: events
-                )
-            }
-
-            let process = Process()
-            process.executableURL = executableURL
-            process.arguments = Self.arguments(modelPreset: modelPreset)
-            process.currentDirectoryURL = workingDirectoryURL
-            process.environment = ProcessInfo.processInfo.environment.merging(CodexExecProvider.environment(for: modelPreset)) { _, new in new }
-
-            let inputPipe = Pipe()
-            let outputPipe = Pipe()
-            let errorPipe = Pipe()
-            process.standardInput = inputPipe
-            process.standardOutput = outputPipe
-            process.standardError = errorPipe
-            processBox.set(process)
-
-            let spawnStartedAt = elapsedMilliseconds()
-            try process.run()
-            appendEvent("spawn app-server", startedAt: spawnStartedAt, detail: Self.sanitizedArgumentsSummary(Self.arguments(modelPreset: modelPreset)))
-
-            let writer = inputPipe.fileHandleForWriting
-            var stdoutIterator = outputPipe.fileHandleForReading.bytes.lines.makeAsyncIterator()
-            var finalOutput = ""
-            var outputBytes = 0
-
-            func writeRequest(id: Int, method: String, params: [String: Any]) throws {
-                let message: [String: Any] = [
-                    "jsonrpc": "2.0",
-                    "id": id,
-                    "method": method,
-                    "params": params
-                ]
-                let data = try JSONSerialization.data(withJSONObject: message)
-                writer.write(data)
-                writer.write(Data("\n".utf8))
-            }
-
-            func nextMessage(until deadline: Date) async throws -> [String: Any]? {
-                while Date() < deadline {
-                    if Task.isCancelled {
-                        throw CancellationError()
-                    }
-                    guard let line = try await stdoutIterator.next() else {
-                        return nil
-                    }
-                    outputBytes += Data(line.utf8).count
-                    guard let data = line.data(using: .utf8),
-                          let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-                        continue
-                    }
-                    return object
-                }
-                return nil
-            }
-
-            func waitForResponse(id: Int, deadline: Date) async throws -> [String: Any] {
-                while let object = try await nextMessage(until: deadline) {
-                    if let responseID = object["id"] as? Int, responseID == id {
-                        if let error = object["error"] {
-                            throw LLMProviderError.processFailed("Codex app-server error: \(error)", makeTrace(outputBytes: outputBytes))
-                        }
-                        return object
-                    }
-                }
-                throw LLMProviderError.timedOut(makeTrace(outputBytes: outputBytes, timedOut: true))
-            }
-
-            let deadline = Date().addingTimeInterval(TimeInterval(timeoutSeconds))
-
-            let initializeStartedAt = elapsedMilliseconds()
-            try writeRequest(id: 1, method: "initialize", params: [
-                "clientInfo": [
-                    "name": "meeting-rescue",
-                    "version": "0.0.0"
-                ],
-                "capabilities": [
-                    "experimentalApi": true,
-                    "requestAttestation": false,
-                    "optOutNotificationMethods": [
-                        "mcpServer/startupStatus/updated"
-                    ]
-                ]
-            ])
-            _ = try await waitForResponse(id: 1, deadline: deadline)
-            appendEvent("initialize app-server", startedAt: initializeStartedAt)
-
-            let threadStartedAt = elapsedMilliseconds()
-            var threadStartParams: [String: Any] = [
-                "cwd": workingDirectoryURL.path,
-                "approvalPolicy": "never",
-                "sandbox": "read-only",
-                "ephemeral": true,
-                "experimentalRawEvents": false,
-                "persistExtendedHistory": false,
-                "dynamicTools": [],
-                "environments": [],
-                "baseInstructions": "Return only the JSON object requested by the user. Do not run tools."
-            ]
-            if let modelName = modelPreset.codexModelName {
-                threadStartParams["model"] = modelName
-            }
-            try writeRequest(id: 2, method: "thread/start", params: threadStartParams)
-            let threadResponse = try await waitForResponse(id: 2, deadline: deadline)
-            guard let threadResult = threadResponse["result"] as? [String: Any],
-                  let thread = threadResult["thread"] as? [String: Any],
-                  let threadID = thread["id"] as? String else {
-                throw LLMProviderError.invalidOutput
-            }
-            appendEvent("thread/start", startedAt: threadStartedAt, detail: threadID)
-
-            let schemaData = try Data(contentsOf: schemaURL)
-            guard let outputSchema = try JSONSerialization.jsonObject(with: schemaData) as? [String: Any] else {
-                throw LLMProviderError.invalidOutput
-            }
-
-            let turnStartedAt = elapsedMilliseconds()
-            var turnStartParams: [String: Any] = [
-                "threadId": threadID,
-                "input": [[
-                    "type": "text",
-                    "text": prompt,
-                    "text_elements": []
-                ]],
-                "approvalPolicy": "never",
-                "sandboxPolicy": [
-                    "type": "readOnly",
-                    "networkAccess": false
-                ],
-                "outputSchema": outputSchema,
-                "environments": []
-            ]
-            if let modelName = modelPreset.codexModelName {
-                turnStartParams["model"] = modelName
-            }
-            try writeRequest(id: 3, method: "turn/start", params: turnStartParams)
-            _ = try await waitForResponse(id: 3, deadline: deadline)
-            appendEvent("turn/start", startedAt: turnStartedAt)
-
-            let waitStartedAt = elapsedMilliseconds()
-            while let object = try await nextMessage(until: deadline) {
-                if let method = object["method"] as? String,
-                   method == "item/agentMessage/delta",
-                   let params = object["params"] as? [String: Any],
-                   let delta = params["delta"] as? String {
-                    finalOutput += delta
-                    continue
-                }
-                if let method = object["method"] as? String,
-                   method == "item/completed",
-                   let params = object["params"] as? [String: Any],
-                   let item = params["item"] as? [String: Any],
-                   let type = item["type"] as? String,
-                   type == "agentMessage",
-                   let phase = item["phase"] as? String,
-                   phase == "final_answer" {
-                    if let text = item["text"] as? String, !text.isEmpty {
-                        finalOutput = text
-                    }
-                    break
-                }
-                if let method = object["method"] as? String,
-                   method == "turn/completed" {
-                    break
-                }
-                if let responseID = object["id"] as? Int, responseID == 3,
-                   let error = object["error"] {
-                    throw LLMProviderError.processFailed("Codex app-server turn error: \(error)", makeTrace(outputBytes: outputBytes))
-                }
-            }
-            appendEvent("wait for app-server turn", startedAt: waitStartedAt, detail: "\(Data(finalOutput.utf8).count) bytes")
-
-            try? writer.close()
-            process.terminate()
-            process.waitUntilExit()
-
-            let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
-            let stderrBytes = errorData.count
-            guard !finalOutput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                throw LLMProviderError.invalidOutput
-            }
-            return ProcessRunOutput(
-                output: finalOutput.trimmingCharacters(in: .whitespacesAndNewlines),
-                trace: makeTrace(
-                    outputBytes: outputBytes,
-                    stderrBytes: stderrBytes,
-                    exitCode: process.terminationStatus
-                )
-            )
-        }
-
-        return try await withTaskCancellationHandler {
-            try await withThrowingTaskGroup(of: ProcessRunOutput.self) { group in
-                group.addTask {
-                    try await runner.value
-                }
-                group.addTask {
-                    try await Task.sleep(nanoseconds: UInt64(max(1, timeoutSeconds)) * 1_000_000_000)
-                    throw LLMProviderError.timedOut(nil)
-                }
-                do {
-                    guard let result = try await group.next() else {
-                        throw LLMProviderError.invalidOutput
-                    }
-                    group.cancelAll()
-                    return result
-                } catch {
-                    group.cancelAll()
-                    processBox.terminate()
-                    throw error
-                }
-            }
-        } onCancel: {
-            runner.cancel()
-            processBox.terminate()
-        }
+    private func runAppServerTurn(prompt: String, schemaURL: URL, meetingID: String) async throws -> ProcessRunOutput {
+        let schemaData = try Data(contentsOf: schemaURL)
+        return try await service.runTurn(
+            prompt: prompt,
+            schemaData: schemaData,
+            meetingID: meetingID,
+            executableURL: executableURL,
+            workingDirectoryURL: workingDirectoryURL,
+            modelPreset: modelPreset,
+            timeoutSeconds: timeoutSeconds
+        )
     }
 
     static func arguments(modelPreset: LLMModelPreset) -> [String] {
@@ -519,10 +306,531 @@ public struct CodexAppServerProvider: LLMProvider {
         ]
     }
 
-    private static func sanitizedArgumentsSummary(_ arguments: [String]) -> String {
+    static func sanitizedArgumentsSummary(_ arguments: [String]) -> String {
         arguments.map { argument in
             argument.count > 180 ? String(argument.prefix(177)) + "..." : argument
         }.joined(separator: " ")
+    }
+}
+
+struct CodexAppServerRuntimeConfiguration: Sendable, Equatable {
+    var executableURL: URL
+    var arguments: [String]
+    var environment: [String: String]
+    var workingDirectoryURL: URL
+    var modelPreset: LLMModelPreset
+
+    var reuseKey: String {
+        [
+            executableURL.path,
+            workingDirectoryURL.path,
+            modelPreset.rawValue,
+            arguments.joined(separator: "\u{1f}")
+        ].joined(separator: "\u{1e}")
+    }
+}
+
+struct CodexAppServerTurnResult: Sendable, Equatable {
+    var output: String
+    var turnStartLatencyMilliseconds: Int
+    var firstDeltaLatencyMilliseconds: Int?
+    var finalAnswerLatencyMilliseconds: Int
+    var outputBytes: Int
+    var stderrBytes: Int
+    var exitCode: Int32?
+}
+
+protocol CodexAppServerRuntime: Sendable {
+    var configuration: CodexAppServerRuntimeConfiguration { get async }
+    func outputBytesRead() async -> Int
+    func initialize(deadline: Date) async throws
+    func startThread(modelName: String?, deadline: Date) async throws -> String
+    func startTurn(
+        threadID: String,
+        prompt: String,
+        schemaData: Data,
+        modelName: String?,
+        deadline: Date
+    ) async throws -> CodexAppServerTurnResult
+    nonisolated func terminate()
+}
+
+actor CodexAppServerService {
+    static let shared = CodexAppServerService()
+
+    typealias RuntimeFactory = @Sendable (CodexAppServerRuntimeConfiguration) async throws -> any CodexAppServerRuntime
+
+    private var runtime: (any CodexAppServerRuntime)?
+    private var runtimeReuseKey: String?
+    private var initializedRuntimeKey: String?
+    private var threadsByMeetingKey: [String: String] = [:]
+    private let runtimeFactory: RuntimeFactory
+
+    init(runtimeFactory: @escaping RuntimeFactory = { configuration in
+        try await CodexAppServerProcessRuntime(configuration: configuration)
+    }) {
+        self.runtimeFactory = runtimeFactory
+    }
+
+    func runTurn(
+        prompt: String,
+        schemaData: Data,
+        meetingID: String,
+        executableURL: URL,
+        workingDirectoryURL: URL,
+        modelPreset: LLMModelPreset,
+        timeoutSeconds: Int
+    ) async throws -> ProcessRunOutput {
+        let traceStart = Date()
+        let deadline = Date().addingTimeInterval(TimeInterval(max(1, timeoutSeconds)))
+        var events: [AnalysisRunTraceEvent] = []
+        func elapsedMilliseconds() -> Int {
+            max(0, Int((Date().timeIntervalSince(traceStart) * 1000).rounded()))
+        }
+        func appendEvent(_ name: String, startedAt: Int, detail: String? = nil) {
+            events.append(AnalysisRunTraceEvent(
+                name: name,
+                startedAtMilliseconds: startedAt,
+                durationMilliseconds: max(0, elapsedMilliseconds() - startedAt),
+                detail: detail
+            ))
+        }
+        func makeTrace(
+            outputBytes: Int = 0,
+            stderrBytes: Int = 0,
+            exitCode: Int32? = nil,
+            timedOut: Bool = false
+        ) -> AnalysisRunTrace {
+            AnalysisRunTrace(
+                providerExecutable: executableURL.path,
+                argumentsSummary: CodexAppServerProvider.sanitizedArgumentsSummary(CodexAppServerProvider.arguments(modelPreset: modelPreset)),
+                workingDirectory: workingDirectoryURL.path,
+                inputBytes: Data(prompt.utf8).count,
+                outputBytes: outputBytes,
+                stderrBytes: stderrBytes,
+                exitCode: exitCode,
+                timedOut: timedOut,
+                startedAtUnixMilliseconds: Int(traceStart.timeIntervalSince1970 * 1000),
+                events: events
+            )
+        }
+        func remainingTimeoutSeconds() -> Int {
+            max(1, Int(ceil(deadline.timeIntervalSinceNow)))
+        }
+
+        let configuration = CodexAppServerRuntimeConfiguration(
+            executableURL: executableURL,
+            arguments: CodexAppServerProvider.arguments(modelPreset: modelPreset),
+            environment: ProcessInfo.processInfo.environment.merging(CodexExecProvider.environment(for: modelPreset)) { _, new in new },
+            workingDirectoryURL: workingDirectoryURL,
+            modelPreset: modelPreset
+        )
+        var outputBytesBefore = 0
+
+        do {
+            let processStartedAt = elapsedMilliseconds()
+            let runtime: any CodexAppServerRuntime
+            if let existingRuntime = self.runtime, runtimeReuseKey == configuration.reuseKey {
+                runtime = existingRuntime
+                appendEvent("app-server process", startedAt: processStartedAt, detail: "reused")
+            } else {
+                resetRuntime()
+                let newRuntime = try await runtimeFactory(configuration)
+                runtime = newRuntime
+                self.runtime = newRuntime
+                runtimeReuseKey = configuration.reuseKey
+                appendEvent("app-server process", startedAt: processStartedAt, detail: "new")
+            }
+            outputBytesBefore = await runtime.outputBytesRead()
+
+            let initializeStartedAt = elapsedMilliseconds()
+            if initializedRuntimeKey == configuration.reuseKey {
+                appendEvent("initialize app-server", startedAt: initializeStartedAt, detail: "reused")
+            } else {
+                try await withTimeout(seconds: remainingTimeoutSeconds(), runtime: runtime) {
+                    try await runtime.initialize(deadline: deadline)
+                }
+                initializedRuntimeKey = configuration.reuseKey
+                appendEvent("initialize app-server", startedAt: initializeStartedAt, detail: "new")
+            }
+
+            let threadKey = "\(configuration.reuseKey)\u{1e}\(meetingID)"
+            let threadStartedAt = elapsedMilliseconds()
+            let threadID: String
+            if let existingThreadID = threadsByMeetingKey[threadKey] {
+                threadID = existingThreadID
+                appendEvent("thread/start", startedAt: threadStartedAt, detail: "reused \(existingThreadID)")
+            } else {
+                threadID = try await withTimeout(seconds: remainingTimeoutSeconds(), runtime: runtime) {
+                    try await runtime.startThread(modelName: modelPreset.codexModelName, deadline: deadline)
+                }
+                threadsByMeetingKey[threadKey] = threadID
+                appendEvent("thread/start", startedAt: threadStartedAt, detail: "new \(threadID)")
+            }
+
+            let turnStartedAt = elapsedMilliseconds()
+            let result = try await withTimeout(seconds: remainingTimeoutSeconds(), runtime: runtime) {
+                try await runtime.startTurn(
+                    threadID: threadID,
+                    prompt: prompt,
+                    schemaData: schemaData,
+                    modelName: modelPreset.codexModelName,
+                    deadline: deadline
+                )
+            }
+            events.append(AnalysisRunTraceEvent(
+                name: "turn/start",
+                startedAtMilliseconds: turnStartedAt,
+                durationMilliseconds: result.turnStartLatencyMilliseconds,
+                detail: nil
+            ))
+            let waitStartedAt = turnStartedAt + result.turnStartLatencyMilliseconds
+            if let firstDeltaLatency = result.firstDeltaLatencyMilliseconds {
+                events.append(AnalysisRunTraceEvent(
+                    name: "first delta latency",
+                    startedAtMilliseconds: waitStartedAt,
+                    durationMilliseconds: firstDeltaLatency,
+                    detail: nil
+                ))
+            }
+            events.append(AnalysisRunTraceEvent(
+                name: "final answer latency",
+                startedAtMilliseconds: waitStartedAt,
+                durationMilliseconds: result.finalAnswerLatencyMilliseconds,
+                detail: "\(Data(result.output.utf8).count) bytes"
+            ))
+            events.append(AnalysisRunTraceEvent(
+                name: "total provider latency",
+                startedAtMilliseconds: 0,
+                durationMilliseconds: elapsedMilliseconds(),
+                detail: nil
+            ))
+            return ProcessRunOutput(
+                output: result.output,
+                trace: makeTrace(
+                    outputBytes: max(0, result.outputBytes - outputBytesBefore),
+                    stderrBytes: result.stderrBytes,
+                    exitCode: result.exitCode
+                )
+            )
+        } catch let error as LLMProviderError {
+            resetRuntime()
+            if case .timedOut = error {
+                appendEvent("app-server reset", startedAt: elapsedMilliseconds(), detail: "timeout")
+                throw LLMProviderError.timedOut(makeTrace(outputBytes: outputBytesBefore, timedOut: true))
+            }
+            appendEvent("app-server reset", startedAt: elapsedMilliseconds(), detail: error.localizedDescription)
+            throw LLMProviderError.processFailed(error.localizedDescription, makeTrace(outputBytes: outputBytesBefore))
+        } catch {
+            resetRuntime()
+            appendEvent("app-server reset", startedAt: elapsedMilliseconds(), detail: error.localizedDescription)
+            throw LLMProviderError.processFailed(error.localizedDescription, makeTrace(outputBytes: outputBytesBefore))
+        }
+    }
+
+    private func withTimeout<T: Sendable>(
+        seconds: Int,
+        runtime: any CodexAppServerRuntime,
+        operation: @escaping @Sendable () async throws -> T
+    ) async throws -> T {
+        try await withTaskCancellationHandler {
+            try await withThrowingTaskGroup(of: T.self) { group in
+                group.addTask {
+                    try await operation()
+                }
+                group.addTask {
+                    try await Task.sleep(nanoseconds: UInt64(max(1, seconds)) * 1_000_000_000)
+                    throw LLMProviderError.timedOut(nil)
+                }
+                do {
+                    guard let result = try await group.next() else {
+                        throw LLMProviderError.invalidOutput
+                    }
+                    group.cancelAll()
+                    return result
+                } catch {
+                    group.cancelAll()
+                    runtime.terminate()
+                    throw error
+                }
+            }
+        } onCancel: {
+            runtime.terminate()
+        }
+    }
+
+    private func resetRuntime() {
+        runtime?.terminate()
+        runtime = nil
+        runtimeReuseKey = nil
+        initializedRuntimeKey = nil
+        threadsByMeetingKey.removeAll()
+    }
+}
+
+private actor CodexAppServerProcessRuntime: CodexAppServerRuntime {
+    let configuration: CodexAppServerRuntimeConfiguration
+    private let processBox = ProcessBox()
+    private let writer: FileHandle
+    private let errorPipe: Pipe
+    private let lineBuffer: CodexAppServerLineBuffer
+    private var nextRequestID = 1
+    private var outputBytes = 0
+
+    init(configuration: CodexAppServerRuntimeConfiguration) async throws {
+        self.configuration = configuration
+        let process = Process()
+        process.executableURL = configuration.executableURL
+        process.arguments = configuration.arguments
+        process.currentDirectoryURL = configuration.workingDirectoryURL
+        process.environment = configuration.environment
+
+        let inputPipe = Pipe()
+        let outputPipe = Pipe()
+        let errorPipe = Pipe()
+        process.standardInput = inputPipe
+        process.standardOutput = outputPipe
+        process.standardError = errorPipe
+
+        self.writer = inputPipe.fileHandleForWriting
+        self.errorPipe = errorPipe
+        let lineBuffer = CodexAppServerLineBuffer()
+        self.lineBuffer = lineBuffer
+        let outputReader = outputPipe.fileHandleForReading
+        Task.detached(priority: .utility) {
+            do {
+                for try await line in outputReader.bytes.lines {
+                    await lineBuffer.append(line)
+                }
+            } catch {
+                // EOF and cancellation are both represented as a finished buffer for callers.
+            }
+            await lineBuffer.finish()
+        }
+        processBox.set(process)
+        try process.run()
+    }
+
+    func outputBytesRead() -> Int {
+        outputBytes
+    }
+
+    func initialize(deadline: Date) async throws {
+        let id = nextID()
+        try writeRequest(id: id, method: "initialize", params: [
+            "clientInfo": [
+                "name": "meeting-rescue",
+                "version": "0.0.0"
+            ],
+            "capabilities": [
+                "experimentalApi": true,
+                "requestAttestation": false,
+                "optOutNotificationMethods": [
+                    "mcpServer/startupStatus/updated"
+                ]
+            ]
+        ])
+        _ = try await waitForResponse(id: id, deadline: deadline)
+    }
+
+    func startThread(modelName: String?, deadline: Date) async throws -> String {
+        let id = nextID()
+        var params: [String: Any] = [
+            "cwd": configuration.workingDirectoryURL.path,
+            "approvalPolicy": "never",
+            "sandbox": "read-only",
+            "ephemeral": true,
+            "experimentalRawEvents": false,
+            "persistExtendedHistory": false,
+            "dynamicTools": [],
+            "environments": [],
+            "baseInstructions": "Return only the JSON object requested by the user. Do not run tools."
+        ]
+        if let modelName {
+            params["model"] = modelName
+        }
+        try writeRequest(id: id, method: "thread/start", params: params)
+        let response = try await waitForResponse(id: id, deadline: deadline)
+        guard let result = response["result"] as? [String: Any],
+              let thread = result["thread"] as? [String: Any],
+              let threadID = thread["id"] as? String else {
+            throw LLMProviderError.invalidOutput
+        }
+        return threadID
+    }
+
+    func startTurn(
+        threadID: String,
+        prompt: String,
+        schemaData: Data,
+        modelName: String?,
+        deadline: Date
+    ) async throws -> CodexAppServerTurnResult {
+        guard let outputSchema = try JSONSerialization.jsonObject(with: schemaData) as? [String: Any] else {
+            throw LLMProviderError.invalidOutput
+        }
+
+        let id = nextID()
+        var params: [String: Any] = [
+            "threadId": threadID,
+            "input": [[
+                "type": "text",
+                "text": prompt,
+                "text_elements": []
+            ]],
+            "approvalPolicy": "never",
+            "sandboxPolicy": [
+                "type": "readOnly",
+                "networkAccess": false
+            ],
+            "outputSchema": outputSchema,
+            "environments": []
+        ]
+        if let modelName {
+            params["model"] = modelName
+        }
+
+        let turnStart = Date()
+        try writeRequest(id: id, method: "turn/start", params: params)
+        _ = try await waitForResponse(id: id, deadline: deadline)
+        let waitStart = Date()
+        var finalOutput = ""
+        var firstDeltaLatencyMilliseconds: Int?
+
+        while let object = try await nextMessage(until: deadline) {
+            if let method = object["method"] as? String,
+               method == "item/agentMessage/delta",
+               let params = object["params"] as? [String: Any],
+               let delta = params["delta"] as? String {
+                if firstDeltaLatencyMilliseconds == nil {
+                    firstDeltaLatencyMilliseconds = max(0, Int((Date().timeIntervalSince(waitStart) * 1000).rounded()))
+                }
+                finalOutput += delta
+                continue
+            }
+            if let method = object["method"] as? String,
+               method == "item/completed",
+               let params = object["params"] as? [String: Any],
+               let item = params["item"] as? [String: Any],
+               let type = item["type"] as? String,
+               type == "agentMessage",
+               let phase = item["phase"] as? String,
+               phase == "final_answer" {
+                if let text = item["text"] as? String, !text.isEmpty {
+                    finalOutput = text
+                }
+                break
+            }
+            if let method = object["method"] as? String,
+               method == "turn/completed" {
+                break
+            }
+            if let responseID = object["id"] as? Int, responseID == id,
+               let error = object["error"] {
+                throw LLMProviderError.processFailed("Codex app-server turn error: \(error)")
+            }
+        }
+
+        let trimmedOutput = finalOutput.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedOutput.isEmpty else {
+            throw LLMProviderError.invalidOutput
+        }
+        return CodexAppServerTurnResult(
+            output: trimmedOutput,
+            turnStartLatencyMilliseconds: max(0, Int((waitStart.timeIntervalSince(turnStart) * 1000).rounded())),
+            firstDeltaLatencyMilliseconds: firstDeltaLatencyMilliseconds,
+            finalAnswerLatencyMilliseconds: max(0, Int((Date().timeIntervalSince(waitStart) * 1000).rounded())),
+            outputBytes: outputBytes,
+            stderrBytes: 0,
+            exitCode: processBox.terminationStatus
+        )
+    }
+
+    nonisolated func terminate() {
+        processBox.terminate()
+    }
+
+    private func nextID() -> Int {
+        defer { nextRequestID += 1 }
+        return nextRequestID
+    }
+
+    private func writeRequest(id: Int, method: String, params: [String: Any]) throws {
+        let message: [String: Any] = [
+            "jsonrpc": "2.0",
+            "id": id,
+            "method": method,
+            "params": params
+        ]
+        let data = try JSONSerialization.data(withJSONObject: message)
+        writer.write(data)
+        writer.write(Data("\n".utf8))
+    }
+
+    private func nextMessage(until deadline: Date) async throws -> [String: Any]? {
+        while Date() < deadline {
+            if Task.isCancelled {
+                throw CancellationError()
+            }
+            guard let line = await lineBuffer.nextLine() else {
+                return nil
+            }
+            outputBytes += Data(line.utf8).count
+            guard let data = line.data(using: .utf8),
+                  let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                continue
+            }
+            return object
+        }
+        return nil
+    }
+
+    private func waitForResponse(id: Int, deadline: Date) async throws -> [String: Any] {
+        while let object = try await nextMessage(until: deadline) {
+            if let responseID = object["id"] as? Int, responseID == id {
+                if let error = object["error"] {
+                    throw LLMProviderError.processFailed("Codex app-server error: \(error)")
+                }
+                return object
+            }
+        }
+        throw LLMProviderError.timedOut(nil)
+    }
+}
+
+private actor CodexAppServerLineBuffer {
+    private var lines: [String] = []
+    private var waiters: [CheckedContinuation<String?, Never>] = []
+    private var isFinished = false
+
+    func append(_ line: String) {
+        if let waiter = waiters.first {
+            waiters.removeFirst()
+            waiter.resume(returning: line)
+        } else {
+            lines.append(line)
+        }
+    }
+
+    func finish() {
+        isFinished = true
+        let pendingWaiters = waiters
+        waiters.removeAll()
+        for waiter in pendingWaiters {
+            waiter.resume(returning: nil)
+        }
+    }
+
+    func nextLine() async -> String? {
+        if !lines.isEmpty {
+            return lines.removeFirst()
+        }
+        if isFinished {
+            return nil
+        }
+        return await withCheckedContinuation { continuation in
+            waiters.append(continuation)
+        }
     }
 }
 
@@ -543,6 +851,16 @@ private final class ProcessBox: @unchecked Sendable {
         if process?.isRunning == true {
             process?.terminate()
         }
+    }
+
+    var terminationStatus: Int32? {
+        lock.lock()
+        let process = process
+        lock.unlock()
+        guard let process, !process.isRunning else {
+            return nil
+        }
+        return process.terminationStatus
     }
 }
 
