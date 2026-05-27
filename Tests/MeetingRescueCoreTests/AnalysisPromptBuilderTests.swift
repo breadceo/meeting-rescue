@@ -17,10 +17,11 @@ struct AnalysisPromptBuilderTests {
 
         let prompt = try AnalysisPromptBuilder.buildPrompt(for: request)
 
-        #expect(prompt.contains("\"mode\" : \"incremental\""))
+        #expect(prompt.contains(#""mode":"incremental""#))
         #expect(prompt.contains("NEW_CHUNK_LINE"))
         #expect(prompt.contains("recentTranscriptContext"))
         #expect(!prompt.contains("OLD_PREFIX_SENTINEL"))
+        #expect(!prompt.contains("\n  \"mode\""))
     }
 
     @Test("automatic refresh with previous snapshot asks for live patch output")
@@ -39,7 +40,7 @@ struct AnalysisPromptBuilderTests {
         #expect(request.outputMode == .livePatch)
         #expect(prompt.contains("JSON patch 객체"))
         #expect(prompt.contains("topicTimelineUpserts"))
-        #expect(prompt.contains("전체 AnalysisSnapshot을 다시 쓰지 마세요"))
+        #expect(prompt.contains("전체 AnalysisSnapshot을 쓰지 마세요"))
     }
 
     @Test("automatic retry also uses live patch output when previous snapshot exists")
@@ -57,7 +58,7 @@ struct AnalysisPromptBuilderTests {
 
         #expect(request.outputMode == .livePatch)
         #expect(prompt.contains("JSON patch 객체"))
-        #expect(prompt.contains("\"mode\" : \"initial_live_patch\""))
+        #expect(prompt.contains(#""mode":"initial_live_patch""#))
         #expect(prompt.contains("newTranscriptChunk"))
         #expect(!prompt.contains("\"fullTranscript\""))
     }
@@ -77,7 +78,7 @@ struct AnalysisPromptBuilderTests {
 
         #expect(request.outputMode == .livePatch)
         #expect(prompt.contains("final catch-up"))
-        #expect(prompt.contains("전체 AnalysisSnapshot을 다시 쓰지 마세요"))
+        #expect(prompt.contains("전체 AnalysisSnapshot을 쓰지 마세요"))
         #expect(prompt.contains("후반부 결정 후보"))
     }
 
@@ -116,12 +117,10 @@ struct AnalysisPromptBuilderTests {
 
         let prompt = try AnalysisPromptBuilder.buildPrompt(for: request)
 
-        #expect(prompt.contains("3-6분 이상 이어지는 장문 발제"))
-        #expect(prompt.contains("마지막 topic을 무한히 확장하지 마세요"))
-        #expect(prompt.contains("새 논점이나 다음 agenda가 시작되면"))
-        #expect(prompt.contains("currentIssue.summary는 3-5문장"))
-        #expect(prompt.contains("topicTimeline은 전체 8개 이하"))
-        #expect(prompt.contains("decisionCandidates와 actionItemCandidates는 각각 8개 이하"))
+        #expect(prompt.contains("agenda/논점/대상/실행 방향이 바뀌면 나누세요"))
+        #expect(prompt.contains("전체 6개 이하"))
+        #expect(prompt.contains("currentIssue.summary는 2-4문장"))
+        #expect(prompt.contains("decision/action 후보는 각각 6개 이하"))
     }
 
     @Test("prompt metadata participants는 실제 발화자 중심으로 줄인다")
@@ -156,5 +155,30 @@ struct AnalysisPromptBuilderTests {
         #expect(!prompt.contains("Observer(observer@example.com)"))
         #expect(!prompt.contains("그룹에 입장했습니다"))
         #expect(!prompt.contains("############################################################"))
+    }
+
+    @Test("retrieved chunk text는 prompt에서 짧게 제한된다")
+    func capsRetrievedChunkText() throws {
+        let longChunk = String(repeating: "[00:01] Alex: 오래된 지도 논의입니다.\n", count: 80)
+        let plan = AnalysisContextPlan(
+            retrievalMode: .memoryLiveIndex,
+            retrievalTopK: 1,
+            retrievedChunks: [
+                RetrievedTranscriptChunk(id: "chunk-1", timeRange: "[00:01]-[03:00]", text: longChunk, score: 0.8)
+            ]
+        )
+        let request = AnalysisRequest(
+            meetingID: "meeting-1",
+            metadata: MeetingMetadata(room: "Room", participants: ["Alex"]),
+            rawTranscript: "[10:00] Alex: 지도 논의를 다시 확인합니다.",
+            previousSnapshot: AnalysisSnapshot(currentIssue: CurrentIssue(summary: "이전 요약")),
+            lastAnalyzedTranscriptCharacterCount: 1,
+            contextPlan: plan
+        )
+
+        let prompt = try AnalysisPromptBuilder.buildPrompt(for: request)
+
+        #expect(prompt.contains("앞부분은 길이 제한으로 생략됨"))
+        #expect(prompt.count < longChunk.count + 2_700)
     }
 }

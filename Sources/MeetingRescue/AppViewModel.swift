@@ -635,6 +635,7 @@ final class AppViewModel: ObservableObject {
     private var activeAnalysisRequest: AnalysisRequest?
     private var activeAnalysisWindow: AnalysisTranscriptWindow?
     private var activeAnalysisAttemptID: String?
+    private var analysisRunGeneration = 0
     private var latestSnapshotIsLocalFallback = false
     private var rawReadOffset: UInt64 = 0
     private var securityScopeActive = false
@@ -949,6 +950,7 @@ final class AppViewModel: ObservableObject {
     }
 
     func startWatching(folderURL: URL) {
+        cancelActiveAnalysis(message: "폴더 전환으로 실행 중이던 analysis를 중단했습니다.")
         stopReplayTimer()
         transcriptRunMode = .liveWatch
         liveTranscriptIndex.reset()
@@ -1035,10 +1037,7 @@ final class AppViewModel: ObservableObject {
 
     func openHistoryTranscript(_ url: URL) {
         stopReplayTimer()
-        analysisTask?.cancel()
-        analysisTask = nil
-        activeAnalysisRequest = nil
-        activeAnalysisAttemptID = nil
+        cancelActiveAnalysis(message: "History 화면 전환으로 실행 중이던 analysis를 중단했습니다.")
         latestSnapshotIsLocalFallback = false
         replayCursor = nil
         replaySourceURL = nil
@@ -1053,10 +1052,7 @@ final class AppViewModel: ObservableObject {
 
     func returnToLiveWatch() {
         stopReplayTimer()
-        analysisTask?.cancel()
-        analysisTask = nil
-        activeAnalysisRequest = nil
-        activeAnalysisAttemptID = nil
+        cancelActiveAnalysis(message: "Live Watch 전환으로 실행 중이던 analysis를 중단했습니다.")
         latestSnapshotIsLocalFallback = false
         replayCursor = nil
         replaySourceURL = nil
@@ -1164,10 +1160,7 @@ final class AppViewModel: ObservableObject {
         timer?.invalidate()
         timer = nil
         stopReplayTimer()
-        analysisTask?.cancel()
-        analysisTask = nil
-        activeAnalysisRequest = nil
-        activeAnalysisAttemptID = nil
+        cancelActiveAnalysis(message: "선택 폴더 해제로 실행 중이던 analysis를 중단했습니다.")
         searchIndexBuildTask?.cancel()
         searchDatabaseQueryTask?.cancel()
         liveTranscriptIndex.reset()
@@ -1392,10 +1385,7 @@ final class AppViewModel: ObservableObject {
         timer?.invalidate()
         timer = nil
         stopReplayTimer()
-        analysisTask?.cancel()
-        analysisTask = nil
-        activeAnalysisRequest = nil
-        activeAnalysisAttemptID = nil
+        cancelActiveAnalysis(message: "Test Run 시작으로 실행 중이던 analysis를 중단했습니다.")
         latestSnapshotIsLocalFallback = false
         liveTranscriptIndex.reset()
 
@@ -2003,10 +1993,7 @@ final class AppViewModel: ObservableObject {
     }
 
     private func switchActiveTranscript(to url: URL) {
-        analysisTask?.cancel()
-        analysisTask = nil
-        activeAnalysisRequest = nil
-        activeAnalysisAttemptID = nil
+        cancelActiveAnalysis(message: "active transcript 전환으로 실행 중이던 analysis를 중단했습니다.")
         latestSnapshotIsLocalFallback = false
         lastAutomaticAnalysisAt = Date()
         liveTranscriptIndex.reset()
@@ -2209,13 +2196,28 @@ final class AppViewModel: ObservableObject {
               isAutomaticAnalysisReason(activeAnalysisRequest.reason) else {
             return
         }
-        analysisTask?.cancel()
-        analysisTask = nil
-        self.activeAnalysisRequest = nil
-        activeAnalysisAttemptID = nil
-        activeAnalysisWindow = nil
+        cancelActiveAnalysis(message: "Automatic Meeting Intelligence를 일시 중지했습니다.")
         statusMessage = "Automatic Meeting Intelligence를 일시 중지했습니다."
         analysisStatus = analysisState.isCompleted ? .completed : .stale(statusMessage)
+    }
+
+    private func cancelActiveAnalysis(message: String) {
+        analysisRunGeneration += 1
+        analysisTask?.cancel()
+        analysisTask = nil
+
+        if activeAnalysisAttemptID != nil {
+            updateActiveAttempt(status: .skipped, outputTokens: 0, message: message)
+            analysisState.updatedAt = Date()
+            if let activeTranscriptURL {
+                try? stateStore.saveAnalysisState(analysisState, for: activeTranscriptURL)
+            }
+        }
+
+        activeAnalysisRequest = nil
+        activeAnalysisWindow = nil
+        activeAnalysisAttemptID = nil
+        analysisStatus = analysisState.isCompleted ? .completed : .idle
     }
 
     private func isAutomaticAnalysisReason(_ reason: String) -> Bool {
@@ -2230,7 +2232,7 @@ final class AppViewModel: ObservableObject {
         }
 
         let meetingID = meetingID(for: activeTranscriptURL)
-        let previousSnapshot = providerPreviousSnapshot()
+        let previousSnapshot = providerPreviousSnapshot() ?? patchBaselineSnapshot(for: reason)
         let transcriptWindow = AnalysisTranscriptWindow.make(
             rawTranscript: rawTranscript,
             lastAnalyzedTranscriptCharacterCount: analysisState.analyzedTranscriptCharacterCount,
@@ -2260,6 +2262,8 @@ final class AppViewModel: ObservableObject {
         let provider = makeProvider(timeoutSeconds: timeoutSeconds)
         activeAnalysisRequest = request
         activeAnalysisWindow = transcriptWindow
+        analysisRunGeneration += 1
+        let runGeneration = analysisRunGeneration
         let draftPrompt = (try? AnalysisPromptBuilder.buildPrompt(for: request)) ?? rawTranscript
         let draftInputTokens = TokenEstimator.estimateTokens(in: draftPrompt)
         let finalContextPlan = AnalysisContextPlanner.planByUpdatingEstimatedTokens(
@@ -2305,7 +2309,13 @@ final class AppViewModel: ObservableObject {
                 return
             }
             let result = await scheduler.runIfIdle(request: request, provider: provider)
+            guard !Task.isCancelled else {
+                return
+            }
             await MainActor.run {
+                guard self.analysisRunGeneration == runGeneration else {
+                    return
+                }
                 self.applyAnalysisResult(result, for: activeTranscriptURL, reason: reason)
             }
         }
@@ -2334,6 +2344,13 @@ final class AppViewModel: ObservableObject {
             return nil
         }
         return latestSnapshot
+    }
+
+    private func patchBaselineSnapshot(for reason: String) -> AnalysisSnapshot? {
+        guard !AnalysisRequest.usesFullSnapshotOutput(reason) else {
+            return nil
+        }
+        return AnalysisSnapshot(currentIssue: CurrentIssue(summary: ""))
     }
 
     private func applyAnalysisResult(_ result: AnalysisRunResult, for sourceURL: URL, reason: String) {

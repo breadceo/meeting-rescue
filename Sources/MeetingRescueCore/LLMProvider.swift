@@ -739,6 +739,12 @@ private actor CodexAppServerProcessRuntime: CodexAppServerRuntime {
             if let phase = item["phase"] as? String, !phase.isEmpty {
                 components.append(phase)
             }
+            if let text = item["text"] as? String, !text.isEmpty {
+                components.append("text:\(text.count)")
+            }
+            if let summary = item["summary"] as? String, !summary.isEmpty {
+                components.append("summary:\(summary.count)")
+            }
             guard !components.isEmpty else {
                 return nil
             }
@@ -1131,7 +1137,7 @@ private func decodeSnapshot(from output: String, provider: LLMProviderKind) thro
     return snapshot
 }
 
-private func decodeProviderOutput(
+func decodeProviderOutput(
     from output: String,
     request: AnalysisRequest,
     provider: LLMProviderKind
@@ -1140,11 +1146,11 @@ private func decodeProviderOutput(
     case .fullSnapshot:
         return try decodeSnapshot(from: output, provider: provider)
     case .livePatch:
-        if let previousSnapshot = request.previousSnapshot,
-           let patch = try? decodePatch(from: output) {
-            return previousSnapshot.applyingPatch(patch, provider: provider)
+        guard let previousSnapshot = request.previousSnapshot else {
+            throw LLMProviderError.invalidOutput
         }
-        return try decodeSnapshot(from: output, provider: provider)
+        let patch = try decodePatch(from: output)
+        return previousSnapshot.applyingPatch(patch, provider: provider)
     }
 }
 

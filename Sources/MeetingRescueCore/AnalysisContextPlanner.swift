@@ -1,7 +1,7 @@
 import Foundation
 
 public enum AnalysisContextPlanner {
-    private static let recentContextCharacterLimit = 800
+    private static let recentContextCharacterLimit = 500
 
     public static func makePlan(
         for request: AnalysisRequest,

@@ -81,7 +81,7 @@ struct LiveAnalysisContextPipelineTests {
         let prompt = try AnalysisPromptBuilder.buildPrompt(for: requestWithPlan)
 
         #expect(plan.retrievedChunks.isEmpty)
-        #expect(prompt.contains("\"retrievalMode\" : \"off\""))
+        #expect(prompt.contains(#""retrievalMode":"off""#))
         #expect(prompt.contains("relatedTranscriptChunks"))
     }
 
@@ -120,7 +120,7 @@ struct LiveAnalysisContextPipelineTests {
 
         #expect(plan.retrievedChunks.count <= 2)
         #expect(!plan.retrievedChunks.isEmpty)
-        #expect(prompt.contains("\"retrievalMode\" : \"memoryLiveIndex\""))
+        #expect(prompt.contains(#""retrievalMode":"memoryLiveIndex""#))
         #expect(prompt.contains("relatedTranscriptChunks"))
         #expect(prompt.contains("지도 핀 확대"))
     }

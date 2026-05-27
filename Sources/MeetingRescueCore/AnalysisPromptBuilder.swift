@@ -1,23 +1,22 @@
 import Foundation
 
 public enum AnalysisPromptBuilder {
-    private static let maxInitialTranscriptCharacters = 8_000
-    private static let maxNewTranscriptCharacters = 5_000
-    private static let recentTranscriptContextCharacters = 800
-    private static let compactTimelineLimit = 4
-    private static let compactCandidateLimit = 6
-    private static let compactNotesLimit = 5
+    private static let maxInitialTranscriptCharacters = 6_000
+    private static let maxNewTranscriptCharacters = 3_200
+    private static let recentTranscriptContextCharacters = 500
+    private static let maxRelatedTranscriptChunkCharacters = 700
+    private static let compactTimelineLimit = 3
+    private static let compactCandidateLimit = 4
+    private static let compactNotesLimit = 3
 
     public static func buildPrompt(for request: AnalysisRequest) throws -> String {
         let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        encoder.outputFormatting = [.sortedKeys]
         encoder.dateEncodingStrategy = .iso8601
 
         let transcriptContext = transcriptContext(for: request)
         let payload = PromptPayload(
             meetingMetadata: promptMetadata(from: request.metadata, transcriptContext: transcriptContext),
-            providerKind: request.providerKind.rawValue,
-            modelPreset: request.modelPreset.rawValue,
             transcriptContext: transcriptContext,
             contextPlan: request.contextPlan,
             previousAnalysisSnapshot: compactSnapshot(from: request.previousSnapshot),
@@ -39,21 +38,14 @@ public enum AnalysisPromptBuilder {
         """
         당신은 실시간 회의 분석 assistant입니다. 모든 사용자-facing 응답은 한글로 작성하세요.
 
-        아래 JSON payload를 읽고 지정된 JSON schema에 맞는 하나의 JSON 객체만 반환하세요.
-        previousAnalysisSnapshot은 누적 회의 상태를 압축한 compact state입니다.
-        transcriptContext.newTranscriptChunk가 있으면 그것을 이번 refresh의 primary source로 사용하고, recentTranscriptContext는 연결 맥락으로만 사용하세요.
-        transcriptContext.relatedTranscriptChunks는 현재 live/test run 회의에서 검색된 관련 과거 맥락입니다. 새 발화와 직접 연결될 때만 보조 근거로 사용하고, 그 자체를 새 결정처럼 반복하지 마세요.
-        transcriptContext.fullTranscript가 있으면 아직 성공적으로 분석된 구간이 없다는 뜻이므로 제공된 transcript 전체를 기준으로 snapshot을 만드세요.
-        기존 compact state의 결정/action 후보와 timeline은 새 transcript chunk에서 반박되거나 갱신할 필요가 있을 때만 바꾸고, 유지할 수 있으면 유지하세요.
-        topicTimeline은 사용자가 회의 흐름을 스캔하기 위한 breakdown입니다. 하나의 topic에 모든 내용을 합치지 말고, 3-6분 이상 이어지는 장문 발제라도 하위 agenda, 논점, 대상, 실행 방향이 바뀌면 별도 topic item으로 나누세요.
-        incremental refresh에서는 previousAnalysisSnapshot.topicTimeline의 마지막 topic을 무한히 확장하지 마세요. newTranscriptChunk가 기존 topic의 직접 연장일 때만 마지막 topic을 갱신하고, 새 논점이나 다음 agenda가 시작되면 기존 topic의 endTimestamp를 닫고 새 topic을 append하세요.
-        topicTimeline은 시간순으로 정렬하고, 각 topic의 startTimestamp는 해당 구간 첫 근거 발화 timestamp로, endTimestamp는 구간 마지막 근거 발화 timestamp로 채우세요.
-        timestamp는 transcript 원문에 있는 회의 경과 시간만 사용하세요. 예: "04:13" 또는 "[04:13]". 날짜가 붙은 ISO timestamp를 새로 만들지 마세요.
-        출력은 live UI 갱신용이므로 장황하게 쓰지 마세요. currentIssue.summary는 3-5문장, topicTimeline은 전체 8개 이하, decisionCandidates와 actionItemCandidates는 각각 8개 이하로 유지하세요.
-        previousAnalysisSnapshot에 이미 있는 오래된 항목은 새 transcript chunk와 직접 관련되지 않으면 반복 설명하지 말고, 필요하면 더 짧게 유지하세요.
-        결정 후보와 action item 후보의 id는 제공된 id가 없으면 normalized text와 evidence timestamp에서 안정적으로 파생될 수 있게 유지하세요.
-        명확하지 않은 내용은 확정하지 말고 candidate 또는 note로 남기세요.
-        optional 값이 없으면 해당 key를 생략하지 말고 null 또는 빈 배열로 채우세요.
+        아래 payload만 근거로 지정된 JSON schema의 JSON 객체 하나만 반환하세요.
+        fullTranscript가 있으면 첫 분석입니다. 제공된 범위로 작고 읽기 쉬운 snapshot을 만드세요.
+        newTranscriptChunk가 있으면 primary source로 쓰고 recentTranscriptContext/relatedTranscriptChunks는 연결 맥락으로만 쓰세요.
+        과거 맥락을 새 결정처럼 반복하지 말고, 불확실하면 candidate/note로 남기세요.
+        timestamp는 원문 회의 경과 시간만 사용하세요. 예: "04:13" 또는 "[04:13]". ISO 날짜를 만들지 마세요.
+        topicTimeline은 시간순이며 agenda/논점/대상/실행 방향이 바뀌면 나누세요. 전체 6개 이하를 권장합니다.
+        currentIssue.summary는 2-4문장, decision/action 후보는 각각 6개 이하로 간결하게 유지하세요.
+        optional 값은 null 또는 빈 배열로 채우세요.
 
         Payload:
         \(payloadJSON)
@@ -64,21 +56,15 @@ public enum AnalysisPromptBuilder {
         """
         당신은 실시간 회의 분석 assistant입니다. 모든 사용자-facing 응답은 한글로 작성하세요.
 
-        아래 JSON payload를 읽고 지정된 JSON schema에 맞는 하나의 JSON patch 객체만 반환하세요.
-        이 요청은 incremental patch refresh입니다. live automatic 또는 final catch-up 중이며, previousAnalysisSnapshot은 이미 앱에 저장된 compact state입니다.
-        transcriptContext.newTranscriptChunk가 있으면 그것을 이번 refresh의 primary source로 사용하세요. incremental refresh에서는 fullTranscript 재전송을 피하고 compact state와 새 chunk만 기준으로 판단하세요.
-        transcriptContext.relatedTranscriptChunks는 현재 회의의 관련 과거 chunk입니다. 새 transcript chunk의 생략된 맥락을 연결하는 용도로만 사용하고, 관련성이 낮으면 무시하세요.
-        전체 AnalysisSnapshot을 다시 쓰지 마세요. 제공된 transcript 때문에 추가/수정이 필요한 항목만 patch 배열에 넣으세요.
-        바뀐 current issue가 있으면 currentIssue를 채우고, 변화가 거의 없으면 currentIssue는 null로 두세요.
-        topicTimelineUpserts에는 새 topic 또는 실제로 수정해야 하는 기존 topic만 넣으세요. 기존 topic을 닫아야 하면 endTimestamp가 반영된 topic item을 upsert하고 closeTopicIDs에도 id를 넣으세요.
-        하나의 topic을 5분 이상 계속 열어두지 마세요. 새 agenda, 논점, speaker focus, 실행 방향이 바뀌면 기존 topic을 닫고 새 topic을 upsert하세요.
-        timestamp는 transcript 원문에 있는 회의 경과 시간만 사용하세요. 예: "04:13" 또는 "[04:13]". 날짜가 붙은 ISO timestamp를 새로 만들지 마세요.
-        final catch-up에서는 남은 transcript chunk를 반영하는 것이 목적입니다. 전체 회의를 다시 요약하지 말고 이번 chunk의 추가 흐름, 결정, action, note만 patch로 반영하세요.
-        decisionCandidateUpserts와 actionItemCandidateUpserts에는 새 후보 또는 수정이 필요한 후보만 넣으세요. confirmed/deleted 상태는 앱이 보존하므로 사용자가 확정/삭제한 상태를 되돌리지 마세요.
-        risksOrNotesAppend에는 새롭게 발견한 risk/note만 넣고, 기존 note를 반복하지 마세요.
-        출력은 live UI 갱신용입니다. patch는 작아야 하며, 각 배열은 보통 0-3개, 최대 5개 이하로 유지하세요.
-        명확하지 않은 내용은 확정하지 말고 candidate 또는 note로 남기세요.
-        optional 값이 없으면 해당 key를 생략하지 말고 null 또는 빈 배열로 채우세요.
+        아래 payload만 근거로 지정된 JSON schema의 JSON patch 객체 하나만 반환하세요.
+        전체 AnalysisSnapshot을 쓰지 마세요. 이번 newTranscriptChunk 때문에 추가/수정할 항목만 patch로 반환하세요.
+        currentIssue는 실제 변화가 있을 때만 채우고, 변화가 작으면 null로 두세요.
+        topicTimelineUpserts/decisionCandidateUpserts/actionItemCandidateUpserts/risksOrNotesAppend는 보통 0-2개, 최대 3개로 제한하세요.
+        기존 후보/노트/토픽을 반복하지 말고, confirmed/deleted 상태를 되돌리지 마세요.
+        relatedTranscriptChunks는 생략된 현재 회의 맥락 연결용입니다. 관련성이 낮으면 무시하세요.
+        timestamp는 원문 회의 경과 시간만 사용하세요. 예: "04:13" 또는 "[04:13]". ISO 날짜를 만들지 마세요.
+        final catch-up에서도 전체 회의 재요약 없이 이번 chunk의 추가 흐름/결정/action/note만 반영하세요.
+        optional 값은 null 또는 빈 배열로 채우세요.
 
         Payload:
         \(payloadJSON)
@@ -87,8 +73,6 @@ public enum AnalysisPromptBuilder {
 
     private struct PromptPayload: Encodable {
         var meetingMetadata: MeetingMetadata
-        var providerKind: String
-        var modelPreset: String
         var transcriptContext: TranscriptContext
         var contextPlan: AnalysisContextPlan?
         var previousAnalysisSnapshot: AnalysisSnapshot?
@@ -181,7 +165,14 @@ public enum AnalysisPromptBuilder {
     }
 
     private static func relatedTranscriptChunks(for request: AnalysisRequest) -> [RetrievedTranscriptChunk] {
-        request.contextPlan?.retrievedChunks ?? []
+        (request.contextPlan?.retrievedChunks ?? []).map { chunk in
+            RetrievedTranscriptChunk(
+                id: chunk.id,
+                timeRange: chunk.timeRange,
+                text: cappedSuffix(promptDialogueText(from: chunk.text), limit: maxRelatedTranscriptChunkCharacters),
+                score: chunk.score
+            )
+        }
     }
 
     private static func compactSnapshot(from snapshot: AnalysisSnapshot?) -> AnalysisSnapshot? {

@@ -11,10 +11,11 @@
           "additionalProperties": false,
           "required": ["summary", "openQuestions"],
           "properties": {
-            "summary": { "type": "string" },
+            "summary": { "type": "string", "maxLength": 360 },
             "openQuestions": {
               "type": "array",
-              "items": { "type": "string" }
+              "maxItems": 3,
+              "items": { "type": "string", "maxLength": 180 }
             }
           }
         },
@@ -23,6 +24,7 @@
     },
     "topicTimelineUpserts": {
       "type": "array",
+      "maxItems": 3,
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -31,24 +33,26 @@
           "id": { "type": "string" },
           "startTimestamp": { "type": "string" },
           "endTimestamp": { "type": ["string", "null"] },
-          "title": { "type": "string" },
-          "summary": { "type": "string" }
+          "title": { "type": "string", "maxLength": 100 },
+          "summary": { "type": "string", "maxLength": 260 }
         }
       }
     },
     "closeTopicIDs": {
       "type": "array",
+      "maxItems": 3,
       "items": { "type": "string" }
     },
     "decisionCandidateUpserts": {
       "type": "array",
+      "maxItems": 3,
       "items": {
         "type": "object",
         "additionalProperties": false,
         "required": ["id", "text", "status", "evidenceTimestamp", "speaker"],
         "properties": {
           "id": { "type": "string" },
-          "text": { "type": "string" },
+          "text": { "type": "string", "maxLength": 240 },
           "status": { "enum": ["candidate", "confirmed", "deleted"] },
           "evidenceTimestamp": { "type": "string" },
           "speaker": { "type": ["string", "null"] }
@@ -57,6 +61,7 @@
     },
     "actionItemCandidateUpserts": {
       "type": "array",
+      "maxItems": 3,
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -64,7 +69,7 @@
         "properties": {
           "id": { "type": "string" },
           "assignee": { "type": ["string", "null"] },
-          "task": { "type": "string" },
+          "task": { "type": "string", "maxLength": 240 },
           "deadline": { "type": ["string", "null"] },
           "status": { "enum": ["candidate", "confirmed", "deleted"] },
           "evidenceTimestamp": { "type": "string" },
@@ -74,7 +79,8 @@
     },
     "risksOrNotesAppend": {
       "type": "array",
-      "items": { "type": "string" }
+      "maxItems": 3,
+      "items": { "type": "string", "maxLength": 240 }
     }
   }
 }
