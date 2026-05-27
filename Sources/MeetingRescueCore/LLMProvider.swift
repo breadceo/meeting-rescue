@@ -335,6 +335,7 @@ struct CodexAppServerTurnResult: Sendable, Equatable {
     var turnStartLatencyMilliseconds: Int
     var firstDeltaLatencyMilliseconds: Int?
     var finalAnswerLatencyMilliseconds: Int
+    var observedEvents: [AnalysisRunTraceEvent]
     var outputBytes: Int
     var stderrBytes: Int
     var exitCode: Int32?
@@ -493,6 +494,14 @@ actor CodexAppServerService {
                     detail: nil
                 ))
             }
+            events.append(contentsOf: result.observedEvents.map { event in
+                AnalysisRunTraceEvent(
+                    name: event.name,
+                    startedAtMilliseconds: waitStartedAt + event.startedAtMilliseconds,
+                    durationMilliseconds: event.durationMilliseconds,
+                    detail: event.detail
+                )
+            })
             events.append(AnalysisRunTraceEvent(
                 name: "final answer latency",
                 startedAtMilliseconds: waitStartedAt,
@@ -696,14 +705,33 @@ private actor CodexAppServerProcessRuntime: CodexAppServerRuntime {
         let waitStart = Date()
         var finalOutput = ""
         var firstDeltaLatencyMilliseconds: Int?
+        var observedMethods: [String: (firstSeenMilliseconds: Int, count: Int)] = [:]
+        var observedMethodOrder: [String] = []
+
+        func elapsedSinceWaitStart() -> Int {
+            max(0, Int((Date().timeIntervalSince(waitStart) * 1000).rounded()))
+        }
+
+        func recordObservedMethod(_ method: String) {
+            if var existing = observedMethods[method] {
+                existing.count += 1
+                observedMethods[method] = existing
+            } else {
+                observedMethods[method] = (firstSeenMilliseconds: elapsedSinceWaitStart(), count: 1)
+                observedMethodOrder.append(method)
+            }
+        }
 
         while let object = try await nextMessage(until: deadline) {
+            if let method = object["method"] as? String {
+                recordObservedMethod(method)
+            }
             if let method = object["method"] as? String,
                method == "item/agentMessage/delta",
                let params = object["params"] as? [String: Any],
                let delta = params["delta"] as? String {
                 if firstDeltaLatencyMilliseconds == nil {
-                    firstDeltaLatencyMilliseconds = max(0, Int((Date().timeIntervalSince(waitStart) * 1000).rounded()))
+                    firstDeltaLatencyMilliseconds = elapsedSinceWaitStart()
                 }
                 finalOutput += delta
                 continue
@@ -740,6 +768,17 @@ private actor CodexAppServerProcessRuntime: CodexAppServerRuntime {
             turnStartLatencyMilliseconds: max(0, Int((waitStart.timeIntervalSince(turnStart) * 1000).rounded())),
             firstDeltaLatencyMilliseconds: firstDeltaLatencyMilliseconds,
             finalAnswerLatencyMilliseconds: max(0, Int((Date().timeIntervalSince(waitStart) * 1000).rounded())),
+            observedEvents: observedMethodOrder.prefix(24).compactMap { method in
+                guard let observed = observedMethods[method] else {
+                    return nil
+                }
+                return AnalysisRunTraceEvent(
+                    name: "app-server event: \(method)",
+                    startedAtMilliseconds: observed.firstSeenMilliseconds,
+                    durationMilliseconds: nil,
+                    detail: "count \(observed.count)"
+                )
+            },
             outputBytes: outputBytes,
             stderrBytes: 0,
             exitCode: processBox.terminationStatus

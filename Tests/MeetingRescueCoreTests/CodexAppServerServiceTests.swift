@@ -41,6 +41,8 @@ struct CodexAppServerServiceTests {
         #expect(second.trace.events.contains { $0.name == "thread/start" && ($0.detail?.hasPrefix("reused") == true) })
         #expect(second.trace.events.contains { $0.name == "first delta latency" })
         #expect(second.trace.events.contains { $0.name == "final answer latency" })
+        #expect(second.trace.events.contains { $0.name == "app-server event: item/started" && $0.detail == "count 1" })
+        #expect(second.trace.events.contains { $0.name == "app-server event: item/agentMessage/delta" && $0.detail == "count 2" })
     }
 
     @Test("turn failure는 app-server service를 reset하고 다음 run은 새 process를 만든다")
@@ -223,6 +225,18 @@ private final class FakeAppServerRuntime: CodexAppServerRuntime, @unchecked Send
             turnStartLatencyMilliseconds: 3,
             firstDeltaLatencyMilliseconds: 5,
             finalAnswerLatencyMilliseconds: 9,
+            observedEvents: [
+                AnalysisRunTraceEvent(
+                    name: "app-server event: item/started",
+                    startedAtMilliseconds: 1,
+                    detail: "count 1"
+                ),
+                AnalysisRunTraceEvent(
+                    name: "app-server event: item/agentMessage/delta",
+                    startedAtMilliseconds: 5,
+                    detail: "count 2"
+                )
+            ],
             outputBytes: lock.withLock { outputBytes },
             stderrBytes: 0,
             exitCode: 0
