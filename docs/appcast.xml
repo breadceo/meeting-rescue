@@ -8,33 +8,28 @@
     <description>Meeting Rescue release updates.</description>
     <language>ko</language>
     <item>
-      <title>Meeting Rescue 0.1.11</title>
+      <title>Meeting Rescue 0.1.12</title>
       <description><![CDATA[
-        <h2>Meeting Rescue v0.1.11</h2>
+        <h2>Meeting Rescue v0.1.12</h2>
         <ul>
-        <li>Live analysis가 새 transcript chunk와 compact state를 더 작게 보내도록 개선해 LLM 호출 비용과 prompt 크기를 줄였습니다.</li>
-        <li>Codex app-server experimental provider의 실행 모드 표기, diagnostics, run trace를 보강했습니다.</li>
-        <li>Analysis 실행 상세 화면의 긴 prompt/output 표시와 context plan 가독성을 개선했습니다.</li>
-        <li>자동 analysis trigger를 hybrid preset 중심으로 조정해 너무 잦은 Test Run/Live analysis 실행을 줄였습니다.</li>
-        <li>결정 후보와 액션 후보를 섹션 단위로 전체 복사할 수 있게 개선했습니다.</li>
-        <li>Markdown 다운로드에서 내부 운영용 LLM 사용량 추정과 Analysis 실행 로그를 제외했습니다.</li>
-        <li>릴리즈 노트 작성/배포 흐름을 추가하고, 앱 안에서 현재/최신 릴리즈 노트를 확인할 수 있게 했습니다.</li>
-        <li>좁은 화면에서 Meetings, Raw Transcript, Meeting Intelligence 패널을 접고 펼칠 수 있게 반응형 레이아웃을 개선했습니다.</li>
+        <li>설정창을 `LLM`, `Analysis`, `App`, `Danger` 탭으로 나눠 기능별로 정리했습니다.</li>
+        <li>설정 항목을 카드형 row로 재배치해 설명과 control이 한눈에 보이도록 개선했습니다.</li>
+        <li>LLM 가격 reference를 기본 접힘 상태로 바꿔 설정창의 기본 밀도를 낮췄습니다.</li>
         </ul>
-        <p><a href="https://github.com/breadceo/meeting-rescue/releases/tag/v0.1.11">Release notes</a></p>
+        <p><a href="https://github.com/breadceo/meeting-rescue/releases/tag/v0.1.12">Release notes</a></p>
       ]]></description>
-      <pubDate>Wed, 27 May 2026 18:06:19 +0900</pubDate>
-      <sparkle:version>47</sparkle:version>
-      <sparkle:shortVersionString>0.1.11</sparkle:shortVersionString>
+      <pubDate>Wed, 27 May 2026 18:36:51 +0900</pubDate>
+      <sparkle:version>50</sparkle:version>
+      <sparkle:shortVersionString>0.1.12</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
       <enclosure
-        url="https://github.com/breadceo/meeting-rescue/releases/download/v0.1.11/Meeting-Rescue-v0.1.11-notarized.dmg"
-        sparkle:edSignature="zkvBQk9jiHWWkhsP9dglOtn/RLApCtUl5zfUHCHLgX/uOclZM/isCNuszzvXP5b4CeTTIS8NMl/jyGrUNtDODA==" length="6359072"
+        url="https://github.com/breadceo/meeting-rescue/releases/download/v0.1.12/Meeting-Rescue-v0.1.12-notarized.dmg"
+        sparkle:edSignature="V4Fo3IGT+5M+eau/FEtVUznnd1AVNtS509rfIKMOk2UxYC0EYr8wCFwv+pU/EL2lMEfW5pYKrPdWY1cx1UuUBA==" length="6431214"
         type="application/x-apple-diskimage" />
     </item>
   </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: +PlGLtMtrX+0Ii7tekWiqetimd1QlVQOogCjo5hnYlou3HyH91aEamkYr43dG2nUPAucyouHqT/dFjtzT0LbCQ==
-length: 2396
+edSignature: N8fFBS8s73qYX5jtxiNTzWr+C/2D6NPwVaU79YGGFxCHrFvDbD1OBAwVliBng/O13ZsJo19gwT/cLX4JK0EsCA==
+length: 1630
 -->
