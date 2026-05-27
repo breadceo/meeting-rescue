@@ -26,6 +26,8 @@ RELEASE_ASSET_URL="${RELEASE_ASSET_URL:-https://github.com/$GITHUB_REPOSITORY/re
 APPCAST_PATH="${APPCAST_PATH:-$ROOT_DIR/docs/appcast.xml}"
 SPARKLE_SIGN_UPDATE_TOOL="${SPARKLE_SIGN_UPDATE_TOOL:-$ROOT_DIR/.build/artifacts/sparkle/Sparkle/bin/sign_update}"
 RELEASES_DOCS_DIR="${RELEASES_DOCS_DIR:-$ROOT_DIR/docs/releases}"
+UPDATE_FEED_REPOSITORY="${UPDATE_FEED_REPOSITORY:-breadceo/meeting-rescue-updates}"
+UPDATE_FEED_BRANCH="${UPDATE_FEED_BRANCH:-main}"
 
 cd "$ROOT_DIR"
 
@@ -131,7 +133,8 @@ fi
 
 mkdir -p "$(dirname "$APPCAST_PATH")"
 appcast_description="$(mktemp "${TMPDIR:-/tmp}/meeting-rescue-appcast-description.XXXXXX")"
-trap 'rm -f "$appcast_description"' EXIT
+update_feed_dir=""
+trap 'rm -f "$appcast_description"; if [[ -n "$update_feed_dir" ]]; then rm -rf "$update_feed_dir"; fi' EXIT
 APP_VERSION="$APP_VERSION" "$ROOT_DIR/scripts/generate_release_notes.sh" appcast-html "$appcast_description"
 cat > "$APPCAST_PATH" <<APPCAST
 <?xml version="1.0" encoding="utf-8"?>
@@ -164,5 +167,26 @@ APPCAST
 
 "$SPARKLE_SIGN_UPDATE_TOOL" --disable-signing-warning "$APPCAST_PATH" >/dev/null
 
+if [[ -n "$UPDATE_FEED_REPOSITORY" ]]; then
+  update_feed_dir="$(mktemp -d "${TMPDIR:-/tmp}/meeting-rescue-update-feed.XXXXXX")"
+  git clone --depth 1 --branch "$UPDATE_FEED_BRANCH" \
+    "https://github.com/$UPDATE_FEED_REPOSITORY.git" \
+    "$update_feed_dir" >/dev/null
+
+  mkdir -p "$update_feed_dir/releases"
+  cp "$APPCAST_PATH" "$update_feed_dir/appcast.xml"
+  cp "$RELEASES_DOCS_DIR/$TAG_NAME.md" "$update_feed_dir/releases/$TAG_NAME.md"
+  cp "$RELEASES_DOCS_DIR/latest.md" "$update_feed_dir/releases/latest.md"
+
+  git -C "$update_feed_dir" add appcast.xml releases
+  if ! git -C "$update_feed_dir" diff --cached --quiet; then
+    git -C "$update_feed_dir" commit -m "Update appcast for $TAG_NAME"
+    git -C "$update_feed_dir" push origin "$UPDATE_FEED_BRANCH"
+  fi
+fi
+
 printf 'Release created: https://github.com/%s/releases/tag/%s\n' "$GITHUB_REPOSITORY" "$TAG_NAME"
 printf 'Appcast updated: %s\n' "$APPCAST_PATH"
+if [[ -n "$UPDATE_FEED_REPOSITORY" ]]; then
+  printf 'Update feed repository updated: %s\n' "$UPDATE_FEED_REPOSITORY"
+fi

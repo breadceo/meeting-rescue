@@ -113,7 +113,7 @@ GitHub Release와 Sparkle appcast를 발행하려면 notarization 이후 다음 
 ./scripts/publish_github_release.sh
 ```
 
-이 스크립트는 `vX.Y.Z` tag와 GitHub Release DMG asset을 만들고, Sparkle 서명을 포함한 `docs/appcast.xml`을 갱신합니다. 또한 `docs/releases/vX.Y.Z.md`와 `docs/releases/latest.md`를 갱신해 앱 안의 릴리즈 노트 화면에서 최신 노트를 확인할 수 있게 합니다. `docs/appcast.xml`은 GitHub Pages의 `/docs` source로 배포되어 앱의 자동 업데이트 feed가 됩니다. Sparkle private key는 Keychain에 보관하고, 백업 파일이 필요하면 `private/` 아래에 두세요. `private/`는 git에 포함하지 않습니다.
+이 스크립트는 `vX.Y.Z` tag와 GitHub Release DMG asset을 만들고, Sparkle 서명을 포함한 `docs/appcast.xml`을 갱신합니다. 또한 `docs/releases/vX.Y.Z.md`와 `docs/releases/latest.md`를 갱신해 앱 안의 릴리즈 노트 화면에서 최신 노트를 확인할 수 있게 합니다. 실제 설치 앱의 기본 Sparkle feed는 `breadceo/meeting-rescue-updates` repo의 `appcast.xml`이므로, publish script는 같은 appcast와 release note 파일을 해당 repo에도 push합니다. Sparkle private key는 Keychain에 보관하고, 백업 파일이 필요하면 `private/` 아래에 두세요. `private/`는 git에 포함하지 않습니다.
 
 ## Transcript 폴더
 
