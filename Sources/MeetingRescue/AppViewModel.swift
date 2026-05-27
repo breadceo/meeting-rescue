@@ -1098,6 +1098,7 @@ final class AppViewModel: ObservableObject {
         settings = AppSettings(
             selectedProvider: settings.selectedProvider,
             codexExecutionMode: settings.codexExecutionMode,
+            codexAppServerDiagnosticsEnabled: settings.codexAppServerDiagnosticsEnabled,
             modelPreset: settings.modelPreset,
             automaticAnalysisEnabled: settings.automaticAnalysisEnabled,
             hasCompletedOnboarding: settings.hasCompletedOnboarding,
@@ -1126,6 +1127,11 @@ final class AppViewModel: ObservableObject {
 
     func updateCodexExecutionMode(_ mode: CodexExecutionMode) {
         settings.codexExecutionMode = mode
+        saveSettings()
+    }
+
+    func setCodexAppServerDiagnosticsEnabled(_ isEnabled: Bool) {
+        settings.codexAppServerDiagnosticsEnabled = isEnabled
         saveSettings()
     }
 
@@ -2659,6 +2665,7 @@ final class AppViewModel: ObservableObject {
                     timeoutSeconds: timeoutSeconds,
                     workingDirectoryURL: URL(fileURLWithPath: FileManager.default.currentDirectoryPath),
                     modelPreset: settings.modelPreset,
+                    diagnosticsEnabled: settings.codexAppServerDiagnosticsEnabled,
                     fallbackProvider: CodexExecProvider(
                         schemaURL: analysisSchemaURL(),
                         patchSchemaURL: analysisPatchSchemaURL(),

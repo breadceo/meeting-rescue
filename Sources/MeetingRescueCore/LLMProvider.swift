@@ -174,6 +174,7 @@ public struct CodexAppServerProvider: LLMProvider {
     private let timeoutSeconds: Int
     private let workingDirectoryURL: URL
     private let modelPreset: LLMModelPreset
+    private let diagnosticsEnabled: Bool
     private let fallbackProvider: CodexExecProvider?
     private let service: CodexAppServerService
 
@@ -184,6 +185,7 @@ public struct CodexAppServerProvider: LLMProvider {
         timeoutSeconds: Int,
         workingDirectoryURL: URL,
         modelPreset: LLMModelPreset = .economy,
+        diagnosticsEnabled: Bool = false,
         fallbackProvider: CodexExecProvider? = nil
     ) {
         self.init(
@@ -193,6 +195,7 @@ public struct CodexAppServerProvider: LLMProvider {
             timeoutSeconds: timeoutSeconds,
             workingDirectoryURL: workingDirectoryURL,
             modelPreset: modelPreset,
+            diagnosticsEnabled: diagnosticsEnabled,
             fallbackProvider: fallbackProvider,
             service: .shared
         )
@@ -205,6 +208,7 @@ public struct CodexAppServerProvider: LLMProvider {
         timeoutSeconds: Int,
         workingDirectoryURL: URL,
         modelPreset: LLMModelPreset = .economy,
+        diagnosticsEnabled: Bool = false,
         fallbackProvider: CodexExecProvider? = nil,
         service: CodexAppServerService
     ) {
@@ -214,6 +218,7 @@ public struct CodexAppServerProvider: LLMProvider {
         self.timeoutSeconds = timeoutSeconds
         self.workingDirectoryURL = workingDirectoryURL
         self.modelPreset = modelPreset
+        self.diagnosticsEnabled = diagnosticsEnabled
         self.fallbackProvider = fallbackProvider
         self.service = service
     }
@@ -277,6 +282,7 @@ public struct CodexAppServerProvider: LLMProvider {
             executableURL: executableURL,
             workingDirectoryURL: workingDirectoryURL,
             modelPreset: modelPreset,
+            diagnosticsEnabled: diagnosticsEnabled,
             timeoutSeconds: timeoutSeconds
         )
     }
@@ -319,12 +325,14 @@ struct CodexAppServerRuntimeConfiguration: Sendable, Equatable {
     var environment: [String: String]
     var workingDirectoryURL: URL
     var modelPreset: LLMModelPreset
+    var diagnosticsEnabled: Bool
 
     var reuseKey: String {
         [
             executableURL.path,
             workingDirectoryURL.path,
             modelPreset.rawValue,
+            diagnosticsEnabled ? "diagnostics-on" : "diagnostics-off",
             arguments.joined(separator: "\u{1f}")
         ].joined(separator: "\u{1e}")
     }
@@ -345,7 +353,7 @@ protocol CodexAppServerRuntime: Sendable {
     var configuration: CodexAppServerRuntimeConfiguration { get async }
     func outputBytesRead() async -> Int
     func initialize(deadline: Date) async throws
-    func startThread(modelName: String?, deadline: Date) async throws -> String
+    func startThread(modelName: String?, diagnosticsEnabled: Bool, deadline: Date) async throws -> String
     func startTurn(
         threadID: String,
         prompt: String,
@@ -380,6 +388,7 @@ actor CodexAppServerService {
         executableURL: URL,
         workingDirectoryURL: URL,
         modelPreset: LLMModelPreset,
+        diagnosticsEnabled: Bool = false,
         timeoutSeconds: Int
     ) async throws -> ProcessRunOutput {
         let traceStart = Date()
@@ -424,7 +433,8 @@ actor CodexAppServerService {
             arguments: CodexAppServerProvider.arguments(modelPreset: modelPreset),
             environment: ProcessInfo.processInfo.environment.merging(CodexExecProvider.environment(for: modelPreset)) { _, new in new },
             workingDirectoryURL: workingDirectoryURL,
-            modelPreset: modelPreset
+            modelPreset: modelPreset,
+            diagnosticsEnabled: diagnosticsEnabled
         )
         var outputBytesBefore = 0
 
@@ -463,7 +473,11 @@ actor CodexAppServerService {
                 appendEvent("thread/start", startedAt: threadStartedAt, detail: "reused \(existingThreadID)")
             } else {
                 threadID = try await withTimeout(seconds: remainingTimeoutSeconds(), runtime: runtime) {
-                    try await runtime.startThread(modelName: modelPreset.codexModelName, deadline: deadline)
+                    try await runtime.startThread(
+                        modelName: modelPreset.codexModelName,
+                        diagnosticsEnabled: diagnosticsEnabled,
+                        deadline: deadline
+                    )
                 }
                 threadsByMeetingKey[threadKey] = threadID
                 appendEvent("thread/start", startedAt: threadStartedAt, detail: "new \(threadID)")
@@ -642,14 +656,14 @@ private actor CodexAppServerProcessRuntime: CodexAppServerRuntime {
         _ = try await waitForResponse(id: id, deadline: deadline)
     }
 
-    func startThread(modelName: String?, deadline: Date) async throws -> String {
+    func startThread(modelName: String?, diagnosticsEnabled: Bool, deadline: Date) async throws -> String {
         let id = nextID()
         var params: [String: Any] = [
             "cwd": configuration.workingDirectoryURL.path,
             "approvalPolicy": "never",
             "sandbox": "read-only",
             "ephemeral": true,
-            "experimentalRawEvents": false,
+            "experimentalRawEvents": diagnosticsEnabled,
             "persistExtendedHistory": false,
             "dynamicTools": [],
             "environments": [],
@@ -705,26 +719,52 @@ private actor CodexAppServerProcessRuntime: CodexAppServerRuntime {
         let waitStart = Date()
         var finalOutput = ""
         var firstDeltaLatencyMilliseconds: Int?
-        var observedMethods: [String: (firstSeenMilliseconds: Int, count: Int)] = [:]
+        var observedMethods: [String: (firstSeenMilliseconds: Int, count: Int, details: Set<String>)] = [:]
         var observedMethodOrder: [String] = []
 
         func elapsedSinceWaitStart() -> Int {
             max(0, Int((Date().timeIntervalSince(waitStart) * 1000).rounded()))
         }
 
-        func recordObservedMethod(_ method: String) {
+        func observedDetail(for object: [String: Any], method: String) -> String? {
+            guard method.hasPrefix("item/") || method == "rawResponseItem/completed",
+                  let params = object["params"] as? [String: Any],
+                  let item = params["item"] as? [String: Any] else {
+                return nil
+            }
+            var components: [String] = []
+            if let type = item["type"] as? String, !type.isEmpty {
+                components.append(type)
+            }
+            if let phase = item["phase"] as? String, !phase.isEmpty {
+                components.append(phase)
+            }
+            guard !components.isEmpty else {
+                return nil
+            }
+            return components.joined(separator: "/")
+        }
+
+        func recordObservedMethod(_ method: String, detail: String?) {
             if var existing = observedMethods[method] {
                 existing.count += 1
+                if let detail {
+                    existing.details.insert(detail)
+                }
                 observedMethods[method] = existing
             } else {
-                observedMethods[method] = (firstSeenMilliseconds: elapsedSinceWaitStart(), count: 1)
+                observedMethods[method] = (
+                    firstSeenMilliseconds: elapsedSinceWaitStart(),
+                    count: 1,
+                    details: detail.map { Set([$0]) } ?? []
+                )
                 observedMethodOrder.append(method)
             }
         }
 
         while let object = try await nextMessage(until: deadline) {
             if let method = object["method"] as? String {
-                recordObservedMethod(method)
+                recordObservedMethod(method, detail: observedDetail(for: object, method: method))
             }
             if let method = object["method"] as? String,
                method == "item/agentMessage/delta",
@@ -772,11 +812,16 @@ private actor CodexAppServerProcessRuntime: CodexAppServerRuntime {
                 guard let observed = observedMethods[method] else {
                     return nil
                 }
+                var detailParts = ["count \(observed.count)"]
+                if !observed.details.isEmpty {
+                    let details = observed.details.sorted().prefix(6).joined(separator: ", ")
+                    detailParts.append("details \(details)")
+                }
                 return AnalysisRunTraceEvent(
                     name: "app-server event: \(method)",
                     startedAtMilliseconds: observed.firstSeenMilliseconds,
                     durationMilliseconds: nil,
-                    detail: "count \(observed.count)"
+                    detail: detailParts.joined(separator: " · ")
                 )
             },
             outputBytes: outputBytes,

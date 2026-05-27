@@ -125,6 +125,29 @@ struct CodexAppServerServiceTests {
         #expect(await factory.runtime(at: 0)?.stats().terminated == true)
         #expect(await factory.runtime(at: 1)?.stats().turnCount == 1)
     }
+
+    @Test("diagnostics option은 thread/start raw events opt-in으로 전달된다")
+    func passesDiagnosticsOptionToThreadStart() async throws {
+        let factory = FakeAppServerRuntimeFactory(turnBehaviors: [])
+        let service = CodexAppServerService { configuration in
+            await factory.makeRuntime(configuration)
+        }
+
+        _ = try await service.runTurn(
+            prompt: "diagnostics prompt",
+            schemaData: Data("{}".utf8),
+            meetingID: "meeting-1",
+            executableURL: URL(fileURLWithPath: "/usr/bin/env"),
+            workingDirectoryURL: URL(fileURLWithPath: "/tmp"),
+            modelPreset: .economy,
+            diagnosticsEnabled: true,
+            timeoutSeconds: 10
+        )
+
+        let stats = await factory.runtime(at: 0)?.stats()
+        #expect(stats?.lastDiagnosticsEnabled == true)
+        #expect(await factory.runtime(at: 0)?.configuration.diagnosticsEnabled == true)
+    }
 }
 
 private actor FakeAppServerRuntimeFactory {
@@ -165,6 +188,7 @@ private struct FakeAppServerRuntimeStats: Equatable {
     var threadStartCount: Int
     var turnCount: Int
     var terminated: Bool
+    var lastDiagnosticsEnabled: Bool?
 }
 
 private final class FakeAppServerRuntime: CodexAppServerRuntime, @unchecked Sendable {
@@ -176,6 +200,7 @@ private final class FakeAppServerRuntime: CodexAppServerRuntime, @unchecked Send
     private var turnCount = 0
     private var outputBytes = 0
     private var terminated = false
+    private var lastDiagnosticsEnabled: Bool?
 
     init(configuration: CodexAppServerRuntimeConfiguration, turnBehavior: FakeTurnBehavior) {
         self.configuration = configuration
@@ -193,10 +218,11 @@ private final class FakeAppServerRuntime: CodexAppServerRuntime, @unchecked Send
         }
     }
 
-    func startThread(modelName: String?, deadline: Date) async throws -> String {
+    func startThread(modelName: String?, diagnosticsEnabled: Bool, deadline: Date) async throws -> String {
         lock.withLock {
             threadStartCount += 1
             outputBytes += 16
+            lastDiagnosticsEnabled = diagnosticsEnabled
         }
         return "thread-1"
     }
@@ -255,7 +281,8 @@ private final class FakeAppServerRuntime: CodexAppServerRuntime, @unchecked Send
                 initializeCount: initializeCount,
                 threadStartCount: threadStartCount,
                 turnCount: turnCount,
-                terminated: terminated
+                terminated: terminated,
+                lastDiagnosticsEnabled: lastDiagnosticsEnabled
             )
         }
     }

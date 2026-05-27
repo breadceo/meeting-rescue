@@ -19,6 +19,7 @@ struct LLMProviderConfigurationTests {
 
         #expect(settings.selectedProvider == .customCommand)
         #expect(settings.codexExecutionMode == .cliExec)
+        #expect(!settings.codexAppServerDiagnosticsEnabled)
         #expect(settings.modelPreset == .economy)
         #expect(settings.automaticAnalysisEnabled)
         #expect(settings.analysisTriggerPreset == .balanced)
@@ -29,11 +30,12 @@ struct LLMProviderConfigurationTests {
 
     @Test("Codex execution mode를 저장하고 불러온다")
     func encodesCodexExecutionMode() throws {
-        let settings = AppSettings(codexExecutionMode: .appServerExperimental)
+        let settings = AppSettings(codexExecutionMode: .appServerExperimental, codexAppServerDiagnosticsEnabled: true)
         let data = try JSONEncoder().encode(settings)
         let decoded = try JSONDecoder().decode(AppSettings.self, from: data)
 
         #expect(decoded.codexExecutionMode == .appServerExperimental)
+        #expect(decoded.codexAppServerDiagnosticsEnabled)
     }
 
     @Test("automatic analysis 설정을 저장하고 불러온다")

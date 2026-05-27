@@ -2127,6 +2127,14 @@ struct SettingsView: View {
                         .font(.caption)
                         .foregroundStyle(Color.smoothMuted)
                         .fixedSize(horizontal: false, vertical: true)
+
+                    if viewModel.settings.codexExecutionMode == .appServerExperimental {
+                        Toggle("app-server diagnostics", isOn: codexAppServerDiagnosticsBinding)
+                        Text("켜면 experimental raw events를 요청하고 item type/phase timing을 실행 trace에 기록합니다. raw payload는 저장하지 않습니다.")
+                            .font(.caption)
+                            .foregroundStyle(Color.smoothMuted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
 
                 Picker("model preset", selection: modelPresetBinding) {
@@ -2252,6 +2260,14 @@ struct SettingsView: View {
             viewModel.settings.codexExecutionMode
         } set: { value in
             viewModel.updateCodexExecutionMode(value)
+        }
+    }
+
+    private var codexAppServerDiagnosticsBinding: Binding<Bool> {
+        Binding {
+            viewModel.settings.codexAppServerDiagnosticsEnabled
+        } set: { value in
+            viewModel.setCodexAppServerDiagnosticsEnabled(value)
         }
     }
 

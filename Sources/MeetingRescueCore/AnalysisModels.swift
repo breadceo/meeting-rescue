@@ -194,6 +194,7 @@ public enum LiveContextRetrievalMode: String, Codable, CaseIterable, Identifiabl
 public struct AppSettings: Codable, Equatable, Sendable {
     public var selectedProvider: LLMProviderKind
     public var codexExecutionMode: CodexExecutionMode
+    public var codexAppServerDiagnosticsEnabled: Bool
     public var modelPreset: LLMModelPreset
     public var automaticAnalysisEnabled: Bool
     public var hasCompletedOnboarding: Bool
@@ -206,6 +207,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public init(
         selectedProvider: LLMProviderKind = .codexExec,
         codexExecutionMode: CodexExecutionMode = .cliExec,
+        codexAppServerDiagnosticsEnabled: Bool = false,
         modelPreset: LLMModelPreset = .economy,
         automaticAnalysisEnabled: Bool = true,
         hasCompletedOnboarding: Bool = false,
@@ -217,6 +219,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
     ) {
         self.selectedProvider = selectedProvider
         self.codexExecutionMode = codexExecutionMode
+        self.codexAppServerDiagnosticsEnabled = codexAppServerDiagnosticsEnabled
         self.modelPreset = modelPreset
         self.automaticAnalysisEnabled = automaticAnalysisEnabled
         self.hasCompletedOnboarding = hasCompletedOnboarding
@@ -230,6 +233,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case selectedProvider
         case codexExecutionMode
+        case codexAppServerDiagnosticsEnabled
         case modelPreset
         case automaticAnalysisEnabled
         case hasCompletedOnboarding
@@ -245,6 +249,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         self.init(
             selectedProvider: (try? container.decode(LLMProviderKind.self, forKey: .selectedProvider)) ?? .codexExec,
             codexExecutionMode: (try? container.decode(CodexExecutionMode.self, forKey: .codexExecutionMode)) ?? .cliExec,
+            codexAppServerDiagnosticsEnabled: (try? container.decode(Bool.self, forKey: .codexAppServerDiagnosticsEnabled)) ?? false,
             modelPreset: (try? container.decode(LLMModelPreset.self, forKey: .modelPreset)) ?? .economy,
             automaticAnalysisEnabled: (try? container.decode(Bool.self, forKey: .automaticAnalysisEnabled)) ?? true,
             hasCompletedOnboarding: (try? container.decode(Bool.self, forKey: .hasCompletedOnboarding)) ?? false,
