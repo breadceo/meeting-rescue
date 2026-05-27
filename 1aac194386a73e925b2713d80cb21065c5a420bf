@@ -1,0 +1,15 @@
+Sources/MeetingRescueCore/LLMProvider.swift
+  h_d82ccb34241a0d 338,497-504,708-723,726-728,734,771-781
+Tests/MeetingRescueCoreTests/CodexAppServerServiceTests.swift
+  h_d82ccb34241a0d 44-45,228-239
+---
+{
+  "schema_version": "zax-attestation/1.1.0",
+  "base_commit_sha": "1aac194386a73e925b2713d80cb21065c5a420bf",
+  "prompts": {},
+  "humans": {
+    "h_d82ccb34241a0d": {
+      "author": "ethan@zigbang.com"
+    }
+  }
+}
