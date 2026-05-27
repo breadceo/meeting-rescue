@@ -82,6 +82,8 @@ release 설정은 git에 올리지 않는 `config/release.local.env`에 둡니�
 cp config/release.env.example config/release.local.env
 ```
 
+사용자에게 노출할 변경사항은 `CHANGELOG.md`의 해당 버전 섹션에 먼저 작성합니다. `package_release.sh`는 이 내용을 사용해 앱 번들 안의 `ReleaseNotes.md`와 `dist/release-notes-vX.Y.Z.md`를 생성합니다.
+
 로컬 release archive를 만들려면:
 
 ```sh
@@ -111,7 +113,7 @@ GitHub Release와 Sparkle appcast를 발행하려면 notarization 이후 다음 
 ./scripts/publish_github_release.sh
 ```
 
-이 스크립트는 `vX.Y.Z` tag와 GitHub Release DMG asset을 만들고, Sparkle 서명을 포함한 `docs/appcast.xml`을 갱신합니다. `docs/appcast.xml`은 GitHub Pages의 `/docs` source로 배포되어 앱의 자동 업데이트 feed가 됩니다. Sparkle private key는 Keychain에 보관하고, 백업 파일이 필요하면 `private/` 아래에 두세요. `private/`는 git에 포함하지 않습니다.
+이 스크립트는 `vX.Y.Z` tag와 GitHub Release DMG asset을 만들고, Sparkle 서명을 포함한 `docs/appcast.xml`을 갱신합니다. 또한 `docs/releases/vX.Y.Z.md`와 `docs/releases/latest.md`를 갱신해 앱 안의 릴리즈 노트 화면에서 최신 노트를 확인할 수 있게 합니다. `docs/appcast.xml`은 GitHub Pages의 `/docs` source로 배포되어 앱의 자동 업데이트 feed가 됩니다. Sparkle private key는 Keychain에 보관하고, 백업 파일이 필요하면 `private/` 아래에 두세요. `private/`는 git에 포함하지 않습니다.
 
 ## Transcript 폴더
 

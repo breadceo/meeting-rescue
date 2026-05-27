@@ -94,7 +94,25 @@ struct AnalysisTriggerPolicyTests {
         #expect(decision == .wait(reason: "min-batch-wait"))
     }
 
-    @Test("Balanced preset은 3분 전에는 기다리고 이후 충분한 batch를 실행한다")
+    @Test("min batch wait 전에도 큰 batch는 조기 실행한다")
+    func bypassesMinimumBatchWaitForLargeBatch() {
+        let policy = AnalysisTriggerPolicy()
+        let transcript = (1...12)
+            .map { "[01:\(String(format: "%02d", $0))] Speaker: 마케팅 운영 계획과 담당 액션을 확인합니다 \($0)" }
+            .joined(separator: "\n")
+
+        let decision = policy.evaluate(
+            rawTranscript: transcript,
+            lastAnalyzedTranscriptCharacterCount: 0,
+            latestTranscriptElapsedSeconds: 90,
+            now: baseDate,
+            lastAutomaticAnalysisAt: baseDate.addingTimeInterval(-20)
+        )
+
+        #expect(decision == .run(reason: "min-dialogue-lines"))
+    }
+
+    @Test("Balanced preset은 최소 대기 전에는 기다리고 이후 충분한 batch를 실행한다")
     func balancedPresetWaitsForLargerBatch() {
         let policy = AnalysisTriggerPolicy(
             configuration: AnalysisTriggerPreset.balanced.configuration.withMinimumMeetingElapsedSeconds(60)

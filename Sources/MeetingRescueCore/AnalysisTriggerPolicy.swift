@@ -1,6 +1,8 @@
 import Foundation
 
 public struct AnalysisTriggerPolicy: Equatable, Sendable {
+    private static let softGateBypassMultiplier = 1.5
+
     public struct Configuration: Equatable, Sendable {
         public var minNewDialogueLines: Int
         public var minNewTranscriptCharacters: Int
@@ -62,12 +64,6 @@ public struct AnalysisTriggerPolicy: Equatable, Sendable {
             return .wait(reason: "no-new-transcript")
         }
 
-        let elapsedSinceLastAttempt = lastAutomaticAnalysisAt.map { now.timeIntervalSince($0) }
-        if let elapsedSinceLastAttempt,
-           elapsedSinceLastAttempt < TimeInterval(configuration.minBatchWaitSeconds) {
-            return .wait(reason: "min-batch-wait")
-        }
-
         let newTranscript = transcriptSlice(rawTranscript, from: startCount, to: sourceCount)
         let dialogueLines = TranscriptParser.parse(newTranscript).dialogueLines
         guard !dialogueLines.isEmpty else {
@@ -79,11 +75,21 @@ public struct AnalysisTriggerPolicy: Equatable, Sendable {
             return .skip(reason: "low-value-dialogue")
         }
 
+        let newCharacterCount = sourceCount - startCount
+        let elapsedSinceLastAttempt = lastAutomaticAnalysisAt.map { now.timeIntervalSince($0) }
+        if let elapsedSinceLastAttempt,
+           elapsedSinceLastAttempt < TimeInterval(configuration.minBatchWaitSeconds),
+           !shouldBypassMinimumWait(
+               meaningfulLineCount: meaningfulLines.count,
+               newCharacterCount: newCharacterCount
+           ) {
+            return .wait(reason: "min-batch-wait")
+        }
+
         if meaningfulLines.count >= configuration.minNewDialogueLines {
             return .run(reason: "min-dialogue-lines")
         }
 
-        let newCharacterCount = sourceCount - startCount
         if newCharacterCount >= configuration.minNewTranscriptCharacters {
             return .run(reason: "min-transcript-characters")
         }
@@ -95,6 +101,16 @@ public struct AnalysisTriggerPolicy: Equatable, Sendable {
         }
 
         return .wait(reason: "batch-threshold-not-reached")
+    }
+
+    private func shouldBypassMinimumWait(
+        meaningfulLineCount: Int,
+        newCharacterCount: Int
+    ) -> Bool {
+        let lineBypassThreshold = Int(ceil(Double(configuration.minNewDialogueLines) * Self.softGateBypassMultiplier))
+        let characterBypassThreshold = Int(ceil(Double(configuration.minNewTranscriptCharacters) * Self.softGateBypassMultiplier))
+        return meaningfulLineCount >= lineBypassThreshold
+            || newCharacterCount >= characterBypassThreshold
     }
 
     private static func isMeaningfulDialogueLine(_ line: DialogueLine) -> Bool {

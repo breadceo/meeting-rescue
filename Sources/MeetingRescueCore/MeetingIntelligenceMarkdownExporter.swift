@@ -64,29 +64,6 @@ public enum MeetingIntelligenceMarkdownExporter {
         }
         lines.append("")
 
-        lines.append("## LLM 사용량 추정")
-        lines.append("")
-        lines.append("- 누적 input tokens: \(state.usageSummary.totalInputTokens)")
-        lines.append("- 누적 output tokens: \(state.usageSummary.totalOutputTokens)")
-        lines.append("- 누적 추정 비용: \(String(format: "$%.6f", state.usageSummary.totalEstimatedCostUSD))")
-        if let latest = state.usageSummary.latestSample {
-            lines.append("- 최근 run: \(latest.modelName), input \(latest.inputTokens), output \(latest.outputTokens)")
-        }
-        lines.append("")
-
-        lines.append("## Analysis 실행 로그")
-        if state.attemptLogs.isEmpty {
-            lines.append("- 아직 기록된 실행 로그가 없습니다.")
-        } else {
-            for attempt in state.attemptLogs.suffix(10) {
-                let completed = attempt.completedAt?.formatted(date: .omitted, time: .standard) ?? "running"
-                let duration = attempt.elapsedMilliseconds.map { " · \($0)ms" } ?? ""
-                let batch = attempt.batchStats.map { " · \($0.compactSummary)" } ?? ""
-                lines.append("- \(attempt.reason) · \(attempt.status.rawValue) · \(attempt.modelName) · \(completed)\(duration)\(batch)\(attempt.message.map { " · \($0)" } ?? "")")
-            }
-        }
-        lines.append("")
-
         return lines.joined(separator: "\n")
     }
 

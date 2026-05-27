@@ -57,6 +57,33 @@ struct LiveAnalysisContextPipelineTests {
         #expect(chunks.contains { $0.timeRange == "[12:00]-[12:10]" })
     }
 
+    @Test("live memory index excludes chunks with partial line overlap")
+    func liveIndexExcludesChunksWithPartialLineOverlap() {
+        var index = LiveTranscriptIndex(
+            configuration: .init(maxDialogueLinesPerSegment: 6, scoreThreshold: 0.01)
+        )
+        index.append("""
+        [01:00] Dulee Lee: GitHub Docs 분리 기준을 봅니다.
+        [01:10] Mason Choi: 직방닥스와 호갱독스 역할이 궁금합니다.
+        [01:20] Glen Lee: 노션 대체 가능성도 같이 봐야 합니다.
+        [01:30] Rad Kim: 문서 성격을 먼저 나눠야 합니다.
+        [01:40] Mason Choi: HTML 문서 허용 범위도 궁금합니다.
+        [01:50] Glen Lee: 팀 전용 문서는 자유도를 열어두죠.
+        """)
+
+        let chunks = index.retrieve(
+            queryText: "[02:00] Rad Kim: 직방닥스 문서 성격과 HTML 허용 범위를 다시 묻겠습니다.",
+            excludingText: """
+            [01:40] Mason Choi: HTML 문서 허용 범위도 궁금합니다.
+            [01:50] Glen Lee: 팀 전용 문서는 자유도를 열어두죠.
+            [02:00] Rad Kim: 직방닥스 문서 성격과 HTML 허용 범위를 다시 묻겠습니다.
+            """,
+            topK: 1
+        )
+
+        #expect(chunks.isEmpty)
+    }
+
     @Test("context planner keeps retrieval off compatible with existing prompt path")
     func retrievalOffProducesNoChunks() throws {
         var index = LiveTranscriptIndex()

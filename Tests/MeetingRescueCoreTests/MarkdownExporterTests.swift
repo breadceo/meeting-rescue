@@ -3,7 +3,7 @@ import Testing
 
 @Suite("Markdown exporter")
 struct MarkdownExporterTests {
-    @Test("Meeting Intelligence markdown은 elapsed timestamp와 usage를 포함한다")
+    @Test("Meeting Intelligence markdown은 elapsed timestamp를 포함하고 내부 usage/log는 제외한다")
     func exportsMarkdown() {
         let metadata = MeetingMetadata(
             room: "Room A",
@@ -54,6 +54,8 @@ struct MarkdownExporterTests {
         #expect(markdown.contains("[04:13]"))
         #expect(markdown.contains("수정된 결정"))
         #expect(markdown.contains("@B 수정된 액션 / deadline: 월요일"))
-        #expect(markdown.contains("누적 input tokens: 10"))
+        #expect(!markdown.contains("## LLM 사용량 추정"))
+        #expect(!markdown.contains("누적 input tokens: 10"))
+        #expect(!markdown.contains("## Analysis 실행 로그"))
     }
 }

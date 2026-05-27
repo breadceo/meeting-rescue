@@ -61,19 +61,19 @@ struct LLMProviderConfigurationTests {
     @Test("analysis trigger preset은 샘플 검토 기반 threshold를 제공한다")
     func analysisTriggerPresetConfigurations() {
         let responsive = AnalysisTriggerPreset.responsive.configuration
-        #expect(responsive.minBatchWaitSeconds == 120)
+        #expect(responsive.minBatchWaitSeconds == 90)
         #expect(responsive.maxBatchWaitSeconds == 240)
         #expect(responsive.minNewDialogueLines == 20)
         #expect(responsive.minNewTranscriptCharacters == 1_500)
 
         let balanced = AnalysisTriggerPreset.balanced.configuration
-        #expect(balanced.minBatchWaitSeconds == 180)
+        #expect(balanced.minBatchWaitSeconds == 120)
         #expect(balanced.maxBatchWaitSeconds == 300)
         #expect(balanced.minNewDialogueLines == 24)
         #expect(balanced.minNewTranscriptCharacters == 1_800)
 
         let economy = AnalysisTriggerPreset.economy.configuration
-        #expect(economy.minBatchWaitSeconds == 300)
+        #expect(economy.minBatchWaitSeconds == 240)
         #expect(economy.maxBatchWaitSeconds == 300)
         #expect(economy.minNewDialogueLines == 30)
         #expect(economy.minNewTranscriptCharacters == 2_200)

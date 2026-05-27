@@ -19,8 +19,12 @@ DMG_PATH="$DIST_DIR/$ARCHIVE_BASENAME.dmg"
 CHECKSUM_PATH="$DMG_PATH.sha256"
 RELEASE_NOTES_PATH="${RELEASE_NOTES_PATH:-$DIST_DIR/release-notes-v$APP_VERSION.md}"
 OVERWRITE_RELEASE_NOTES="${OVERWRITE_RELEASE_NOTES:-1}"
+APP_RELEASE_NOTES_RESOURCE="${APP_RELEASE_NOTES_RESOURCE:-$ROOT_DIR/Sources/MeetingRescue/Resources/ReleaseNotes.md}"
 
 cd "$ROOT_DIR"
+
+APP_VERSION="$APP_VERSION" BUILD_NUMBER="$BUILD_NUMBER" BUNDLE_ID="${BUNDLE_ID:-com.local.meeting-rescue}" \
+  "$ROOT_DIR/scripts/generate_release_notes.sh" bundle "$APP_RELEASE_NOTES_RESOURCE"
 
 "$ROOT_DIR/scripts/build_app.sh"
 
@@ -40,19 +44,8 @@ hdiutil create \
 shasum -a 256 "$DMG_PATH" > "$CHECKSUM_PATH"
 
 if [[ "$OVERWRITE_RELEASE_NOTES" == "1" || ! -f "$RELEASE_NOTES_PATH" ]]; then
-  cat > "$RELEASE_NOTES_PATH" <<NOTES
-# Meeting Rescue v$APP_VERSION
-
-- Build: $BUILD_NUMBER
-- Bundle ID: ${BUNDLE_ID:-com.local.meeting-rescue}
-- Distribution: GitHub Release DMG
-
-## 검증
-
-- codesign verification: pending
-- notarization: pending
-- staple validation: pending
-NOTES
+  APP_VERSION="$APP_VERSION" BUILD_NUMBER="$BUILD_NUMBER" BUNDLE_ID="${BUNDLE_ID:-com.local.meeting-rescue}" \
+    "$ROOT_DIR/scripts/generate_release_notes.sh" dist-pending "$RELEASE_NOTES_PATH"
 fi
 
 printf 'Release archive: %s\n' "$DMG_PATH"

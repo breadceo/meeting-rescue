@@ -721,9 +721,8 @@ final class AppViewModel: ObservableObject {
         if isAnalysisRunning {
             return "running"
         }
-        let config = settings.analysisTriggerPreset.configuration.withMinimumMeetingElapsedSeconds(
-            minimumAutomaticAnalysisElapsedSeconds
-        )
+        let policy = automaticTriggerPolicyForCurrentMode()
+        let config = policy.configuration
         let lastAnalyzedCount = analysisState.analyzedTranscriptCharacterCount
         let newCharacterCount = max(0, rawTranscript.count - lastAnalyzedCount)
         let newText = transcriptSlice(rawTranscript, from: lastAnalyzedCount, to: rawTranscript.count)
@@ -734,8 +733,34 @@ final class AppViewModel: ObservableObject {
         }
         let now = automaticTriggerReferenceDate(now: Date(), latestTranscriptElapsedSeconds: latestElapsedSeconds)
         let elapsedSinceLast = lastAutomaticAnalysisAt.map { max(0, Int(now.timeIntervalSince($0))) } ?? 0
-        let waitRemaining = max(0, config.maxBatchWaitSeconds - elapsedSinceLast)
-        return "새 \(newLines)/\(config.minNewDialogueLines)줄 · \(newCharacterCount)/\(config.minNewTranscriptCharacters)자 또는 \(formatDuration(waitRemaining))"
+        let minWaitRemaining = max(0, config.minBatchWaitSeconds - elapsedSinceLast)
+        let maxWaitRemaining = max(0, config.maxBatchWaitSeconds - elapsedSinceLast)
+        let progress = "\(newLines)/\(config.minNewDialogueLines)줄 · \(newCharacterCount)/\(config.minNewTranscriptCharacters)자"
+        let decision = policy.evaluate(
+            rawTranscript: rawTranscript,
+            lastAnalyzedTranscriptCharacterCount: lastAnalyzedCount,
+            latestTranscriptElapsedSeconds: latestElapsedSeconds,
+            now: now,
+            lastAutomaticAnalysisAt: lastAutomaticAnalysisAt
+        )
+
+        switch decision {
+        case .run:
+            return "곧 분석 · \(progress)"
+        case .skip(let reason):
+            return "\(automaticWaitLabel(for: reason)) · \(progress)"
+        case .wait(let reason):
+            switch reason {
+            case "min-batch-wait":
+                return "최소 대기 \(formatDuration(minWaitRemaining)) 남음 · \(progress)"
+            case "batch-threshold-not-reached":
+                return "새 \(progress) · 최대 \(formatDuration(maxWaitRemaining))"
+            case "no-new-transcript":
+                return "새 0/\(config.minNewDialogueLines)줄 · 0/\(config.minNewTranscriptCharacters)자"
+            default:
+                return "\(automaticWaitLabel(for: reason)) · \(progress)"
+            }
+        }
     }
 
     var filteredMeetingHistoryItems: [MeetingHistoryItem] {
@@ -2470,6 +2495,25 @@ final class AppViewModel: ObservableObject {
         let minutes = seconds / 60
         let seconds = seconds % 60
         return "\(minutes):\(String(format: "%02d", seconds))"
+    }
+
+    private func automaticWaitLabel(for reason: String) -> String {
+        switch reason {
+        case "initial-meeting-gate":
+            return "초기 skip"
+        case "system-only":
+            return "system only"
+        case "low-value-dialogue":
+            return "낮은 신호"
+        case "min-batch-wait":
+            return "최소 대기"
+        case "batch-threshold-not-reached":
+            return "batch 대기"
+        case "no-new-transcript":
+            return "새 transcript 없음"
+        default:
+            return reason
+        }
     }
 
     private func triggerDescription(for reason: String) -> String {

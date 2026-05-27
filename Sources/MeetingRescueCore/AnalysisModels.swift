@@ -140,21 +140,21 @@ public enum AnalysisTriggerPreset: String, Codable, CaseIterable, Identifiable, 
             return AnalysisTriggerPolicy.Configuration(
                 minNewDialogueLines: 20,
                 minNewTranscriptCharacters: 1_500,
-                minBatchWaitSeconds: 120,
+                minBatchWaitSeconds: 90,
                 maxBatchWaitSeconds: 240
             )
         case .balanced:
             return AnalysisTriggerPolicy.Configuration(
                 minNewDialogueLines: 24,
                 minNewTranscriptCharacters: 1_800,
-                minBatchWaitSeconds: 180,
+                minBatchWaitSeconds: 120,
                 maxBatchWaitSeconds: 300
             )
         case .economy:
             return AnalysisTriggerPolicy.Configuration(
                 minNewDialogueLines: 30,
                 minNewTranscriptCharacters: 2_200,
-                minBatchWaitSeconds: 300,
+                minBatchWaitSeconds: 240,
                 maxBatchWaitSeconds: 300
             )
         }

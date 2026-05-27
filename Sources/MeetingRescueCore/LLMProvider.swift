@@ -1149,17 +1149,24 @@ func decodeProviderOutput(
         guard let previousSnapshot = request.previousSnapshot else {
             throw LLMProviderError.invalidOutput
         }
-        let patch = try decodePatch(from: output)
+        let patch = try decodePatch(from: output, request: request)
         return previousSnapshot.applyingPatch(patch, provider: provider)
     }
 }
 
-private func decodePatch(from output: String) throws -> AnalysisSnapshotPatch {
+private func decodePatch(from output: String, request: AnalysisRequest) throws -> AnalysisSnapshotPatch {
     let decoder = JSONDecoder()
     decoder.dateDecodingStrategy = .iso8601
     guard let data = output.data(using: .utf8),
           var patch = try? decoder.decode(AnalysisSnapshotPatch.self, from: data) else {
         throw LLMProviderError.invalidOutput
+    }
+    patch.topicTimelineUpserts = patch.topicTimelineUpserts.map { item in
+        var item = item
+        if item.endTimestamp?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false {
+            item.endTimestamp = fallbackEndTimestamp(for: request, startTimestamp: item.startTimestamp)
+        }
+        return item
     }
     patch.decisionCandidateUpserts = patch.decisionCandidateUpserts.map { candidate in
         var candidate = candidate
@@ -1176,6 +1183,41 @@ private func decodePatch(from output: String) throws -> AnalysisSnapshotPatch {
         return candidate
     }
     return patch
+}
+
+private func fallbackEndTimestamp(for request: AnalysisRequest, startTimestamp: String) -> String {
+    let rawTranscript = request.rawTranscript
+    let sourceCount = rawTranscript.count
+    let startOffset = min(max(0, request.lastAnalyzedTranscriptCharacterCount), sourceCount)
+    let startIndex = rawTranscript.index(rawTranscript.startIndex, offsetBy: startOffset)
+    let newTranscript = String(rawTranscript[startIndex...])
+    return lastDialogueTimestamp(in: newTranscript)
+        ?? lastDialogueTimestamp(in: rawTranscript)
+        ?? startTimestamp
+}
+
+private func lastDialogueTimestamp(in text: String) -> String? {
+    text.components(separatedBy: .newlines)
+        .reversed()
+        .compactMap { line -> String? in
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard trimmed.hasPrefix("["),
+                  let closeBracket = trimmed.firstIndex(of: "]") else {
+                return nil
+            }
+            let timestamp = String(trimmed[trimmed.index(after: trimmed.startIndex)..<closeBracket])
+            let remainder = trimmed[trimmed.index(after: closeBracket)...]
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let colon = remainder.firstIndex(of: ":") else {
+                return nil
+            }
+            let speaker = remainder[..<colon].trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !speaker.isEmpty, speaker.uppercased() != "SYSTEM" else {
+                return nil
+            }
+            return timestamp
+        }
+        .first
 }
 
 private func runTraceStart(_ trace: AnalysisRunTrace) -> Date {

@@ -63,6 +63,7 @@ public enum AnalysisPromptBuilder {
         기존 후보/노트/토픽을 반복하지 말고, confirmed/deleted 상태를 되돌리지 마세요.
         relatedTranscriptChunks는 생략된 현재 회의 맥락 연결용입니다. 관련성이 낮으면 무시하세요.
         timestamp는 원문 회의 경과 시간만 사용하세요. 예: "04:13" 또는 "[04:13]". ISO 날짜를 만들지 마세요.
+        topicTimelineUpserts의 startTimestamp와 endTimestamp는 둘 다 채우세요. 한 발화짜리 topic이면 같은 timestamp를 넣으세요.
         final catch-up에서도 전체 회의 재요약 없이 이번 chunk의 추가 흐름/결정/action/note만 반영하세요.
         optional 값은 null 또는 빈 배열로 채우세요.
 
@@ -191,7 +192,15 @@ public enum AnalysisPromptBuilder {
         from metadata: MeetingMetadata,
         transcriptContext: TranscriptContext
     ) -> MeetingMetadata {
-        let speakers = speakerNames(
+        let primarySpeakers = speakerNames(
+            in: [
+                transcriptContext.fullTranscript,
+                transcriptContext.newTranscriptChunk
+            ]
+            .compactMap { $0 }
+            .joined(separator: "\n")
+        )
+        let contextSpeakers = speakerNames(
             in: [
                 transcriptContext.fullTranscript,
                 transcriptContext.newTranscriptChunk,
@@ -201,6 +210,7 @@ public enum AnalysisPromptBuilder {
             .compactMap { $0 }
             .joined(separator: "\n")
         )
+        let speakers = primarySpeakers.isEmpty ? contextSpeakers : primarySpeakers
         guard !speakers.isEmpty else {
             return metadata
         }
@@ -214,11 +224,20 @@ public enum AnalysisPromptBuilder {
                     || normalizedSpeaker.contains(normalizedParticipant)
             }
         }
-        if filteredParticipants.isEmpty {
-            copy.participants = speakers
-        } else {
-            copy.participants = filteredParticipants
+        var compactParticipants = filteredParticipants.isEmpty ? speakers : filteredParticipants
+        let knownParticipantText = compactParticipants
+            .map(normalizedParticipantText)
+            .joined(separator: " ")
+        for speaker in primarySpeakers {
+            let normalizedSpeaker = normalizedParticipantText(speaker)
+            guard !normalizedSpeaker.isEmpty,
+                  !knownParticipantText.contains(normalizedSpeaker),
+                  !compactParticipants.contains(where: { normalizedParticipantText($0) == normalizedSpeaker }) else {
+                continue
+            }
+            compactParticipants.append(speaker)
         }
+        copy.participants = compactParticipants
         return copy
     }
 

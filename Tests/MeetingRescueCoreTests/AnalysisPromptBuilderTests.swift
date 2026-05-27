@@ -157,6 +157,47 @@ struct AnalysisPromptBuilderTests {
         #expect(!prompt.contains("############################################################"))
     }
 
+    @Test("prompt metadata participants는 새 chunk 발화자를 빠뜨리지 않는다")
+    func promptMetadataKeepsCurrentChunkSpeakers() throws {
+        let previousTranscript = """
+        [00:10] Dulee Lee: GitHub Docs 분리 기준을 봅니다.
+        [00:20] Dulee Lee: 직방닥스와 호갱독스를 나누는 안입니다.
+        """
+        let newTranscript = """
+        [06:19] Mason Choi: 네, 알겠습니다.
+        [06:20] Mason Choi: 문서 형식 제약도 궁금합니다.
+        [06:52] Dulee Lee: 팀 전용 문서는 자유로워야 하지 않을까요?
+        [07:31] Glen Lee: 쓰면 안 된다는 의견부터 볼까요?
+        [08:13] Rad Kim: 어떤 문서 성격이 들어가나요?
+        """
+        let rawTranscript = previousTranscript + "\n" + newTranscript
+        let request = AnalysisRequest(
+            meetingID: "meeting-1",
+            metadata: MeetingMetadata(
+                room: "Room",
+                dateTime: "2026-05-27 15:01",
+                participants: [
+                    "Dulee Lee(dulee@example.com)",
+                    "Glen Lee(glen@example.com)",
+                    "Mason Choi(mason@example.com)",
+                    "Rad Kim(rad@example.com)",
+                    "Observer(observer@example.com)"
+                ]
+            ),
+            rawTranscript: rawTranscript,
+            previousSnapshot: AnalysisSnapshot(currentIssue: CurrentIssue(summary: "기존 요약")),
+            lastAnalyzedTranscriptCharacterCount: previousTranscript.count
+        )
+
+        let prompt = try AnalysisPromptBuilder.buildPrompt(for: request)
+
+        #expect(prompt.contains("Mason Choi(mason@example.com)"))
+        #expect(prompt.contains("Dulee Lee(dulee@example.com)"))
+        #expect(prompt.contains("Glen Lee(glen@example.com)"))
+        #expect(prompt.contains("Rad Kim(rad@example.com)"))
+        #expect(!prompt.contains("Observer(observer@example.com)"))
+    }
+
     @Test("retrieved chunk text는 prompt에서 짧게 제한된다")
     func capsRetrievedChunkText() throws {
         let longChunk = String(repeating: "[00:01] Alex: 오래된 지도 논의입니다.\n", count: 80)

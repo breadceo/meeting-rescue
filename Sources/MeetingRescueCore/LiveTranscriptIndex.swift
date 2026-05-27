@@ -212,8 +212,7 @@ public struct LiveTranscriptIndex: Equatable, Sendable {
         guard overlapCount > 0 else {
             return false
         }
-        let overlapRatio = Double(overlapCount) / Double(segmentLineFingerprints.count)
-        return overlapRatio >= 0.5 && overlapCount >= min(2, segmentLineFingerprints.count)
+        return true
     }
 
     private static func dialogueLineFingerprints(in text: String) -> Set<String> {

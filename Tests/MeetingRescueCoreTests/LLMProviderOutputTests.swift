@@ -82,4 +82,78 @@ struct LLMProviderOutputTests {
 
         #expect(snapshot.currentIssue.summary == "새 이슈")
     }
+
+    @Test("live patch timeline endTimestamp가 없으면 현재 batch 마지막 발화로 보정한다")
+    func livePatchBackfillsMissingTimelineEndTimestamp() throws {
+        let patchOutput = """
+        {
+          "currentIssue": null,
+          "topicTimelineUpserts": [
+            {
+              "id": "topic-docs",
+              "startTimestamp": "00:20",
+              "endTimestamp": null,
+              "title": "문서 구조 논의",
+              "summary": "문서 구조를 논의했다."
+            }
+          ],
+          "closeTopicIDs": [],
+          "decisionCandidateUpserts": [],
+          "actionItemCandidateUpserts": [],
+          "risksOrNotesAppend": []
+        }
+        """
+        let previousText = "[00:10] Alex: 이전 내용입니다."
+        let newText = """
+        [00:20] Alex: 문서 구조를 봅니다.
+        [00:40] Blair: 디렉토리 기준도 같이 봅니다.
+        [00:55][SYSTEM] 대화 기록 종료
+        """
+        let request = AnalysisRequest(
+            meetingID: "meeting-1",
+            metadata: MeetingMetadata(room: "Room"),
+            rawTranscript: previousText + "\n" + newText,
+            previousSnapshot: AnalysisSnapshot(currentIssue: CurrentIssue(summary: "기존 요약")),
+            reason: "automatic-min-dialogue-lines",
+            lastAnalyzedTranscriptCharacterCount: previousText.count
+        )
+
+        let snapshot = try decodeProviderOutput(from: patchOutput, request: request, provider: .codexExec)
+
+        #expect(snapshot.topicTimeline.first?.endTimestamp == "00:40")
+    }
+
+    @Test("live patch timeline endTimestamp가 빈 문자열이면 startTimestamp로 fallback한다")
+    func livePatchBackfillsEmptyTimelineEndTimestamp() throws {
+        let patchOutput = """
+        {
+          "currentIssue": null,
+          "topicTimelineUpserts": [
+            {
+              "id": "topic-docs",
+              "startTimestamp": "00:20",
+              "endTimestamp": "",
+              "title": "문서 구조 논의",
+              "summary": "문서 구조를 논의했다."
+            }
+          ],
+          "closeTopicIDs": [],
+          "decisionCandidateUpserts": [],
+          "actionItemCandidateUpserts": [],
+          "risksOrNotesAppend": []
+        }
+        """
+        let request = AnalysisRequest(
+            meetingID: "meeting-1",
+            metadata: MeetingMetadata(room: "Room"),
+            rawTranscript: "[SYSTEM] no dialogue",
+            previousSnapshot: AnalysisSnapshot(currentIssue: CurrentIssue(summary: "기존 요약")),
+            reason: "automatic-min-dialogue-lines",
+            lastAnalyzedTranscriptCharacterCount: 0
+        )
+
+        let snapshot = try decodeProviderOutput(from: patchOutput, request: request, provider: .codexExec)
+
+        #expect(snapshot.topicTimeline.first?.endTimestamp == "00:20")
+    }
 }

@@ -84,12 +84,14 @@ struct ContentView: View {
     @EnvironmentObject private var viewModel: AppViewModel
     @EnvironmentObject private var sparkleUpdater: SparkleUpdater
     @State private var showingSettings = false
+    @State private var showingReleaseNotes = false
     @State private var intelligenceMode: IntelligenceMode = .overview
     @State private var editingCandidate: EditingCandidate?
     @State private var decisionDraftText = ""
     @State private var actionDraftAssignee = ""
     @State private var actionDraftTask = ""
     @State private var actionDraftDeadline = ""
+    @State private var copiedCandidateID: String?
     @State private var selectedAnalysisAttempt: AnalysisAttemptLog?
     @State private var isAnalysisDiagnosticsExpanded = false
     @State private var isParticipantsPopoverPresented = false
@@ -114,6 +116,9 @@ struct ContentView: View {
             SettingsView()
                 .environmentObject(viewModel)
                 .environmentObject(sparkleUpdater)
+        }
+        .sheet(isPresented: $showingReleaseNotes) {
+            ReleaseNotesView()
         }
         .sheet(isPresented: $viewModel.isShowingOnboarding) {
             OnboardingView()
@@ -204,6 +209,20 @@ struct ContentView: View {
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(Color.smoothAccent)
                             .textCase(.uppercase)
+
+                        Button {
+                            showingReleaseNotes = true
+                        } label: {
+                            Label("릴리즈 노트", systemImage: "doc.text")
+                                .font(.caption.weight(.semibold))
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(Color.smoothInk)
+                        .background(Color.smoothSurface, in: Capsule())
+                        .overlay(Capsule().stroke(Color.smoothLine, lineWidth: 1))
+                        .help("릴리즈 노트 보기")
 
                         if let availableUpdate = sparkleUpdater.availableUpdate {
                             Button {
@@ -1081,7 +1100,17 @@ struct ContentView: View {
     private func decisions(_ candidates: [DecisionCandidate], compact: Bool) -> some View {
         let candidates = visibleDecisions(candidates)
         return VStack(alignment: .leading, spacing: 10) {
-            sectionHeader("결정 후보", systemImage: "checkmark.seal")
+            HStack(spacing: 8) {
+                sectionHeader("결정 후보", systemImage: "checkmark.seal")
+                if !candidates.isEmpty {
+                    copySectionButton(
+                        title: "전체 복사",
+                        copiedID: "decisions-all",
+                        help: "결정 후보 전체 복사",
+                        action: { copyDecisionCandidates(candidates) }
+                    )
+                }
+            }
             if candidates.isEmpty {
                 placeholderLine("아직 반응할 결정 후보가 없습니다.")
             }
@@ -1095,7 +1124,17 @@ struct ContentView: View {
     private func actionItems(_ candidates: [ActionItemCandidate], compact: Bool) -> some View {
         let candidates = visibleActions(candidates)
         return VStack(alignment: .leading, spacing: 10) {
-            sectionHeader("액션 후보", systemImage: "arrow.up.forward.circle")
+            HStack(spacing: 8) {
+                sectionHeader("액션 후보", systemImage: "arrow.up.forward.circle")
+                if !candidates.isEmpty {
+                    copySectionButton(
+                        title: "전체 복사",
+                        copiedID: "actions-all",
+                        help: "액션 후보 전체 복사",
+                        action: { copyActionCandidates(candidates) }
+                    )
+                }
+            }
             if candidates.isEmpty {
                 placeholderLine("아직 반응할 action item 후보가 없습니다.")
             }
@@ -1238,6 +1277,48 @@ struct ContentView: View {
         }
         .padding(9)
         .background(Color.smoothCanvas, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    private func copySectionButton(title: String, copiedID: String, help: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Label(copiedCandidateID == copiedID ? "복사됨" : title, systemImage: copiedCandidateID == copiedID ? "checkmark" : "doc.on.doc")
+                .font(.caption.weight(.semibold))
+                .padding(.horizontal, 8)
+                .padding(.vertical, 5)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(copiedCandidateID == copiedID ? Color.smoothOnAccent : Color.smoothInk)
+        .background(copiedCandidateID == copiedID ? Color.smoothAccent : Color.smoothSurface, in: Capsule())
+        .overlay(
+            Capsule()
+                .stroke(copiedCandidateID == copiedID ? Color.smoothAccent.opacity(0.45) : Color.smoothLine, lineWidth: 1)
+        )
+        .help(help)
+    }
+
+    private func copyDecisionCandidates(_ candidates: [DecisionCandidate]) {
+        let text = candidates.map(\.text).joined(separator: "\n")
+        copyCandidateText(text, id: "decisions-all")
+    }
+
+    private func copyActionCandidates(_ candidates: [ActionItemCandidate]) {
+        let text = candidates.map(actionText).joined(separator: "\n")
+        copyCandidateText(text, id: "actions-all")
+    }
+
+    private func copyCandidateText(_ text: String, id: String) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return
+        }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(trimmed, forType: .string)
+        copiedCandidateID = id
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+            if copiedCandidateID == id {
+                copiedCandidateID = nil
+            }
+        }
     }
 
     private func decisionEditForm(_ candidate: DecisionCandidate) -> some View {
@@ -2086,6 +2167,7 @@ struct SettingsView: View {
     @EnvironmentObject private var viewModel: AppViewModel
     @EnvironmentObject private var sparkleUpdater: SparkleUpdater
     @Environment(\.dismiss) private var dismiss
+    @State private var showingReleaseNotes = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -2206,6 +2288,13 @@ struct SettingsView: View {
                 .buttonStyle(SmoothActionButtonStyle())
                 .disabled(!sparkleUpdater.canCheckForUpdates)
 
+                Button {
+                    showingReleaseNotes = true
+                } label: {
+                    Label("릴리즈 노트 보기", systemImage: "doc.text")
+                }
+                .buttonStyle(SmoothActionButtonStyle())
+
                 Button(role: .destructive) {
                     viewModel.clearCurrentAnalysisState()
                 } label: {
@@ -2245,6 +2334,9 @@ struct SettingsView: View {
         .padding(24)
         .frame(width: 540)
         .background(Color.smoothCanvas)
+        .sheet(isPresented: $showingReleaseNotes) {
+            ReleaseNotesView()
+        }
     }
 
     private var providerBinding: Binding<LLMProviderKind> {
@@ -2345,6 +2437,275 @@ struct SettingsView: View {
 
     private func priceString(_ value: Double) -> String {
         String(format: "%.2f", value)
+    }
+}
+
+private enum ReleaseNotesSource: String, CaseIterable, Identifiable {
+    case current = "현재 버전"
+    case latest = "최신"
+
+    var id: String { rawValue }
+}
+
+private enum ReleaseNoteBlock: Identifiable {
+    case heading(level: Int, text: String)
+    case bullet(String)
+    case paragraph(String)
+    case divider
+
+    var id: String {
+        switch self {
+        case let .heading(level, text):
+            return "heading-\(level)-\(text)"
+        case let .bullet(text):
+            return "bullet-\(text)"
+        case let .paragraph(text):
+            return "paragraph-\(text)"
+        case .divider:
+            return "divider"
+        }
+    }
+}
+
+struct ReleaseNotesView: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var selectedSource: ReleaseNotesSource = .current
+    @State private var latestReleaseNotes: String?
+    @State private var latestLoadMessage: String?
+    @State private var isLoadingLatest = false
+
+    private var currentReleaseNotes: String {
+        Self.loadBundledReleaseNotes()
+    }
+
+    private var displayedReleaseNotes: String {
+        switch selectedSource {
+        case .current:
+            currentReleaseNotes
+        case .latest:
+            latestReleaseNotes ?? latestLoadMessage ?? "최신 릴리즈 노트를 불러오는 중입니다."
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .center) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("릴리즈 노트")
+                        .font(.title2.weight(.semibold))
+                        .foregroundStyle(Color.smoothInk)
+                    Text(AppVersion.displayTitle)
+                        .font(.callout)
+                        .foregroundStyle(Color.smoothMuted)
+                }
+
+                Spacer()
+
+                Button {
+                    dismiss()
+                } label: {
+                    Label("닫기", systemImage: "xmark")
+                }
+                .buttonStyle(SmoothActionButtonStyle())
+                .keyboardShortcut(.cancelAction)
+            }
+
+            Picker("릴리즈 노트", selection: $selectedSource) {
+                ForEach(ReleaseNotesSource.allCases) { source in
+                    Text(source.rawValue).tag(source)
+                }
+            }
+            .pickerStyle(.segmented)
+
+            if selectedSource == .latest, isLoadingLatest {
+                ProgressView("최신 릴리즈 노트를 확인하는 중")
+                    .font(.callout)
+            }
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 10) {
+                    ForEach(Array(releaseNoteBlocks(displayedReleaseNotes).enumerated()), id: \.offset) { _, block in
+                        releaseNoteBlockView(block)
+                    }
+                }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(16)
+                    .textSelection(.enabled)
+            }
+            .background(Color.smoothSurface, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(Color.smoothLine, lineWidth: 1)
+            )
+        }
+        .padding(24)
+        .frame(width: 640, height: 560)
+        .background(Color.smoothCanvas)
+        .task {
+            await loadLatestReleaseNotesIfNeeded()
+        }
+    }
+
+    @ViewBuilder
+    private func releaseNoteBlockView(_ block: ReleaseNoteBlock) -> some View {
+        switch block {
+        case let .heading(level, text):
+            Text(text)
+                .font(level == 1 ? .title3.weight(.semibold) : .headline.weight(.semibold))
+                .foregroundStyle(Color.smoothInk)
+                .padding(.top, level == 1 ? 0 : 8)
+        case let .bullet(text):
+            HStack(alignment: .top, spacing: 8) {
+                Text("•")
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(Color.smoothAccent)
+                    .padding(.top, 1)
+                Text(inlineMarkdown(text))
+                    .font(.body)
+                    .foregroundStyle(Color.smoothInk)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        case let .paragraph(text):
+            Text(inlineMarkdown(text))
+                .font(.body)
+                .foregroundStyle(Color.smoothInk)
+                .fixedSize(horizontal: false, vertical: true)
+        case .divider:
+            Divider()
+                .overlay(Color.smoothLine)
+                .padding(.vertical, 4)
+        }
+    }
+
+    private func inlineMarkdown(_ text: String) -> AttributedString {
+        (try? AttributedString(markdown: text)) ?? AttributedString(text)
+    }
+
+    private func releaseNoteBlocks(_ markdown: String) -> [ReleaseNoteBlock] {
+        var blocks: [ReleaseNoteBlock] = []
+        var paragraphLines: [String] = []
+
+        func flushParagraph() {
+            let text = paragraphLines
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+                .joined(separator: " ")
+            if !text.isEmpty {
+                blocks.append(.paragraph(text))
+            }
+            paragraphLines.removeAll()
+        }
+
+        for rawLine in markdown.components(separatedBy: .newlines) {
+            let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
+
+            if line.isEmpty {
+                flushParagraph()
+                continue
+            }
+
+            if line == "---" {
+                flushParagraph()
+                blocks.append(.divider)
+                continue
+            }
+
+            if line.hasPrefix("## ") {
+                flushParagraph()
+                blocks.append(.heading(level: 2, text: String(line.dropFirst(3))))
+                continue
+            }
+
+            if line.hasPrefix("# ") {
+                flushParagraph()
+                blocks.append(.heading(level: 1, text: String(line.dropFirst(2))))
+                continue
+            }
+
+            if line.hasPrefix("- ") {
+                flushParagraph()
+                blocks.append(.bullet(String(line.dropFirst(2))))
+                continue
+            }
+
+            paragraphLines.append(line)
+        }
+
+        flushParagraph()
+        return blocks
+    }
+
+    @MainActor
+    private func loadLatestReleaseNotesIfNeeded() async {
+        guard latestReleaseNotes == nil, latestLoadMessage == nil, !isLoadingLatest else {
+            return
+        }
+        guard let url = Self.latestReleaseNotesURL() else {
+            latestLoadMessage = "최신 릴리즈 노트 URL을 찾을 수 없습니다."
+            return
+        }
+
+        isLoadingLatest = true
+        defer { isLoadingLatest = false }
+
+        do {
+            let (data, response) = try await URLSession.shared.data(from: url)
+            if let httpResponse = response as? HTTPURLResponse, !(200..<300).contains(httpResponse.statusCode) {
+                latestLoadMessage = """
+                # 최신 릴리즈 노트를 아직 찾을 수 없습니다
+
+                GitHub Pages에 `docs/releases/latest.md`가 배포되기 전이면 HTTP \(httpResponse.statusCode)가 표시될 수 있습니다. 아래는 현재 앱에 포함된 릴리즈 노트입니다.
+
+                ---
+
+                \(currentReleaseNotes)
+                """
+                return
+            }
+            guard let text = String(data: data, encoding: .utf8), !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                latestLoadMessage = "최신 릴리즈 노트가 비어 있습니다."
+                return
+            }
+            latestReleaseNotes = text
+        } catch {
+            latestLoadMessage = """
+            # 최신 릴리즈 노트를 불러오지 못했습니다
+
+            \(error.localizedDescription)
+
+            아래는 현재 앱에 포함된 릴리즈 노트입니다.
+
+            ---
+
+            \(currentReleaseNotes)
+            """
+        }
+    }
+
+    private static func loadBundledReleaseNotes() -> String {
+        let urls = [
+            Bundle.module.url(forResource: "ReleaseNotes", withExtension: "md", subdirectory: "Resources"),
+            Bundle.module.url(forResource: "ReleaseNotes", withExtension: "md")
+        ]
+
+        for url in urls.compactMap({ $0 }) {
+            if let text = try? String(contentsOf: url, encoding: .utf8), !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return text
+            }
+        }
+
+        return "# \(AppVersion.displayTitle)\n\n릴리즈 노트를 찾을 수 없습니다."
+    }
+
+    private static func latestReleaseNotesURL() -> URL? {
+        guard let feedURLString = Bundle.main.object(forInfoDictionaryKey: "SUFeedURL") as? String,
+              let feedURL = URL(string: feedURLString) else {
+            return URL(string: "https://breadceo.github.io/meeting-rescue/releases/latest.md")
+        }
+        return feedURL
+            .deletingLastPathComponent()
+            .appendingPathComponent("releases")
+            .appendingPathComponent("latest.md")
     }
 }
 

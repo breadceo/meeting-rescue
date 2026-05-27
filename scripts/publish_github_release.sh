@@ -25,6 +25,7 @@ PAGES_BASE_URL="${PAGES_BASE_URL:-https://breadceo.github.io/meeting-rescue}"
 RELEASE_ASSET_URL="${RELEASE_ASSET_URL:-https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG_NAME/$(basename "$ARCHIVE_PATH")}"
 APPCAST_PATH="${APPCAST_PATH:-$ROOT_DIR/docs/appcast.xml}"
 SPARKLE_SIGN_UPDATE_TOOL="${SPARKLE_SIGN_UPDATE_TOOL:-$ROOT_DIR/.build/artifacts/sparkle/Sparkle/bin/sign_update}"
+RELEASES_DOCS_DIR="${RELEASES_DOCS_DIR:-$ROOT_DIR/docs/releases}"
 
 cd "$ROOT_DIR"
 
@@ -79,30 +80,20 @@ app_notary_id="$(plutil -extract id raw -o - "$app_notary_result" 2>/dev/null ||
 dmg_notary_status="$(plutil -extract status raw -o - "$dmg_notary_result" 2>/dev/null || printf 'not recorded')"
 dmg_notary_id="$(plutil -extract id raw -o - "$dmg_notary_result" 2>/dev/null || printf '-')"
 
-if grep -q 'pending' "$RELEASE_NOTES_PATH"; then
-  cat > "$RELEASE_NOTES_PATH" <<NOTES
-# Meeting Rescue v$APP_VERSION
+APP_VERSION="$APP_VERSION" \
+BUILD_NUMBER="$build_number" \
+BUNDLE_ID="${BUNDLE_ID:-com.local.meeting-rescue}" \
+APP_NOTARY_STATUS="$app_notary_status" \
+APP_NOTARY_ID="$app_notary_id" \
+DMG_NOTARY_STATUS="$dmg_notary_status" \
+DMG_NOTARY_ID="$dmg_notary_id" \
+CHECKSUM_VALUE="$checksum_value" \
+ARCHIVE_BASENAME="$archive_basename" \
+  "$ROOT_DIR/scripts/generate_release_notes.sh" dist-verified "$RELEASE_NOTES_PATH"
 
-- Build: $build_number
-- Bundle ID: ${BUNDLE_ID:-com.local.meeting-rescue}
-- Distribution: GitHub Release DMG
-
-## 검증
-
-- codesign verification: passed
-- App notarization: $app_notary_status ($app_notary_id)
-- DMG notarization: $dmg_notary_status ($dmg_notary_id)
-- staple validation: passed
-- Gatekeeper validation: accepted
-- Sparkle appcast signature: passed
-
-## Checksum
-
-\`\`\`txt
-$checksum_value  $archive_basename
-\`\`\`
-NOTES
-fi
+mkdir -p "$RELEASES_DOCS_DIR"
+APP_VERSION="$APP_VERSION" "$ROOT_DIR/scripts/generate_release_notes.sh" public-markdown "$RELEASES_DOCS_DIR/$TAG_NAME.md"
+cp "$RELEASES_DOCS_DIR/$TAG_NAME.md" "$RELEASES_DOCS_DIR/latest.md"
 
 if ! git rev-parse "$TAG_NAME" >/dev/null 2>&1; then
   git tag -a "$TAG_NAME" -m "Meeting Rescue $TAG_NAME"
@@ -116,6 +107,10 @@ if gh release view "$TAG_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
     "$CHECKSUM_PATH#SHA-256 checksum" \
     --repo "$GITHUB_REPOSITORY" \
     --clobber
+  gh release edit "$TAG_NAME" \
+    --repo "$GITHUB_REPOSITORY" \
+    --title "$RELEASE_TITLE" \
+    --notes-file "$RELEASE_NOTES_PATH"
 else
   release_args=(
     release create "$TAG_NAME"
@@ -135,6 +130,9 @@ else
 fi
 
 mkdir -p "$(dirname "$APPCAST_PATH")"
+appcast_description="$(mktemp "${TMPDIR:-/tmp}/meeting-rescue-appcast-description.XXXXXX")"
+trap 'rm -f "$appcast_description"' EXIT
+APP_VERSION="$APP_VERSION" "$ROOT_DIR/scripts/generate_release_notes.sh" appcast-html "$appcast_description"
 cat > "$APPCAST_PATH" <<APPCAST
 <?xml version="1.0" encoding="utf-8"?>
 <rss version="2.0"
@@ -148,7 +146,7 @@ cat > "$APPCAST_PATH" <<APPCAST
     <item>
       <title>Meeting Rescue $APP_VERSION</title>
       <description><![CDATA[
-        <p>Meeting Rescue $APP_VERSION release.</p>
+$(sed 's/^/        /' "$appcast_description")
         <p><a href="https://github.com/$GITHUB_REPOSITORY/releases/tag/$TAG_NAME">Release notes</a></p>
       ]]></description>
       <pubDate>$pub_date</pubDate>
