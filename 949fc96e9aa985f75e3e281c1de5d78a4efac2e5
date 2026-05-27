@@ -1,0 +1,15 @@
+README.md
+  h_d82ccb34241a0d 116
+scripts/publish_github_release.sh
+  h_d82ccb34241a0d 29-30,136-137,170-187,190-192
+---
+{
+  "schema_version": "zax-attestation/1.1.0",
+  "base_commit_sha": "949fc96e9aa985f75e3e281c1de5d78a4efac2e5",
+  "prompts": {},
+  "humans": {
+    "h_d82ccb34241a0d": {
+      "author": "ethan@zigbang.com"
+    }
+  }
+}
