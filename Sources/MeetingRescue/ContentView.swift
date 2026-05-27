@@ -2168,159 +2168,21 @@ struct SettingsView: View {
     @EnvironmentObject private var sparkleUpdater: SparkleUpdater
     @Environment(\.dismiss) private var dismiss
     @State private var showingReleaseNotes = false
+    @State private var selectedSection: SettingsSection = .llm
+    @State private var isPricingReferenceExpanded = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(alignment: .center) {
-                    Text("설정")
-                        .font(.title2.weight(.semibold))
-                    Spacer()
-                    Button {
-                        dismiss()
-                        Task { @MainActor in
-                            viewModel.showOnboarding()
-                        }
-                    } label: {
-                        Label("온보딩", systemImage: "questionmark.circle")
-                    }
-                    .buttonStyle(SmoothActionButtonStyle())
+        VStack(alignment: .leading, spacing: 16) {
+            settingsHeader
+            settingsSectionPicker
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    selectedSettingsSection
                 }
-                Text("Model preset은 provider 공통 설정입니다. Codex와 Claude Code는 preset을 CLI model/effort로 적용하고, Custom Command에는 환경변수로 전달합니다.")
-                    .font(.callout)
-                    .foregroundStyle(Color.smoothMuted)
-                    .fixedSize(horizontal: false, vertical: true)
+                .padding(.vertical, 2)
             }
-
-            Form {
-                Picker("LLM provider", selection: providerBinding) {
-                    ForEach(LLMProviderKind.allCases) { provider in
-                        Text(provider.displayName).tag(provider)
-                    }
-                }
-
-                if viewModel.settings.selectedProvider == .codexExec {
-                    Picker("Codex execution", selection: codexExecutionModeBinding) {
-                        ForEach(CodexExecutionMode.allCases) { mode in
-                            Text(mode.displayName).tag(mode)
-                        }
-                    }
-                    Text(viewModel.settings.codexExecutionMode.detail)
-                        .font(.caption)
-                        .foregroundStyle(Color.smoothMuted)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    if viewModel.settings.codexExecutionMode == .appServerExperimental {
-                        Toggle("app-server diagnostics", isOn: codexAppServerDiagnosticsBinding)
-                        Text("켜면 experimental raw events를 요청하고 item type/phase timing을 실행 trace에 기록합니다. raw payload는 저장하지 않습니다.")
-                            .font(.caption)
-                            .foregroundStyle(Color.smoothMuted)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-
-                Picker("model preset", selection: modelPresetBinding) {
-                    ForEach(LLMModelPreset.allCases) { preset in
-                        Text(preset.displayName).tag(preset)
-                    }
-                }
-
-                Text(viewModel.settings.modelPreset.detail)
-                    .font(.caption)
-                    .foregroundStyle(Color.smoothMuted)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                Toggle("automatic meeting intelligence", isOn: automaticAnalysisBinding)
-                Text("끄면 live/test run 중 자동 LLM analysis와 회의 종료 final analysis를 실행하지 않습니다. 수동 `분석`은 계속 사용할 수 있습니다.")
-                    .font(.caption)
-                    .foregroundStyle(Color.smoothMuted)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                Picker("analysis trigger", selection: analysisTriggerPresetBinding) {
-                    ForEach(AnalysisTriggerPreset.allCases) { preset in
-                        Text(preset.displayName).tag(preset)
-                    }
-                }
-                    .disabled(!viewModel.settings.automaticAnalysisEnabled)
-                Text(viewModel.settings.analysisTriggerPreset.detail)
-                    .font(.caption)
-                    .foregroundStyle(Color.smoothMuted)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                Stepper("provider timeout: \(viewModel.settings.providerTimeoutSeconds)초", value: timeoutBinding, in: 10...300)
-                Text("Test Run도 같은 preset을 사용하되 wait 계산은 transcript 경과 시간 기준입니다. 수동 `분석`과 final analysis는 최소 180초 timeout을 사용합니다.")
-                    .font(.caption)
-                    .foregroundStyle(Color.smoothMuted)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                Picker("live context retrieval", selection: liveContextRetrievalModeBinding) {
-                    ForEach(LiveContextRetrievalMode.allCases) { mode in
-                        Text(mode.displayName).tag(mode)
-                    }
-                }
-                Text(viewModel.settings.liveContextRetrievalMode.detail)
-                    .font(.caption)
-                    .foregroundStyle(Color.smoothMuted)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                TextField("custom command", text: customCommandBinding)
-                    .disabled(viewModel.settings.selectedProvider != .customCommand)
-            }
-
-            pricingReference
-
-            Divider()
-
-            VStack(alignment: .leading, spacing: 8) {
-                Button {
-                    viewModel.chooseFolder()
-                } label: {
-                    Label("selected Recordings folder 변경", systemImage: "folder")
-                }
-                .buttonStyle(SmoothActionButtonStyle())
-
-                Button {
-                    dismiss()
-                    sparkleUpdater.checkForUpdates()
-                } label: {
-                    Label("업데이트 확인", systemImage: "arrow.down.circle")
-                }
-                .buttonStyle(SmoothActionButtonStyle())
-                .disabled(!sparkleUpdater.canCheckForUpdates)
-
-                Button {
-                    showingReleaseNotes = true
-                } label: {
-                    Label("릴리즈 노트 보기", systemImage: "doc.text")
-                }
-                .buttonStyle(SmoothActionButtonStyle())
-
-                Button(role: .destructive) {
-                    viewModel.clearCurrentAnalysisState()
-                } label: {
-                    Label("현재 meeting analysis state 지우기", systemImage: "eraser")
-                }
-                .buttonStyle(SmoothActionButtonStyle(kind: .destructive))
-                .disabled(viewModel.activeTranscriptURL == nil)
-
-                Button(role: .destructive) {
-                    viewModel.forgetSelectedFolder()
-                } label: {
-                    Label("선택 폴더 잊기", systemImage: "xmark.circle")
-                }
-                .buttonStyle(SmoothActionButtonStyle(kind: .destructive))
-                .disabled(viewModel.selectedFolderURL == nil)
-
-                Button {
-                    dismiss()
-                    Task { @MainActor in
-                        viewModel.showOnboarding()
-                    }
-                } label: {
-                    Label("onboarding 다시 보기", systemImage: "questionmark.circle")
-                }
-                .buttonStyle(SmoothActionButtonStyle())
-            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             HStack {
                 Spacer()
@@ -2332,11 +2194,301 @@ struct SettingsView: View {
             }
         }
         .padding(24)
-        .frame(width: 540)
+        .frame(width: 640, height: 620)
         .background(Color.smoothCanvas)
         .sheet(isPresented: $showingReleaseNotes) {
             ReleaseNotesView()
         }
+    }
+
+    private var settingsHeader: some View {
+        HStack(alignment: .center) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("설정")
+                    .font(.title2.weight(.semibold))
+                    .foregroundStyle(Color.smoothInk)
+                Text(settingsSubtitle)
+                    .font(.callout)
+                    .foregroundStyle(Color.smoothMuted)
+                    .lineLimit(2)
+            }
+            Spacer()
+            Button {
+                dismiss()
+                Task { @MainActor in
+                    viewModel.showOnboarding()
+                }
+            } label: {
+                Label("온보딩", systemImage: "questionmark.circle")
+            }
+            .buttonStyle(SmoothActionButtonStyle())
+        }
+    }
+
+    private var settingsSubtitle: String {
+        switch selectedSection {
+        case .llm:
+            return "provider, model preset, execution mode를 조정합니다."
+        case .analysis:
+            return "자동 분석, trigger, timeout, context retrieval을 조정합니다."
+        case .app:
+            return "폴더, 업데이트, 릴리즈 노트, onboarding을 관리합니다."
+        case .danger:
+            return "현재 회의 상태나 선택 폴더 저장값을 지웁니다."
+        }
+    }
+
+    private var settingsSectionPicker: some View {
+        Picker("설정 섹션", selection: $selectedSection) {
+            ForEach(SettingsSection.allCases) { section in
+                Label(section.rawValue, systemImage: section.systemImage)
+                    .tag(section)
+            }
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+    }
+
+    @ViewBuilder
+    private var selectedSettingsSection: some View {
+        switch selectedSection {
+        case .llm:
+            llmSettings
+        case .analysis:
+            analysisSettings
+        case .app:
+            appSettings
+        case .danger:
+            dangerSettings
+        }
+    }
+
+    private var llmSettings: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            settingsCard("Provider", systemImage: "cpu") {
+                settingsRow("LLM provider") {
+                    Picker("LLM provider", selection: providerBinding) {
+                        ForEach(LLMProviderKind.allCases) { provider in
+                            Text(provider.displayName).tag(provider)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(width: 260)
+                }
+
+                if viewModel.settings.selectedProvider == .codexExec {
+                    settingsRow("Codex execution", detail: viewModel.settings.codexExecutionMode.detail) {
+                        Picker("Codex execution", selection: codexExecutionModeBinding) {
+                            ForEach(CodexExecutionMode.allCases) { mode in
+                                Text(mode.displayName).tag(mode)
+                            }
+                        }
+                        .labelsHidden()
+                        .frame(width: 260)
+                    }
+
+                    if viewModel.settings.codexExecutionMode == .appServerExperimental {
+                        settingsRow("Diagnostics", detail: "Run trace에 app-server event timing을 더 자세히 기록합니다.") {
+                            Toggle("app-server diagnostics", isOn: codexAppServerDiagnosticsBinding)
+                                .labelsHidden()
+                        }
+                    }
+                }
+
+                settingsRow("Model preset", detail: viewModel.settings.modelPreset.detail) {
+                    Picker("model preset", selection: modelPresetBinding) {
+                        ForEach(LLMModelPreset.allCases) { preset in
+                            Text(preset.displayName).tag(preset)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(width: 180)
+                }
+
+                settingsRow("Custom command") {
+                    TextField("custom command", text: customCommandBinding)
+                        .textFieldStyle(.roundedBorder)
+                        .disabled(viewModel.settings.selectedProvider != .customCommand)
+                        .frame(width: 320)
+                }
+            }
+
+            pricingReference
+        }
+    }
+
+    private var analysisSettings: some View {
+        settingsCard("Meeting Intelligence", systemImage: "sparkles") {
+            settingsRow("Automatic analysis", detail: "끄면 live/test run 자동 분석과 회의 종료 final analysis를 실행하지 않습니다.") {
+                Toggle("automatic meeting intelligence", isOn: automaticAnalysisBinding)
+                    .labelsHidden()
+            }
+
+            settingsRow("Analysis trigger", detail: viewModel.settings.analysisTriggerPreset.detail) {
+                Picker("analysis trigger", selection: analysisTriggerPresetBinding) {
+                    ForEach(AnalysisTriggerPreset.allCases) { preset in
+                        Text(preset.displayName).tag(preset)
+                    }
+                }
+                .labelsHidden()
+                .disabled(!viewModel.settings.automaticAnalysisEnabled)
+                .frame(width: 180)
+            }
+
+            settingsRow("Provider timeout", detail: "수동 분석과 final analysis는 최소 180초 timeout을 사용합니다.") {
+                Stepper("\(viewModel.settings.providerTimeoutSeconds)초", value: timeoutBinding, in: 10...300)
+                    .frame(width: 160)
+            }
+
+            settingsRow("Live context retrieval", detail: viewModel.settings.liveContextRetrievalMode.detail) {
+                Picker("live context retrieval", selection: liveContextRetrievalModeBinding) {
+                    ForEach(LiveContextRetrievalMode.allCases) { mode in
+                        Text(mode.displayName).tag(mode)
+                    }
+                }
+                .labelsHidden()
+                .frame(width: 220)
+            }
+        }
+    }
+
+    private var appSettings: some View {
+        settingsCard("App", systemImage: "macwindow") {
+            actionRow(
+                "Recordings folder",
+                detail: viewModel.selectedFolderURL?.path(percentEncoded: false) ?? "선택된 폴더 없음"
+            ) {
+                Button {
+                    viewModel.chooseFolder()
+                } label: {
+                    Label("변경", systemImage: "folder")
+                }
+                .buttonStyle(SmoothActionButtonStyle())
+            }
+
+            actionRow("Update", detail: "Sparkle update feed에서 새 버전을 확인합니다.") {
+                Button {
+                    dismiss()
+                    sparkleUpdater.checkForUpdates()
+                } label: {
+                    Label("확인", systemImage: "arrow.down.circle")
+                }
+                .buttonStyle(SmoothActionButtonStyle())
+                .disabled(!sparkleUpdater.canCheckForUpdates)
+            }
+
+            actionRow("Release notes", detail: "현재 버전과 최신 릴리즈 노트를 앱 안에서 확인합니다.") {
+                Button {
+                    showingReleaseNotes = true
+                } label: {
+                    Label("보기", systemImage: "doc.text")
+                }
+                .buttonStyle(SmoothActionButtonStyle())
+            }
+
+            actionRow("Onboarding", detail: "처음 사용 흐름과 주요 버튼 설명을 다시 봅니다.") {
+                Button {
+                    dismiss()
+                    Task { @MainActor in
+                        viewModel.showOnboarding()
+                    }
+                } label: {
+                    Label("다시 보기", systemImage: "questionmark.circle")
+                }
+                .buttonStyle(SmoothActionButtonStyle())
+            }
+        }
+    }
+
+    private var dangerSettings: some View {
+        settingsCard("Danger Zone", systemImage: "exclamationmark.triangle") {
+            actionRow("Current meeting state", detail: "현재 active meeting의 analysis snapshot, 후보 상태, 실행 로그를 지웁니다.") {
+                Button(role: .destructive) {
+                    viewModel.clearCurrentAnalysisState()
+                } label: {
+                    Label("지우기", systemImage: "eraser")
+                }
+                .buttonStyle(SmoothActionButtonStyle(kind: .destructive))
+                .disabled(viewModel.activeTranscriptURL == nil)
+            }
+
+            actionRow("Selected folder", detail: "저장된 Recordings folder bookmark를 잊습니다.") {
+                Button(role: .destructive) {
+                    viewModel.forgetSelectedFolder()
+                } label: {
+                    Label("잊기", systemImage: "xmark.circle")
+                }
+                .buttonStyle(SmoothActionButtonStyle(kind: .destructive))
+                .disabled(viewModel.selectedFolderURL == nil)
+            }
+        }
+    }
+
+    private func settingsCard<Content: View>(_ title: String, systemImage: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 8) {
+                Image(systemName: systemImage)
+                    .foregroundStyle(Color.smoothAccent)
+                Text(title)
+                    .font(.headline)
+                    .foregroundStyle(Color.smoothInk)
+                Spacer()
+            }
+            .padding(.horizontal, 14)
+            .padding(.top, 12)
+            .padding(.bottom, 8)
+
+            VStack(alignment: .leading, spacing: 0) {
+                content()
+            }
+            .padding(.horizontal, 14)
+            .padding(.bottom, 12)
+        }
+        .background(Color.smoothSurface, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.smoothLine, lineWidth: 1)
+        )
+    }
+
+    private func settingsRow<Control: View>(_ title: String, detail: String? = nil, @ViewBuilder control: () -> Control) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .center, spacing: 14) {
+                Text(title)
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(Color.smoothInk)
+                    .frame(width: 150, alignment: .leading)
+                Spacer(minLength: 12)
+                control()
+            }
+
+            if let detail, !detail.isEmpty {
+                Text(detail)
+                    .font(.caption)
+                    .foregroundStyle(Color.smoothMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.leading, 164)
+            }
+        }
+        .padding(.vertical, 9)
+    }
+
+    private func actionRow<Action: View>(_ title: String, detail: String, @ViewBuilder action: () -> Action) -> some View {
+        HStack(alignment: .center, spacing: 14) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(Color.smoothInk)
+                Text(detail)
+                    .font(.caption)
+                    .foregroundStyle(Color.smoothMuted)
+                    .lineLimit(2)
+                    .truncationMode(.middle)
+            }
+            Spacer(minLength: 16)
+            action()
+        }
+        .padding(.vertical, 9)
     }
 
     private var providerBinding: Binding<LLMProviderKind> {
@@ -2414,24 +2566,28 @@ struct SettingsView: View {
     }
 
     private var pricingReference: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("가격 reference")
+        DisclosureGroup(isExpanded: $isPricingReferenceExpanded) {
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(LLMUsagePricing.referencePrices, id: \.modelName) { price in
+                    HStack {
+                        Text("\(price.providerLabel) · \(price.modelName)")
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        Spacer()
+                        Text("in $\(priceString(price.inputPerMillionUSD)) / out $\(priceString(price.outputPerMillionUSD)) per 1M")
+                            .fontDesign(.monospaced)
+                            .foregroundStyle(Color.smoothMuted)
+                    }
+                    .font(.caption)
+                }
+            }
+            .padding(.top, 8)
+        } label: {
+            Label("가격 reference", systemImage: "dollarsign.circle")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(Color.smoothMuted)
-            ForEach(LLMUsagePricing.referencePrices, id: \.modelName) { price in
-                HStack {
-                    Text("\(price.providerLabel) · \(price.modelName)")
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                    Spacer()
-                    Text("in $\(priceString(price.inputPerMillionUSD)) / out $\(priceString(price.outputPerMillionUSD)) per 1M")
-                        .fontDesign(.monospaced)
-                        .foregroundStyle(Color.smoothMuted)
-                }
-                .font(.caption)
-            }
         }
-        .padding(10)
+        .padding(12)
         .background(Color.smoothSurface.opacity(0.7), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 
@@ -2463,6 +2619,28 @@ private enum ReleaseNoteBlock: Identifiable {
             return "paragraph-\(text)"
         case .divider:
             return "divider"
+        }
+    }
+}
+
+private enum SettingsSection: String, CaseIterable, Identifiable {
+    case llm = "LLM"
+    case analysis = "Analysis"
+    case app = "App"
+    case danger = "Danger"
+
+    var id: String { rawValue }
+
+    var systemImage: String {
+        switch self {
+        case .llm:
+            return "cpu"
+        case .analysis:
+            return "sparkles"
+        case .app:
+            return "macwindow"
+        case .danger:
+            return "exclamationmark.triangle"
         }
     }
 }
