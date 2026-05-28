@@ -1,6 +1,6 @@
-# Meeting Rescue v0.1.12
+# Meeting Rescue v0.1.13
 
 
-- 설정창을 `LLM`, `Analysis`, `App`, `Danger` 탭으로 나눠 기능별로 정리했습니다.
-- 설정 항목을 카드형 row로 재배치해 설명과 control이 한눈에 보이도록 개선했습니다.
-- LLM 가격 reference를 기본 접힘 상태로 바꿔 설정창의 기본 밀도를 낮췄습니다.
+- Live Watch 분석이 성공했는데도 현재 이슈가 `-`로 남을 수 있던 문제를 수정했습니다.
+- 첫 live patch 분석에서 이전 현재 이슈가 비어 있으면 새 transcript chunk의 핵심 논점을 반드시 현재 이슈로 채우도록 보강했습니다.
+- LLM provider가 여전히 `currentIssue`를 비워 반환해도 topic, 결정 후보, 액션 후보, note 근거로 현재 이슈를 보강하도록 했습니다.
