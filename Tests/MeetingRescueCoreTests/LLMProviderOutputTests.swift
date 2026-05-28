@@ -83,6 +83,40 @@ struct LLMProviderOutputTests {
         #expect(snapshot.currentIssue.summary == "새 이슈")
     }
 
+    @Test("빈 baseline currentIssue에 null patch가 오면 patch 근거로 현재 이슈를 보강한다")
+    func livePatchBackfillsEmptyCurrentIssueFromPatchEvidence() throws {
+        let patchOutput = """
+        {
+          "currentIssue": null,
+          "topicTimelineUpserts": [
+            {
+              "id": "topic-landlord-onboarding",
+              "startTimestamp": "00:10",
+              "endTimestamp": "01:20",
+              "title": "임대인 온보딩",
+              "summary": "임차인 모드에서 임대인 모드로 전환할 때 소개 페이지와 FAQ 이미지를 추가하는 방향을 논의했다."
+            }
+          ],
+          "closeTopicIDs": [],
+          "decisionCandidateUpserts": [],
+          "actionItemCandidateUpserts": [],
+          "risksOrNotesAppend": []
+        }
+        """
+        let request = AnalysisRequest(
+            meetingID: "meeting-1",
+            metadata: MeetingMetadata(room: "Room"),
+            rawTranscript: "[00:10] Alex: 임대인 온보딩 소개 페이지를 봅니다.",
+            previousSnapshot: AnalysisSnapshot(currentIssue: CurrentIssue(summary: "")),
+            reason: "automatic-min-dialogue-lines",
+            lastAnalyzedTranscriptCharacterCount: 0
+        )
+
+        let snapshot = try decodeProviderOutput(from: patchOutput, request: request, provider: .codexExec)
+
+        #expect(snapshot.currentIssue.summary == "임차인 모드에서 임대인 모드로 전환할 때 소개 페이지와 FAQ 이미지를 추가하는 방향을 논의했다.")
+    }
+
     @Test("live patch timeline endTimestamp가 없으면 현재 batch 마지막 발화로 보정한다")
     func livePatchBackfillsMissingTimelineEndTimestamp() throws {
         let patchOutput = """

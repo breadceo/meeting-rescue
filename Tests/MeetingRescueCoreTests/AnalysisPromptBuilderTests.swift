@@ -43,6 +43,24 @@ struct AnalysisPromptBuilderTests {
         #expect(prompt.contains("전체 AnalysisSnapshot을 쓰지 마세요"))
     }
 
+    @Test("빈 previous currentIssue가 있으면 patch prompt에서 currentIssue 생성을 요구한다")
+    func emptyPreviousCurrentIssueRequiresCurrentIssueInPatchPrompt() throws {
+        let request = AnalysisRequest(
+            meetingID: "meeting-1",
+            metadata: MeetingMetadata(room: "Room"),
+            rawTranscript: "[00:01] Alex: 임대인 온보딩 소개 페이지를 추가합니다.",
+            previousSnapshot: AnalysisSnapshot(currentIssue: CurrentIssue(summary: "")),
+            reason: "automatic-min-dialogue-lines",
+            lastAnalyzedTranscriptCharacterCount: 0
+        )
+
+        let prompt = try AnalysisPromptBuilder.buildPrompt(for: request)
+
+        #expect(request.outputMode == .livePatch)
+        #expect(prompt.contains("previousAnalysisSnapshot.currentIssue.summary가 비어 있으면"))
+        #expect(prompt.contains("currentIssue를 반드시 채우세요"))
+    }
+
     @Test("automatic retry also uses live patch output when previous snapshot exists")
     func automaticRetryUsesPatchPrompt() throws {
         let request = AnalysisRequest(
@@ -220,6 +238,6 @@ struct AnalysisPromptBuilderTests {
         let prompt = try AnalysisPromptBuilder.buildPrompt(for: request)
 
         #expect(prompt.contains("앞부분은 길이 제한으로 생략됨"))
-        #expect(prompt.count < longChunk.count + 2_700)
+        #expect(prompt.count < longChunk.count + 2_800)
     }
 }

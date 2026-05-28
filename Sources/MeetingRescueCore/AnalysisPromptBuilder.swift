@@ -59,6 +59,7 @@ public enum AnalysisPromptBuilder {
         아래 payload만 근거로 지정된 JSON schema의 JSON patch 객체 하나만 반환하세요.
         전체 AnalysisSnapshot을 쓰지 마세요. 이번 newTranscriptChunk 때문에 추가/수정할 항목만 patch로 반환하세요.
         currentIssue는 실제 변화가 있을 때만 채우고, 변화가 작으면 null로 두세요.
+        단, previousAnalysisSnapshot.currentIssue.summary가 비어 있으면 이번 chunk의 핵심 논점으로 currentIssue를 반드시 채우세요.
         topicTimelineUpserts/decisionCandidateUpserts/actionItemCandidateUpserts/risksOrNotesAppend는 보통 0-2개, 최대 3개로 제한하세요.
         기존 후보/노트/토픽을 반복하지 말고, confirmed/deleted 상태를 되돌리지 마세요.
         relatedTranscriptChunks는 생략된 현재 회의 맥락 연결용입니다. 관련성이 낮으면 무시하세요.

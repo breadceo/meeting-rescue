@@ -443,6 +443,9 @@ public struct AnalysisSnapshot: Codable, Equatable, Sendable {
         var copy = self
         if let currentIssue = patch.currentIssue {
             copy.currentIssue = currentIssue
+        } else if copy.currentIssue.summary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  let fallbackIssue = Self.currentIssueFallback(from: patch) {
+            copy.currentIssue = fallbackIssue
         }
         copy.topicTimeline = Self.upsertTimeline(copy.topicTimeline, with: patch.topicTimelineUpserts)
         copy.decisionCandidates = Self.upsertDecisions(copy.decisionCandidates, with: patch.decisionCandidateUpserts)
@@ -451,6 +454,24 @@ public struct AnalysisSnapshot: Codable, Equatable, Sendable {
         copy.generatedAt = Date()
         copy.provider = provider
         return copy
+    }
+
+    private static func currentIssueFallback(from patch: AnalysisSnapshotPatch) -> CurrentIssue? {
+        if let topic = patch.topicTimelineUpserts.last {
+            return CurrentIssue(summary: topic.summary)
+        }
+        if let decision = patch.decisionCandidateUpserts.last {
+            return CurrentIssue(summary: "결정 후보: \(decision.text)")
+        }
+        if let action = patch.actionItemCandidateUpserts.last {
+            let assigneePrefix = action.assignee.map { "\($0): " } ?? ""
+            return CurrentIssue(summary: "액션 후보: \(assigneePrefix)\(action.task)")
+        }
+        if let note = patch.risksOrNotesAppend.last?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !note.isEmpty {
+            return CurrentIssue(summary: note)
+        }
+        return nil
     }
 
     private static func upsertTimeline(
