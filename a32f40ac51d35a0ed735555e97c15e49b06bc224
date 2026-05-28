@@ -1,0 +1,19 @@
+Sources/MeetingRescueCore/AnalysisModels.swift
+  h_d82ccb34241a0d 446-448,459-476
+Sources/MeetingRescueCore/AnalysisPromptBuilder.swift
+  h_d82ccb34241a0d 62
+Tests/MeetingRescueCoreTests/AnalysisPromptBuilderTests.swift
+  h_d82ccb34241a0d 46-63,241
+Tests/MeetingRescueCoreTests/LLMProviderOutputTests.swift
+  h_d82ccb34241a0d 86-119
+---
+{
+  "schema_version": "zax-attestation/1.1.0",
+  "base_commit_sha": "a32f40ac51d35a0ed735555e97c15e49b06bc224",
+  "prompts": {},
+  "humans": {
+    "h_d82ccb34241a0d": {
+      "author": "ethan@zigbang.com"
+    }
+  }
+}
