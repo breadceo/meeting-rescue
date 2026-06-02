@@ -2861,18 +2861,24 @@ struct ReleaseNotesView: View {
     }
 
     private static func loadBundledReleaseNotes() -> String {
-        let urls = [
-            Bundle.module.url(forResource: "ReleaseNotes", withExtension: "md", subdirectory: "Resources"),
-            Bundle.module.url(forResource: "ReleaseNotes", withExtension: "md")
-        ]
-
-        for url in urls.compactMap({ $0 }) {
+        for url in bundledReleaseNotesCandidates() {
             if let text = try? String(contentsOf: url, encoding: .utf8), !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 return text
             }
         }
 
         return "# \(AppVersion.displayTitle)\n\n릴리즈 노트를 찾을 수 없습니다."
+    }
+
+    private static func bundledReleaseNotesCandidates() -> [URL] {
+        let bundledPath = "MeetingRescue_MeetingRescue.bundle/Resources/ReleaseNotes.md"
+        return [
+            Bundle.main.resourceURL?.appendingPathComponent(bundledPath),
+            Bundle.main.bundleURL.appendingPathComponent(bundledPath),
+            Bundle.main.executableURL?.deletingLastPathComponent().appendingPathComponent(bundledPath),
+            Bundle.main.resourceURL?.appendingPathComponent("ReleaseNotes.md"),
+            Bundle.main.bundleURL.appendingPathComponent("ReleaseNotes.md")
+        ].compactMap { $0 }
     }
 
     private static func latestReleaseNotesURL() -> URL? {
