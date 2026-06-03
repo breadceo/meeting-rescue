@@ -1,0 +1,43 @@
+Sources/MeetingRescue/AppViewModel.swift
+  h_d82ccb34241a0d 612-613,1274-1405,2525-2526,2959-2997,3087-3090
+Sources/MeetingRescue/ContentView.swift
+  h_d82ccb34241a0d 10,843,849-855,871-872,917-1063
+Sources/MeetingRescue/Resources/calendar-mcp-context-output.schema.json
+  h_d82ccb34241a0d 1-41
+Sources/MeetingRescueCore/AnalysisModels.swift
+  h_d82ccb34241a0d 1187,1203-1204,1220,1238,1257-1258,1479,1494-1495,1510
+Sources/MeetingRescueCore/AnalysisPromptBuilder.swift
+  h_d82ccb34241a0d 23,49,86,104,111-120,216-231
+Sources/MeetingRescueCore/CalendarContextModels.swift
+  h_d82ccb34241a0d 1-196
+Sources/MeetingRescueCore/CalendarMCPContextFetcher.swift
+  h_d82ccb34241a0d 1-165
+Sources/MeetingRescueCore/LLMProvider.swift
+  h_d82ccb34241a0d 1247
+Sources/MeetingRescueCore/SupplementalContextReader.swift
+  h_d82ccb34241a0d 1-23
+Tests/MeetingRescueCoreTests/AnalysisPromptBuilderTests.swift
+  h_d82ccb34241a0d 287-313
+Tests/MeetingRescueCoreTests/CalendarContextModelsTests.swift
+  h_d82ccb34241a0d 1-83
+Tests/MeetingRescueCoreTests/CalendarMCPContextFetcherTests.swift
+  h_d82ccb34241a0d 1-85
+Tests/MeetingRescueCoreTests/SchemaTests.swift
+  h_d82ccb34241a0d 10
+docs/superpowers/plans/2026-06-03-d2-google-calendar-context.md
+  h_d82ccb34241a0d 1-1450
+scripts/calendar_mcp_smoke.schema.json
+  h_d82ccb34241a0d 1-34
+scripts/verify_calendar_mcp_context.sh
+  h_d82ccb34241a0d 1-89
+---
+{
+  "schema_version": "zax-attestation/1.1.0",
+  "base_commit_sha": "41a5f0af66b8c9d5c60733fc226900b0a79057e4",
+  "prompts": {},
+  "humans": {
+    "h_d82ccb34241a0d": {
+      "author": "ethan@zigbang.com"
+    }
+  }
+}
