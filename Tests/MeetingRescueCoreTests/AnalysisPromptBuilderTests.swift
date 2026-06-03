@@ -284,4 +284,31 @@ struct AnalysisPromptBuilderTests {
         #expect(prompt.contains("앞부분은 길이 제한으로 생략됨"))
         #expect(prompt.count < longChunk.count + 3_400)
     }
+
+    @Test("prompt includes supplemental context with transcript priority warning")
+    func promptIncludesSupplementalContextPriority() throws {
+        let request = AnalysisRequest(
+            meetingID: "meeting-1",
+            metadata: MeetingMetadata(room: "Launch", dateTime: "2026-06-03 10:00", participants: ["Alex"]),
+            rawTranscript: "[00:01] Alex: transcript가 source of truth입니다.",
+            reason: "manual",
+            supplementalContextSources: [
+                SupplementalContextSource(
+                    id: "calendar-1",
+                    kind: .calendarMetadata,
+                    title: "Launch Review",
+                    sourceName: "Google Calendar",
+                    excerpt: "Calendar says launch review with Blair.",
+                    priority: .calendarMetadata,
+                    confidence: 0.86
+                )
+            ]
+        )
+
+        let prompt = try AnalysisPromptBuilder.buildPrompt(for: request)
+
+        #expect(prompt.contains(#""supplementalContext""#))
+        #expect(prompt.contains("Google Calendar"))
+        #expect(prompt.contains("transcript가 supplemental context와 충돌하면 transcript를 우선"))
+    }
 }
