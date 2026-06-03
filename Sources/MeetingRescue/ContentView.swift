@@ -863,6 +863,10 @@ struct ContentView: View {
     private func overview(_ snapshot: AnalysisSnapshot) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             currentIssue(snapshot.currentIssue)
+            meetingSummary(snapshot.meetingSummary, meetingType: snapshot.meetingType)
+            if !viewModel.analysisState.bookmarks.isEmpty {
+                bookmarks(viewModel.analysisState.bookmarks)
+            }
             metricsRow(snapshot)
             decisions(snapshot.decisionCandidates, compact: true)
             actionItems(snapshot.actionItemCandidates, compact: true)
@@ -876,7 +880,7 @@ struct ContentView: View {
     private func currentIssue(_ issue: CurrentIssue) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Label("현재 이슈", systemImage: "dot.radiowaves.left.and.right")
+                Label("현재 논점", systemImage: "dot.radiowaves.left.and.right")
                     .font(.headline)
                 Spacer()
                 Text(viewModel.analysisStatus.displayText)
@@ -906,6 +910,118 @@ struct ContentView: View {
             }
         }
         .smoothCard(tint: Color.smoothMint)
+    }
+
+    @ViewBuilder
+    private func meetingSummary(_ summary: MeetingSummary, meetingType: MeetingTypePreset) -> some View {
+        if !summary.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Label("회의 요약", systemImage: "text.badge.checkmark")
+                        .font(.headline)
+                    Spacer()
+                    Text(meetingType.displayName)
+                        .font(.caption.weight(.semibold))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 5)
+                        .background(Color.smoothAccent.opacity(0.12), in: Capsule())
+                        .foregroundStyle(Color.smoothAccent)
+                }
+
+                if !summary.overview.isEmpty {
+                    Text(summary.overview)
+                        .font(.callout)
+                        .foregroundStyle(Color.smoothInk)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                if !summary.keyPoints.isEmpty {
+                    VStack(alignment: .leading, spacing: 6) {
+                        ForEach(summary.keyPoints.prefix(4)) { item in
+                            Label {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(item.text)
+                                    if let evidence = item.evidence.first {
+                                        Text(summaryEvidenceText(evidence))
+                                            .font(.caption)
+                                            .foregroundStyle(Color.smoothMuted)
+                                    }
+                                }
+                            } icon: {
+                                Image(systemName: "checkmark.circle")
+                            }
+                            .font(.callout)
+                        }
+                    }
+                }
+
+                if !summary.openQuestions.isEmpty {
+                    VStack(alignment: .leading, spacing: 6) {
+                        ForEach(summary.openQuestions.prefix(3)) { item in
+                            Label {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(item.text)
+                                    if let evidence = item.evidence.first {
+                                        Text(summaryEvidenceText(evidence))
+                                            .font(.caption)
+                                            .foregroundStyle(Color.smoothMuted)
+                                    }
+                                }
+                            } icon: {
+                                Image(systemName: "questionmark.circle")
+                            }
+                            .font(.callout)
+                            .foregroundStyle(Color.smoothMuted)
+                        }
+                    }
+                }
+            }
+            .smoothCard(tint: Color.smoothAccent)
+        }
+    }
+
+    private func bookmarks(_ bookmarks: [MeetingBookmark]) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Label("Bookmarks", systemImage: "bookmark")
+                    .font(.headline)
+                Spacer()
+                Text("\(bookmarks.count)")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.smoothMuted)
+            }
+
+            ForEach(bookmarks.suffix(6)) { bookmark in
+                HStack(alignment: .top, spacing: 8) {
+                    Text(MeetingTimestampFormatter.display(bookmark.timestamp, meetingDateTime: viewModel.metadata.dateTime))
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(Color.smoothAccent)
+                        .frame(width: 58, alignment: .leading)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(bookmark.label ?? "Bookmark")
+                            .font(.callout.weight(.semibold))
+                        if !bookmark.excerpt.isEmpty {
+                            Text(bookmark.excerpt)
+                                .font(.caption)
+                                .foregroundStyle(Color.smoothMuted)
+                                .lineLimit(2)
+                        }
+                    }
+
+                    Spacer(minLength: 0)
+
+                    Button {
+                        viewModel.deleteLiveBookmark(id: bookmark.id)
+                    } label: {
+                        Image(systemName: "xmark")
+                    }
+                    .buttonStyle(.borderless)
+                    .help("북마크 삭제")
+                }
+            }
+        }
+        .smoothCard(tint: Color.smoothAccent)
     }
 
     private func metricsRow(_ snapshot: AnalysisSnapshot) -> some View {
@@ -1445,6 +1561,14 @@ struct ContentView: View {
         ].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
     }
 
+    private func summaryEvidenceText(_ evidence: EvidenceReference) -> String {
+        let timestamp = MeetingTimestampFormatter.display(evidence.timestamp, meetingDateTime: viewModel.metadata.dateTime)
+        let speaker = evidence.speaker.map { " · \($0)" } ?? ""
+        let excerpt = evidence.excerpt.trimmingCharacters(in: .whitespacesAndNewlines)
+        let excerptText = excerpt.isEmpty ? "" : " · \(excerpt)"
+        return "\(timestamp)\(speaker)\(excerptText)"
+    }
+
     private func timeRange(_ item: TopicTimelineItem) -> String {
         MeetingTimestampFormatter.displayRange(
             item.startTimestamp,
@@ -1484,6 +1608,7 @@ struct ContentView: View {
     private var fullHeaderActions: some View {
         HStack(spacing: 8) {
             analysisHeaderButton
+            bookmarkHeaderButton
             issueDraftMenu
             markdownHeaderButton
             testRunHeaderActions
@@ -1518,6 +1643,47 @@ struct ContentView: View {
             viewModel.triggerManualAnalysis()
         }
         .disabled(viewModel.activeTranscriptURL == nil || viewModel.rawTranscript.isEmpty || viewModel.isAnalysisRunning)
+    }
+
+    private var bookmarkHeaderButton: some View {
+        Menu {
+            bookmarkMenuItems
+        } label: {
+            Label("Bookmark", systemImage: "bookmark")
+                .font(.callout.weight(.semibold))
+                .lineLimit(1)
+        }
+        .buttonStyle(SmoothActionButtonStyle())
+        .menuStyle(.button)
+        .controlSize(.regular)
+        .disabled(!viewModel.canAddLiveBookmark)
+    }
+
+    @ViewBuilder
+    private var bookmarkMenuItems: some View {
+        Button {
+            viewModel.addLiveBookmark()
+        } label: {
+            Label("일반", systemImage: "bookmark")
+        }
+
+        Button {
+            viewModel.addLiveBookmark(label: "결정")
+        } label: {
+            Label("결정", systemImage: "checkmark.seal")
+        }
+
+        Button {
+            viewModel.addLiveBookmark(label: "액션")
+        } label: {
+            Label("액션", systemImage: "person.crop.circle.badge.checkmark")
+        }
+
+        Button {
+            viewModel.addLiveBookmark(label: "열린 질문")
+        } label: {
+            Label("열린 질문", systemImage: "questionmark.circle")
+        }
     }
 
     private var markdownHeaderButton: some View {
@@ -1590,6 +1756,11 @@ struct ContentView: View {
                     Label(kind.displayName, systemImage: kind.systemImage)
                 }
             }
+
+            Divider()
+
+            bookmarkMenuItems
+                .disabled(!viewModel.canAddLiveBookmark)
 
             Divider()
 
@@ -2335,6 +2506,16 @@ struct SettingsView: View {
                 .frame(width: 180)
             }
 
+            settingsRow("Meeting type", detail: viewModel.settings.meetingTypePreset.detail) {
+                Picker("meeting type", selection: meetingTypePresetBinding) {
+                    ForEach(MeetingTypePreset.allCases) { preset in
+                        Text(preset.displayName).tag(preset)
+                    }
+                }
+                .labelsHidden()
+                .frame(width: 180)
+            }
+
             settingsRow("Provider timeout", detail: "수동 분석과 final analysis는 최소 180초 timeout을 사용합니다.") {
                 Stepper("\(viewModel.settings.providerTimeoutSeconds)초", value: timeoutBinding, in: 10...300)
                     .frame(width: 160)
@@ -2520,6 +2701,14 @@ struct SettingsView: View {
             viewModel.settings.modelPreset
         } set: { value in
             viewModel.updateModelPreset(value)
+        }
+    }
+
+    private var meetingTypePresetBinding: Binding<MeetingTypePreset> {
+        Binding {
+            viewModel.settings.meetingTypePreset
+        } set: { value in
+            viewModel.updateMeetingTypePreset(value)
         }
     }
 

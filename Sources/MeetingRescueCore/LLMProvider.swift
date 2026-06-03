@@ -1142,15 +1142,24 @@ func decodeProviderOutput(
     request: AnalysisRequest,
     provider: LLMProviderKind
 ) throws -> AnalysisSnapshot {
+    func applyingRequestedMeetingType(_ snapshot: AnalysisSnapshot) -> AnalysisSnapshot {
+        guard request.meetingTypePreset != .automatic else {
+            return snapshot
+        }
+        var snapshot = snapshot
+        snapshot.meetingType = request.meetingTypePreset
+        return snapshot
+    }
+
     switch request.outputMode {
     case .fullSnapshot:
-        return try decodeSnapshot(from: output, provider: provider)
+        return applyingRequestedMeetingType(try decodeSnapshot(from: output, provider: provider))
     case .livePatch:
         guard let previousSnapshot = request.previousSnapshot else {
             throw LLMProviderError.invalidOutput
         }
         let patch = try decodePatch(from: output, request: request)
-        return previousSnapshot.applyingPatch(patch, provider: provider)
+        return applyingRequestedMeetingType(previousSnapshot.applyingPatch(patch, provider: provider))
     }
 }
 

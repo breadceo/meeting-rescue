@@ -4,6 +4,135 @@ import Testing
 
 @Suite("LLM provider output")
 struct LLMProviderOutputTests {
+    @Test("full snapshot provider output은 D0 meeting summary contract를 decode한다")
+    func fullSnapshotDecodesD0Contract() throws {
+        let output = """
+        {
+          "meetingType": "decision",
+          "meetingSummary": {
+            "overview": "배포 방식을 결정하는 회의다.",
+            "keyPoints": [
+              {
+                "id": "summary-release",
+                "text": "금요일 배포로 수렴했다.",
+                "evidence": [
+                  {
+                    "timestamp": "00:10",
+                    "speaker": "Alex",
+                    "excerpt": "금요일 배포로 갑시다."
+                  }
+                ]
+              }
+            ],
+            "openQuestions": []
+          },
+          "currentIssue": {
+            "summary": "배포 owner 확인이 남았다.",
+            "openQuestions": ["owner는 누구인가?"]
+          },
+          "topicTimeline": [],
+          "decisionCandidates": [],
+          "actionItemCandidates": [],
+          "risksOrNotes": []
+        }
+        """
+        let request = AnalysisRequest(
+            meetingID: "meeting-1",
+            metadata: MeetingMetadata(room: "Room"),
+            rawTranscript: "[00:10] Alex: 금요일 배포로 갑시다.",
+            reason: "final"
+        )
+
+        let snapshot = try decodeProviderOutput(from: output, request: request, provider: .codexExec)
+
+        #expect(snapshot.meetingType == .decision)
+        #expect(snapshot.meetingSummary.keyPoints.first?.evidence.first?.speaker == "Alex")
+        #expect(snapshot.provider == .codexExec)
+    }
+
+    @Test("live patch provider output은 nullable D0 fields를 merge한다")
+    func livePatchMergesNullableD0Fields() throws {
+        let output = """
+        {
+          "meetingType": "planning",
+          "meetingSummary": {
+            "overview": "계획 범위가 새로 정리됐다.",
+            "keyPoints": [],
+            "openQuestions": [
+              {
+                "id": "question-owner",
+                "text": "디자인 owner를 확정해야 한다.",
+                "evidence": [
+                  {
+                    "timestamp": "01:40",
+                    "speaker": "Blair",
+                    "excerpt": "디자인 owner는 아직 비어 있습니다."
+                  }
+                ]
+              }
+            ]
+          },
+          "currentIssue": null,
+          "topicTimelineUpserts": [],
+          "closeTopicIDs": [],
+          "decisionCandidateUpserts": [],
+          "actionItemCandidateUpserts": [],
+          "risksOrNotesAppend": []
+        }
+        """
+        let request = AnalysisRequest(
+            meetingID: "meeting-1",
+            metadata: MeetingMetadata(room: "Room"),
+            rawTranscript: "[01:40] Blair: 디자인 owner는 아직 비어 있습니다.",
+            previousSnapshot: AnalysisSnapshot(
+                meetingType: .automatic,
+                meetingSummary: MeetingSummary(overview: "이전 요약"),
+                currentIssue: CurrentIssue(summary: "기존 요약")
+            ),
+            reason: "automatic-min-dialogue-lines",
+            lastAnalyzedTranscriptCharacterCount: 1
+        )
+
+        let snapshot = try decodeProviderOutput(from: output, request: request, provider: .claudeCode)
+
+        #expect(snapshot.meetingType == .planning)
+        #expect(snapshot.meetingSummary.overview == "계획 범위가 새로 정리됐다.")
+        #expect(snapshot.meetingSummary.openQuestions.first?.evidence.first?.timestamp == "01:40")
+    }
+
+    @Test("manual meeting type preset overrides provider meeting type")
+    func manualMeetingTypePresetOverridesProviderOutput() throws {
+        let output = """
+        {
+          "meetingType": "status",
+          "meetingSummary": {
+            "overview": "상태 공유처럼 응답했지만 사용자는 incident로 지정했다.",
+            "keyPoints": [],
+            "openQuestions": []
+          },
+          "currentIssue": {
+            "summary": "장애 원인 확인",
+            "openQuestions": []
+          },
+          "topicTimeline": [],
+          "decisionCandidates": [],
+          "actionItemCandidates": [],
+          "risksOrNotes": []
+        }
+        """
+        let request = AnalysisRequest(
+            meetingID: "meeting-1",
+            metadata: MeetingMetadata(room: "Room"),
+            rawTranscript: "[00:10] Alex: 장애 원인을 봅니다.",
+            meetingTypePreset: .incident,
+            reason: "final"
+        )
+
+        let snapshot = try decodeProviderOutput(from: output, request: request, provider: .codexExec)
+
+        #expect(snapshot.meetingType == .incident)
+    }
+
     @Test("generatedAt/provider가 없는 schema output도 기본값으로 decode한다")
     func decodesOutputWithoutRuntimeFields() throws {
         let json = """
@@ -58,6 +187,8 @@ struct LLMProviderOutputTests {
     func livePatchMergesPatchOutput() throws {
         let patchOutput = """
         {
+          "meetingType": null,
+          "meetingSummary": null,
           "currentIssue": {
             "summary": "새 이슈",
             "openQuestions": []
@@ -87,6 +218,8 @@ struct LLMProviderOutputTests {
     func livePatchBackfillsEmptyCurrentIssueFromPatchEvidence() throws {
         let patchOutput = """
         {
+          "meetingType": null,
+          "meetingSummary": null,
           "currentIssue": null,
           "topicTimelineUpserts": [
             {
@@ -121,6 +254,8 @@ struct LLMProviderOutputTests {
     func livePatchBackfillsMissingTimelineEndTimestamp() throws {
         let patchOutput = """
         {
+          "meetingType": null,
+          "meetingSummary": null,
           "currentIssue": null,
           "topicTimelineUpserts": [
             {
@@ -161,6 +296,8 @@ struct LLMProviderOutputTests {
     func livePatchBackfillsEmptyTimelineEndTimestamp() throws {
         let patchOutput = """
         {
+          "meetingType": null,
+          "meetingSummary": null,
           "currentIssue": null,
           "topicTimelineUpserts": [
             {

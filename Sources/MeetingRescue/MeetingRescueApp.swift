@@ -12,6 +12,14 @@ struct MeetingRescueApp: App {
                 .environmentObject(sparkleUpdater)
         }
         .commands {
+            CommandMenu("Meeting") {
+                Button("Bookmark Current Moment") {
+                    viewModel.addLiveBookmark()
+                }
+                .keyboardShortcut("b", modifiers: [.command])
+                .disabled(!viewModel.canAddLiveBookmark)
+            }
+
             CommandGroup(after: .appInfo) {
                 Button("업데이트 확인...") {
                     sparkleUpdater.checkForUpdates()

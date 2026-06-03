@@ -2,8 +2,83 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "additionalProperties": false,
-  "required": ["currentIssue", "topicTimelineUpserts", "closeTopicIDs", "decisionCandidateUpserts", "actionItemCandidateUpserts", "risksOrNotesAppend"],
+  "required": ["meetingType", "meetingSummary", "currentIssue", "topicTimelineUpserts", "closeTopicIDs", "decisionCandidateUpserts", "actionItemCandidateUpserts", "risksOrNotesAppend"],
   "properties": {
+    "meetingType": {
+      "anyOf": [
+        { "enum": ["decision", "planning", "incident", "oneOnOne", "brainstorm", "status"] },
+        { "type": "null" }
+      ]
+    },
+    "meetingSummary": {
+      "anyOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["overview", "keyPoints", "openQuestions"],
+          "properties": {
+            "overview": { "type": "string", "maxLength": 500 },
+            "keyPoints": {
+              "type": "array",
+              "maxItems": 4,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["id", "text", "evidence"],
+                "properties": {
+                  "id": { "type": "string" },
+                  "text": { "type": "string", "maxLength": 260 },
+                  "evidence": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 3,
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": ["timestamp", "speaker", "excerpt"],
+                      "properties": {
+                        "timestamp": { "type": "string" },
+                        "speaker": { "type": ["string", "null"] },
+                        "excerpt": { "type": "string", "maxLength": 220 }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "openQuestions": {
+              "type": "array",
+              "maxItems": 4,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["id", "text", "evidence"],
+                "properties": {
+                  "id": { "type": "string" },
+                  "text": { "type": "string", "maxLength": 220 },
+                  "evidence": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 3,
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": ["timestamp", "speaker", "excerpt"],
+                      "properties": {
+                        "timestamp": { "type": "string" },
+                        "speaker": { "type": ["string", "null"] },
+                        "excerpt": { "type": "string", "maxLength": 220 }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        { "type": "null" }
+      ]
+    },
     "currentIssue": {
       "anyOf": [
         {

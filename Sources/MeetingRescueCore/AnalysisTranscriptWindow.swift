@@ -49,7 +49,6 @@ public struct AnalysisTranscriptWindow: Equatable, Sendable {
     public static func shouldLimitTranscript(for reason: String) -> Bool {
         reason.hasPrefix("automatic")
             || reason.hasPrefix("manual")
-            || reason.hasPrefix("final")
     }
 
     private static func boundedTargetCount(

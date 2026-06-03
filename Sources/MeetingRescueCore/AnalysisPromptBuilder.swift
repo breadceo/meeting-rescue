@@ -17,6 +17,8 @@ public enum AnalysisPromptBuilder {
         let transcriptContext = transcriptContext(for: request)
         let payload = PromptPayload(
             meetingMetadata: promptMetadata(from: request.metadata, transcriptContext: transcriptContext),
+            meetingTypePreset: request.meetingTypePreset,
+            bookmarks: compactBookmarks(request.bookmarks),
             transcriptContext: transcriptContext,
             contextPlan: request.contextPlan,
             previousAnalysisSnapshot: compactSnapshot(from: request.previousSnapshot),
@@ -41,7 +43,23 @@ public enum AnalysisPromptBuilder {
         아래 payload만 근거로 지정된 JSON schema의 JSON 객체 하나만 반환하세요.
         fullTranscript가 있으면 첫 분석입니다. 제공된 범위로 작고 읽기 쉬운 snapshot을 만드세요.
         newTranscriptChunk가 있으면 primary source로 쓰고 recentTranscriptContext/relatedTranscriptChunks는 연결 맥락으로만 쓰세요.
+        final/full-refresh에서는 회의 전체 wrap-up을 다시 구성하세요.
         과거 맥락을 새 결정처럼 반복하지 말고, 불확실하면 candidate/note로 남기세요.
+
+        meetingTypePreset이 automatic이면 transcript를 보고 meetingType을 decision/planning/incident/oneOnOne/brainstorm/status 중 하나로 추정하세요.
+        meetingTypePreset이 automatic이 아니면 그 값을 meetingType으로 사용하세요.
+        meetingType이 decision이면 선택지, 판단 기준, 결정 근거, 남은 승인자를 우선 정리하세요.
+        meetingType이 planning이면 목표, 범위, 일정, owner, dependency를 우선 정리하세요.
+        meetingType이 incident이면 증상, 영향, 원인 가설, mitigation, follow-up을 우선 정리하세요.
+        meetingType이 oneOnOne이면 관심사, 피드백, 약속, 다음 대화를 우선 정리하세요.
+        meetingType이 brainstorm이면 아이디어, 가설, 근거, 수렴 지점을 우선 정리하세요.
+        meetingType이 status이면 진행 상황, block, 다음 action, escalation을 우선 정리하세요.
+
+        meetingSummary는 회의 전체 wrap-up입니다. overview는 2-4문장으로 작성하고, keyPoints/openQuestions는 각 항목마다 evidence를 1개 이상 붙이세요.
+        evidence.timestamp는 원문 회의 경과 시간만 사용하세요. 예: "04:13" 또는 "[04:13]". ISO 날짜를 만들지 마세요.
+        evidence.excerpt는 payload 원문에서 근거가 되는 짧은 발화 일부를 그대로 옮기세요.
+        bookmarks가 있으면 bookmark 주변 발화를 summary evidence로 우선 고려하세요.
+        currentIssue는 현재 논점 또는 Live Focus입니다. meetingSummary와 중복되는 전체 요약을 쓰지 마세요.
         timestamp는 원문 회의 경과 시간만 사용하세요. 예: "04:13" 또는 "[04:13]". ISO 날짜를 만들지 마세요.
         topicTimeline은 시간순이며 agenda/논점/대상/실행 방향이 바뀌면 나누세요. 전체 6개 이하를 권장합니다.
         currentIssue.summary는 2-4문장, decision/action 후보는 각각 6개 이하로 간결하게 유지하세요.
@@ -58,14 +76,16 @@ public enum AnalysisPromptBuilder {
 
         아래 payload만 근거로 지정된 JSON schema의 JSON patch 객체 하나만 반환하세요.
         전체 AnalysisSnapshot을 쓰지 마세요. 이번 newTranscriptChunk 때문에 추가/수정할 항목만 patch로 반환하세요.
-        currentIssue는 실제 변화가 있을 때만 채우고, 변화가 작으면 null로 두세요.
+        meetingType은 automatic 추정이 새로 확실해졌거나 수동 preset과 맞춰야 할 때만 채우고, 변화가 없으면 null로 두세요.
+        meetingSummary는 이번 chunk 또는 bookmark 때문에 회의 전체 결론, 핵심 포인트, 열린 질문이 바뀌었을 때만 채우고, 변화가 없으면 null로 두세요.
+        meetingSummary를 채울 때는 evidence.timestamp/speaker/excerpt를 함께 채우세요.
+        currentIssue는 현재 논점 또는 Live Focus입니다. 실제 변화가 있을 때만 채우고, 변화가 작으면 null로 두세요.
         단, previousAnalysisSnapshot.currentIssue.summary가 비어 있으면 이번 chunk의 핵심 논점으로 currentIssue를 반드시 채우세요.
         topicTimelineUpserts/decisionCandidateUpserts/actionItemCandidateUpserts/risksOrNotesAppend는 보통 0-2개, 최대 3개로 제한하세요.
         기존 후보/노트/토픽을 반복하지 말고, confirmed/deleted 상태를 되돌리지 마세요.
         relatedTranscriptChunks는 생략된 현재 회의 맥락 연결용입니다. 관련성이 낮으면 무시하세요.
         timestamp는 원문 회의 경과 시간만 사용하세요. 예: "04:13" 또는 "[04:13]". ISO 날짜를 만들지 마세요.
         topicTimelineUpserts의 startTimestamp와 endTimestamp는 둘 다 채우세요. 한 발화짜리 topic이면 같은 timestamp를 넣으세요.
-        final catch-up에서도 전체 회의 재요약 없이 이번 chunk의 추가 흐름/결정/action/note만 반영하세요.
         optional 값은 null 또는 빈 배열로 채우세요.
 
         Payload:
@@ -75,6 +95,8 @@ public enum AnalysisPromptBuilder {
 
     private struct PromptPayload: Encodable {
         var meetingMetadata: MeetingMetadata
+        var meetingTypePreset: MeetingTypePreset
+        var bookmarks: [MeetingBookmark]
         var transcriptContext: TranscriptContext
         var contextPlan: AnalysisContextPlan?
         var previousAnalysisSnapshot: AnalysisSnapshot?
@@ -181,12 +203,24 @@ public enum AnalysisPromptBuilder {
         guard var snapshot else {
             return nil
         }
+        snapshot.meetingSummary.keyPoints = Array(snapshot.meetingSummary.keyPoints.prefix(4))
+        snapshot.meetingSummary.openQuestions = Array(snapshot.meetingSummary.openQuestions.prefix(4))
+        for index in snapshot.meetingSummary.keyPoints.indices {
+            snapshot.meetingSummary.keyPoints[index].evidence = Array(snapshot.meetingSummary.keyPoints[index].evidence.prefix(2))
+        }
+        for index in snapshot.meetingSummary.openQuestions.indices {
+            snapshot.meetingSummary.openQuestions[index].evidence = Array(snapshot.meetingSummary.openQuestions[index].evidence.prefix(2))
+        }
         snapshot.currentIssue.openQuestions = Array(snapshot.currentIssue.openQuestions.prefix(5))
         snapshot.topicTimeline = Array(snapshot.topicTimeline.suffix(compactTimelineLimit))
         snapshot.decisionCandidates = Array(snapshot.decisionCandidates.suffix(compactCandidateLimit))
         snapshot.actionItemCandidates = Array(snapshot.actionItemCandidates.suffix(compactCandidateLimit))
         snapshot.risksOrNotes = Array(snapshot.risksOrNotes.suffix(compactNotesLimit))
         return snapshot
+    }
+
+    private static func compactBookmarks(_ bookmarks: [MeetingBookmark]) -> [MeetingBookmark] {
+        Array(bookmarks.suffix(12))
     }
 
     private static func promptMetadata(

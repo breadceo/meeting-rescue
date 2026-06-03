@@ -1121,6 +1121,7 @@ final class AppViewModel: ObservableObject {
             codexExecutionMode: settings.codexExecutionMode,
             codexAppServerDiagnosticsEnabled: settings.codexAppServerDiagnosticsEnabled,
             modelPreset: settings.modelPreset,
+            meetingTypePreset: settings.meetingTypePreset,
             automaticAnalysisEnabled: settings.automaticAnalysisEnabled,
             hasCompletedOnboarding: settings.hasCompletedOnboarding,
             analysisTriggerPreset: settings.analysisTriggerPreset,
@@ -1158,6 +1159,11 @@ final class AppViewModel: ObservableObject {
 
     func updateModelPreset(_ modelPreset: LLMModelPreset) {
         settings.modelPreset = modelPreset
+        saveSettings()
+    }
+
+    func updateMeetingTypePreset(_ preset: MeetingTypePreset) {
+        settings.meetingTypePreset = preset
         saveSettings()
     }
 
@@ -1244,6 +1250,38 @@ final class AppViewModel: ObservableObject {
 
     func triggerManualAnalysis() {
         triggerAnalysis(reason: "manual")
+    }
+
+    var canAddLiveBookmark: Bool {
+        activeTranscriptURL != nil && !rawTranscriptPreviewLines.isEmpty
+    }
+
+    func addLiveBookmark(label: String? = nil) {
+        guard let activeTranscriptURL, canAddLiveBookmark else {
+            statusMessage = "북마크할 transcript가 없습니다."
+            return
+        }
+
+        let seconds = latestTranscriptElapsedSeconds()
+        let bookmark = MeetingBookmark(
+            timestamp: elapsedTimestamp(seconds),
+            label: label,
+            excerpt: latestTranscriptExcerpt()
+        )
+        analysisState.addBookmark(bookmark)
+        analysisState.updatedAt = Date()
+        try? stateStore.saveAnalysisState(analysisState, for: activeTranscriptURL)
+        statusMessage = "북마크 저장: \(bookmark.timestamp)"
+    }
+
+    func deleteLiveBookmark(id: String) {
+        guard let activeTranscriptURL else {
+            return
+        }
+        analysisState.deleteBookmark(id: id)
+        analysisState.updatedAt = Date()
+        try? stateStore.saveAnalysisState(analysisState, for: activeTranscriptURL)
+        statusMessage = "북마크를 삭제했습니다."
     }
 
     func openGitHubIssueDraft(kind: GitHubIssueDraftKind) {
@@ -1554,6 +1592,8 @@ final class AppViewModel: ObservableObject {
             deletedCandidateIDs: analysisState.deletedCandidateIDs,
             providerKind: settings.selectedProvider,
             modelPreset: settings.modelPreset,
+            meetingTypePreset: settings.meetingTypePreset,
+            bookmarks: analysisState.bookmarks,
             lastAnalyzedTranscriptCharacterCount: analysisState.analyzedTranscriptCharacterCount
         )
         let fallbackSnapshot = LocalAnalysisFallback.snapshot(for: request, message: message)
@@ -2273,6 +2313,8 @@ final class AppViewModel: ObservableObject {
             deletedCandidateIDs: analysisState.deletedCandidateIDs,
             providerKind: settings.selectedProvider,
             modelPreset: settings.modelPreset,
+            meetingTypePreset: settings.meetingTypePreset,
+            bookmarks: analysisState.bookmarks,
             reason: reason,
             lastAnalyzedTranscriptCharacterCount: transcriptWindow.lastAnalyzedTranscriptCharacterCount
         )
@@ -2360,6 +2402,24 @@ final class AppViewModel: ObservableObject {
             .reversed()
             .compactMap { TranscriptTimestampLocator.elapsedSeconds(in: $0) }
             .first ?? 0
+    }
+
+    private func elapsedTimestamp(_ seconds: Int) -> String {
+        let total = max(0, seconds)
+        let hours = total / 3600
+        let minutes = (total % 3600) / 60
+        let seconds = total % 60
+        if hours > 0 {
+            return String(format: "[%02d:%02d:%02d]", hours, minutes, seconds)
+        }
+        return String(format: "[%02d:%02d]", minutes, seconds)
+    }
+
+    private func latestTranscriptExcerpt() -> String {
+        rawTranscriptPreviewLines
+            .reversed()
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .first { !$0.isEmpty } ?? ""
     }
 
     private func providerPreviousSnapshot() -> AnalysisSnapshot? {
@@ -2604,7 +2664,7 @@ final class AppViewModel: ObservableObject {
         guard let window, window.isChunked else {
             return false
         }
-        return reason.hasPrefix("manual") || reason.hasPrefix("final")
+        return reason.hasPrefix("manual")
     }
 
     private func scheduleChunkContinuation(
@@ -2632,9 +2692,6 @@ final class AppViewModel: ObservableObject {
     }
 
     private func nextChunkReason(after reason: String) -> String {
-        if reason.hasPrefix("final") {
-            return "final-continue"
-        }
         return "manual-continue"
     }
 

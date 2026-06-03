@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import MeetingRescueCore
 
@@ -81,8 +82,8 @@ struct AnalysisPromptBuilderTests {
         #expect(!prompt.contains("\"fullTranscript\""))
     }
 
-    @Test("final analysis with previous snapshot also asks for patch output")
-    func finalAnalysisUsesPatchPromptWhenSnapshotExists() throws {
+    @Test("final analysis with previous snapshot asks for full wrap-up output")
+    func finalAnalysisUsesFullWrapUpPromptWhenSnapshotExists() throws {
         let request = AnalysisRequest(
             meetingID: "meeting-1",
             metadata: MeetingMetadata(room: "Room"),
@@ -94,10 +95,11 @@ struct AnalysisPromptBuilderTests {
 
         let prompt = try AnalysisPromptBuilder.buildPrompt(for: request)
 
-        #expect(request.outputMode == .livePatch)
-        #expect(prompt.contains("final catch-up"))
-        #expect(prompt.contains("전체 AnalysisSnapshot을 쓰지 마세요"))
+        #expect(request.outputMode == .fullSnapshot)
+        #expect(prompt.contains("meetingSummary"))
+        #expect(prompt.contains("회의 전체 wrap-up"))
         #expect(prompt.contains("후반부 결정 후보"))
+        #expect(!prompt.contains("전체 AnalysisSnapshot을 쓰지 마세요"))
     }
 
     @Test("previous snapshot은 최근 topic과 후보 중심으로 compact 한다")
@@ -139,6 +141,48 @@ struct AnalysisPromptBuilderTests {
         #expect(prompt.contains("전체 6개 이하"))
         #expect(prompt.contains("currentIssue.summary는 2-4문장"))
         #expect(prompt.contains("decision/action 후보는 각각 6개 이하"))
+    }
+
+    @Test("prompt payload includes meeting type preset and bookmarks")
+    func promptIncludesMeetingTypePresetAndBookmarks() throws {
+        let request = AnalysisRequest(
+            meetingID: "meeting-1",
+            metadata: MeetingMetadata(room: "Room"),
+            rawTranscript: "[00:10] Alex: 금요일 배포 기준으로 보겠습니다.",
+            meetingTypePreset: .decision,
+            bookmarks: [
+                MeetingBookmark(
+                    id: "bookmark-1",
+                    timestamp: "[00:10]",
+                    label: "결정 기준",
+                    createdAt: Date(timeIntervalSince1970: 10),
+                    excerpt: "금요일 배포 기준으로 보겠습니다."
+                )
+            ]
+        )
+
+        let prompt = try AnalysisPromptBuilder.buildPrompt(for: request)
+
+        #expect(prompt.contains(#""meetingTypePreset":"decision""#))
+        #expect(prompt.contains(#""bookmarks""#))
+        #expect(prompt.contains("결정 기준"))
+        #expect(prompt.contains("bookmark 주변 발화를 summary evidence로 우선 고려하세요"))
+    }
+
+    @Test("full prompt explains current issue as live focus and summary as whole-meeting wrap-up")
+    func fullPromptSeparatesLiveFocusAndWrapUp() throws {
+        let request = AnalysisRequest(
+            meetingID: "meeting-1",
+            metadata: MeetingMetadata(room: "Room"),
+            rawTranscript: "[00:10] Alex: 사고 원인을 봅니다.",
+            meetingTypePreset: .incident
+        )
+
+        let prompt = try AnalysisPromptBuilder.buildPrompt(for: request)
+
+        #expect(prompt.contains("currentIssue는 현재 논점 또는 Live Focus입니다"))
+        #expect(prompt.contains("meetingSummary는 회의 전체 wrap-up입니다"))
+        #expect(prompt.contains("meetingType이 incident이면 증상, 영향, 원인 가설, mitigation"))
     }
 
     @Test("prompt metadata participants는 실제 발화자 중심으로 줄인다")
@@ -238,6 +282,6 @@ struct AnalysisPromptBuilderTests {
         let prompt = try AnalysisPromptBuilder.buildPrompt(for: request)
 
         #expect(prompt.contains("앞부분은 길이 제한으로 생략됨"))
-        #expect(prompt.count < longChunk.count + 2_800)
+        #expect(prompt.count < longChunk.count + 3_400)
     }
 }

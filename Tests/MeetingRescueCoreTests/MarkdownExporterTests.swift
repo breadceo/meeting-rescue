@@ -12,6 +12,36 @@ struct MarkdownExporterTests {
         )
         var state = MeetingAnalysisState(
             latestSnapshot: AnalysisSnapshot(
+                meetingType: .decision,
+                meetingSummary: MeetingSummary(
+                    overview: "배포 방식과 follow-up을 정리한 회의다.",
+                    keyPoints: [
+                        MeetingSummaryItem(
+                            id: "summary-release",
+                            text: "금요일 배포로 수렴했다.",
+                            evidence: [
+                                EvidenceReference(
+                                    timestamp: "00:10",
+                                    speaker: "A",
+                                    excerpt: "금요일 배포로 진행합니다."
+                                )
+                            ]
+                        )
+                    ],
+                    openQuestions: [
+                        MeetingSummaryItem(
+                            id: "question-owner",
+                            text: "롤백 owner를 확정해야 한다.",
+                            evidence: [
+                                EvidenceReference(
+                                    timestamp: "00:20",
+                                    speaker: "B",
+                                    excerpt: "롤백 owner는 아직 없습니다."
+                                )
+                            ]
+                        )
+                    ]
+                ),
                 currentIssue: CurrentIssue(summary: "요약"),
                 topicTimeline: [
                     TopicTimelineItem(
@@ -50,7 +80,14 @@ struct MarkdownExporterTests {
             state: state
         )
 
-        #expect(markdown.contains("## 현재 이슈"))
+        #expect(markdown.contains("## 회의 요약"))
+        #expect(markdown.contains("- 유형: Decision"))
+        #expect(markdown.contains("배포 방식과 follow-up을 정리한 회의다."))
+        #expect(markdown.contains("- 금요일 배포로 수렴했다. ([00:10] · A · 금요일 배포로 진행합니다.)"))
+        #expect(markdown.contains("### 열린 질문"))
+        #expect(markdown.contains("- 롤백 owner를 확정해야 한다. ([00:20] · B · 롤백 owner는 아직 없습니다.)"))
+        #expect(markdown.contains("## 현재 논점"))
+        #expect(!markdown.contains("## 현재 이슈"))
         #expect(markdown.contains("[04:13]"))
         #expect(markdown.contains("수정된 결정"))
         #expect(markdown.contains("@B 수정된 액션 / deadline: 월요일"))

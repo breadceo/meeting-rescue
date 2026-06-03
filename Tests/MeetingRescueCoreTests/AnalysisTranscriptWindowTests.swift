@@ -61,8 +61,8 @@ struct AnalysisTranscriptWindowTests {
         #expect(window.messageSuffix?.contains("catch-up 10-") == true)
     }
 
-    @Test("final continuation analysis keeps chunking until the transcript is consumed")
-    func finalContinuationLimitsCatchUpChunk() {
+    @Test("final analysis uses the full transcript for whole-meeting wrap-up")
+    func finalAnalysisUsesFullTranscript() {
         let rawTranscript = String(repeating: "[00:01] Speaker: long line\n", count: 50)
 
         let window = AnalysisTranscriptWindow.make(
@@ -72,8 +72,9 @@ struct AnalysisTranscriptWindowTests {
             maxAutomaticCatchUpCharacters: 100
         )
 
-        #expect(window.isChunked)
-        #expect(window.targetTranscriptCharacterCount < rawTranscript.count)
+        #expect(!window.isChunked)
+        #expect(window.targetTranscriptCharacterCount == rawTranscript.count)
+        #expect(window.rawTranscript == rawTranscript)
         #expect(window.lastAnalyzedTranscriptCharacterCount == 100)
     }
 }

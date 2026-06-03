@@ -29,7 +29,7 @@ public enum MeetingHistorySearchField: String, Equatable, Sendable {
         case .room:
             return "room"
         case .currentIssue:
-            return "현재 이슈"
+            return "현재 논점"
         case .confirmedDecision:
             return "확정 결정"
         case .decision:

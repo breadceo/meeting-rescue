@@ -2,8 +2,75 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "additionalProperties": false,
-  "required": ["currentIssue", "topicTimeline", "decisionCandidates", "actionItemCandidates", "risksOrNotes"],
+  "required": ["meetingType", "meetingSummary", "currentIssue", "topicTimeline", "decisionCandidates", "actionItemCandidates", "risksOrNotes"],
   "properties": {
+    "meetingType": {
+      "enum": ["decision", "planning", "incident", "oneOnOne", "brainstorm", "status"]
+    },
+    "meetingSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["overview", "keyPoints", "openQuestions"],
+      "properties": {
+        "overview": { "type": "string" },
+        "keyPoints": {
+          "type": "array",
+          "maxItems": 6,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "text", "evidence"],
+            "properties": {
+              "id": { "type": "string" },
+              "text": { "type": "string" },
+              "evidence": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 3,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["timestamp", "speaker", "excerpt"],
+                  "properties": {
+                    "timestamp": { "type": "string" },
+                    "speaker": { "type": ["string", "null"] },
+                    "excerpt": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "openQuestions": {
+          "type": "array",
+          "maxItems": 6,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "text", "evidence"],
+            "properties": {
+              "id": { "type": "string" },
+              "text": { "type": "string" },
+              "evidence": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 3,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["timestamp", "speaker", "excerpt"],
+                  "properties": {
+                    "timestamp": { "type": "string" },
+                    "speaker": { "type": ["string", "null"] },
+                    "excerpt": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "currentIssue": {
       "type": "object",
       "additionalProperties": false,

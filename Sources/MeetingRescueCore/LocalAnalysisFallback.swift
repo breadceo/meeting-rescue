@@ -38,8 +38,33 @@ public enum LocalAnalysisFallback {
         let speakerNote = speakerCounts.prefix(4)
             .map { "\($0.key) \($0.value)회" }
             .joined(separator: ", ")
+        let fallbackEvidence = dialogue.last.map {
+            EvidenceReference(timestamp: $0.timestamp, speaker: $0.speaker, excerpt: $0.text)
+        }
+        let fallbackEvidenceList = fallbackEvidence.map { [$0] } ?? []
+        let meetingSummary = MeetingSummary(
+            overview: summary,
+            keyPoints: fallbackEvidence.map {
+                [
+                    MeetingSummaryItem(
+                        id: "local-summary-latest",
+                        text: "최근 발화를 기준으로 provider 결과를 기다리는 중입니다.",
+                        evidence: [$0]
+                    )
+                ]
+            } ?? [],
+            openQuestions: [
+                MeetingSummaryItem(
+                    id: "local-question-provider",
+                    text: "LLM provider 연결 또는 schema 오류를 확인해야 합니다.",
+                    evidence: fallbackEvidenceList
+                )
+            ]
+        )
 
         return AnalysisSnapshot(
+            meetingType: request.meetingTypePreset,
+            meetingSummary: meetingSummary,
             currentIssue: CurrentIssue(
                 summary: summary,
                 openQuestions: ["LLM provider 연결 또는 schema 오류를 확인해야 합니다."]

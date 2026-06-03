@@ -191,11 +191,169 @@ public enum LiveContextRetrievalMode: String, Codable, CaseIterable, Identifiabl
     }
 }
 
+public enum MeetingTypePreset: String, Codable, CaseIterable, Identifiable, Sendable {
+    case automatic
+    case decision
+    case planning
+    case incident
+    case oneOnOne
+    case brainstorm
+    case status
+
+    public var id: String { rawValue }
+
+    public var displayName: String {
+        switch self {
+        case .automatic:
+            return "Auto"
+        case .decision:
+            return "Decision"
+        case .planning:
+            return "Planning"
+        case .incident:
+            return "Incident"
+        case .oneOnOne:
+            return "1:1"
+        case .brainstorm:
+            return "Brainstorm"
+        case .status:
+            return "Status"
+        }
+    }
+
+    public var detail: String {
+        switch self {
+        case .automatic:
+            return "회의 초반 transcript로 유형을 추정하고 사용자가 필요하면 override합니다."
+        case .decision:
+            return "선택지, 판단 기준, 결정 근거, 남은 승인자를 우선 정리합니다."
+        case .planning:
+            return "목표, 범위, 일정, owner, dependency를 우선 정리합니다."
+        case .incident:
+            return "증상, 영향, 원인 가설, mitigation, follow-up을 우선 정리합니다."
+        case .oneOnOne:
+            return "관심사, 피드백, 약속, 다음 대화를 우선 정리합니다."
+        case .brainstorm:
+            return "아이디어, 가설, 근거, 수렴 지점을 우선 정리합니다."
+        case .status:
+            return "진행 상황, block, 다음 action, escalation을 우선 정리합니다."
+        }
+    }
+
+    public static var concreteCases: [MeetingTypePreset] {
+        allCases.filter { $0 != .automatic }
+    }
+}
+
+public struct EvidenceReference: Codable, Equatable, Sendable, Identifiable {
+    public var timestamp: String
+    public var speaker: String?
+    public var excerpt: String
+
+    public var id: String {
+        [timestamp, speaker ?? "", excerpt].joined(separator: "|")
+    }
+
+    public init(timestamp: String, speaker: String? = nil, excerpt: String) {
+        self.timestamp = timestamp
+        self.speaker = speaker
+        self.excerpt = excerpt
+    }
+}
+
+public struct MeetingSummaryItem: Codable, Equatable, Sendable, Identifiable {
+    public var id: String
+    public var text: String
+    public var evidence: [EvidenceReference]
+
+    public init(id: String = UUID().uuidString, text: String, evidence: [EvidenceReference] = []) {
+        self.id = id
+        self.text = text
+        self.evidence = evidence
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case text
+        case evidence
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            id: (try? container.decode(String.self, forKey: .id)) ?? UUID().uuidString,
+            text: (try? container.decode(String.self, forKey: .text)) ?? "",
+            evidence: (try? container.decode([EvidenceReference].self, forKey: .evidence)) ?? []
+        )
+    }
+}
+
+public struct MeetingSummary: Codable, Equatable, Sendable {
+    public var overview: String
+    public var keyPoints: [MeetingSummaryItem]
+    public var openQuestions: [MeetingSummaryItem]
+
+    public init(
+        overview: String = "",
+        keyPoints: [MeetingSummaryItem] = [],
+        openQuestions: [MeetingSummaryItem] = []
+    ) {
+        self.overview = overview
+        self.keyPoints = keyPoints
+        self.openQuestions = openQuestions
+    }
+
+    public var isEmpty: Bool {
+        overview.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && keyPoints.isEmpty
+            && openQuestions.isEmpty
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case overview
+        case keyPoints
+        case openQuestions
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            overview: (try? container.decode(String.self, forKey: .overview)) ?? "",
+            keyPoints: (try? container.decode([MeetingSummaryItem].self, forKey: .keyPoints)) ?? [],
+            openQuestions: (try? container.decode([MeetingSummaryItem].self, forKey: .openQuestions)) ?? []
+        )
+    }
+}
+
+public struct MeetingBookmark: Codable, Equatable, Sendable, Identifiable {
+    public var id: String
+    public var timestamp: String
+    public var label: String?
+    public var createdAt: Date
+    public var excerpt: String
+
+    public init(
+        id: String = UUID().uuidString,
+        timestamp: String,
+        label: String? = nil,
+        createdAt: Date = Date(),
+        excerpt: String = ""
+    ) {
+        self.id = id
+        self.timestamp = timestamp
+        let trimmedLabel = label?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        self.label = trimmedLabel.isEmpty ? nil : trimmedLabel
+        self.createdAt = createdAt
+        self.excerpt = excerpt
+    }
+}
+
 public struct AppSettings: Codable, Equatable, Sendable {
     public var selectedProvider: LLMProviderKind
     public var codexExecutionMode: CodexExecutionMode
     public var codexAppServerDiagnosticsEnabled: Bool
     public var modelPreset: LLMModelPreset
+    public var meetingTypePreset: MeetingTypePreset
     public var automaticAnalysisEnabled: Bool
     public var hasCompletedOnboarding: Bool
     public var analysisTriggerPreset: AnalysisTriggerPreset
@@ -209,6 +367,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         codexExecutionMode: CodexExecutionMode = .cliExec,
         codexAppServerDiagnosticsEnabled: Bool = false,
         modelPreset: LLMModelPreset = .economy,
+        meetingTypePreset: MeetingTypePreset = .automatic,
         automaticAnalysisEnabled: Bool = true,
         hasCompletedOnboarding: Bool = false,
         analysisTriggerPreset: AnalysisTriggerPreset = .balanced,
@@ -221,6 +380,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         self.codexExecutionMode = codexExecutionMode
         self.codexAppServerDiagnosticsEnabled = codexAppServerDiagnosticsEnabled
         self.modelPreset = modelPreset
+        self.meetingTypePreset = meetingTypePreset
         self.automaticAnalysisEnabled = automaticAnalysisEnabled
         self.hasCompletedOnboarding = hasCompletedOnboarding
         self.analysisTriggerPreset = analysisTriggerPreset
@@ -235,6 +395,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         case codexExecutionMode
         case codexAppServerDiagnosticsEnabled
         case modelPreset
+        case meetingTypePreset
         case automaticAnalysisEnabled
         case hasCompletedOnboarding
         case analysisTriggerPreset
@@ -251,6 +412,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
             codexExecutionMode: (try? container.decode(CodexExecutionMode.self, forKey: .codexExecutionMode)) ?? .cliExec,
             codexAppServerDiagnosticsEnabled: (try? container.decode(Bool.self, forKey: .codexAppServerDiagnosticsEnabled)) ?? false,
             modelPreset: (try? container.decode(LLMModelPreset.self, forKey: .modelPreset)) ?? .economy,
+            meetingTypePreset: (try? container.decode(MeetingTypePreset.self, forKey: .meetingTypePreset)) ?? .automatic,
             automaticAnalysisEnabled: (try? container.decode(Bool.self, forKey: .automaticAnalysisEnabled)) ?? true,
             hasCompletedOnboarding: (try? container.decode(Bool.self, forKey: .hasCompletedOnboarding)) ?? false,
             analysisTriggerPreset: (try? container.decode(AnalysisTriggerPreset.self, forKey: .analysisTriggerPreset)) ?? .balanced,
@@ -392,6 +554,8 @@ public struct ActionItemCandidateEdit: Codable, Equatable, Sendable {
 }
 
 public struct AnalysisSnapshot: Codable, Equatable, Sendable {
+    public var meetingType: MeetingTypePreset
+    public var meetingSummary: MeetingSummary
     public var currentIssue: CurrentIssue
     public var topicTimeline: [TopicTimelineItem]
     public var decisionCandidates: [DecisionCandidate]
@@ -401,6 +565,8 @@ public struct AnalysisSnapshot: Codable, Equatable, Sendable {
     public var provider: LLMProviderKind
 
     public init(
+        meetingType: MeetingTypePreset = .automatic,
+        meetingSummary: MeetingSummary = MeetingSummary(),
         currentIssue: CurrentIssue = CurrentIssue(),
         topicTimeline: [TopicTimelineItem] = [],
         decisionCandidates: [DecisionCandidate] = [],
@@ -409,6 +575,8 @@ public struct AnalysisSnapshot: Codable, Equatable, Sendable {
         generatedAt: Date = Date(),
         provider: LLMProviderKind = .codexExec
     ) {
+        self.meetingType = meetingType
+        self.meetingSummary = meetingSummary
         self.currentIssue = currentIssue
         self.topicTimeline = topicTimeline
         self.decisionCandidates = decisionCandidates
@@ -419,6 +587,8 @@ public struct AnalysisSnapshot: Codable, Equatable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
+        case meetingType
+        case meetingSummary
         case currentIssue
         case topicTimeline
         case decisionCandidates
@@ -430,6 +600,8 @@ public struct AnalysisSnapshot: Codable, Equatable, Sendable {
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.meetingType = (try? container.decode(MeetingTypePreset.self, forKey: .meetingType)) ?? .automatic
+        self.meetingSummary = (try? container.decode(MeetingSummary.self, forKey: .meetingSummary)) ?? MeetingSummary()
         self.currentIssue = try container.decode(CurrentIssue.self, forKey: .currentIssue)
         self.topicTimeline = try container.decode([TopicTimelineItem].self, forKey: .topicTimeline)
         self.decisionCandidates = try container.decode([DecisionCandidate].self, forKey: .decisionCandidates)
@@ -441,6 +613,12 @@ public struct AnalysisSnapshot: Codable, Equatable, Sendable {
 
     public func applyingPatch(_ patch: AnalysisSnapshotPatch, provider: LLMProviderKind) -> AnalysisSnapshot {
         var copy = self
+        if let meetingType = patch.meetingType {
+            copy.meetingType = meetingType
+        }
+        if let meetingSummary = patch.meetingSummary {
+            copy.meetingSummary = meetingSummary
+        }
         if let currentIssue = patch.currentIssue {
             copy.currentIssue = currentIssue
         } else if copy.currentIssue.summary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
@@ -585,6 +763,8 @@ public struct AnalysisSnapshot: Codable, Equatable, Sendable {
 }
 
 public struct AnalysisSnapshotPatch: Codable, Equatable, Sendable {
+    public var meetingType: MeetingTypePreset?
+    public var meetingSummary: MeetingSummary?
     public var currentIssue: CurrentIssue?
     public var topicTimelineUpserts: [TopicTimelineItem]
     public var closeTopicIDs: [String]
@@ -593,6 +773,8 @@ public struct AnalysisSnapshotPatch: Codable, Equatable, Sendable {
     public var risksOrNotesAppend: [String]
 
     public init(
+        meetingType: MeetingTypePreset? = nil,
+        meetingSummary: MeetingSummary? = nil,
         currentIssue: CurrentIssue? = nil,
         topicTimelineUpserts: [TopicTimelineItem] = [],
         closeTopicIDs: [String] = [],
@@ -600,12 +782,39 @@ public struct AnalysisSnapshotPatch: Codable, Equatable, Sendable {
         actionItemCandidateUpserts: [ActionItemCandidate] = [],
         risksOrNotesAppend: [String] = []
     ) {
+        self.meetingType = meetingType
+        self.meetingSummary = meetingSummary
         self.currentIssue = currentIssue
         self.topicTimelineUpserts = topicTimelineUpserts
         self.closeTopicIDs = closeTopicIDs
         self.decisionCandidateUpserts = decisionCandidateUpserts
         self.actionItemCandidateUpserts = actionItemCandidateUpserts
         self.risksOrNotesAppend = risksOrNotesAppend
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case meetingType
+        case meetingSummary
+        case currentIssue
+        case topicTimelineUpserts
+        case closeTopicIDs
+        case decisionCandidateUpserts
+        case actionItemCandidateUpserts
+        case risksOrNotesAppend
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            meetingType: try container.decodeIfPresent(MeetingTypePreset.self, forKey: .meetingType),
+            meetingSummary: try container.decodeIfPresent(MeetingSummary.self, forKey: .meetingSummary),
+            currentIssue: try container.decodeIfPresent(CurrentIssue.self, forKey: .currentIssue),
+            topicTimelineUpserts: try container.decode([TopicTimelineItem].self, forKey: .topicTimelineUpserts),
+            closeTopicIDs: try container.decode([String].self, forKey: .closeTopicIDs),
+            decisionCandidateUpserts: try container.decode([DecisionCandidate].self, forKey: .decisionCandidateUpserts),
+            actionItemCandidateUpserts: try container.decode([ActionItemCandidate].self, forKey: .actionItemCandidateUpserts),
+            risksOrNotesAppend: try container.decode([String].self, forKey: .risksOrNotesAppend)
+        )
     }
 }
 
@@ -972,6 +1181,7 @@ public struct MeetingAnalysisState: Codable, Equatable, Sendable {
     public var usageSummary: LLMUsageSummary
     public var attemptLogs: [AnalysisAttemptLog]
     public var analyzedTranscriptCharacterCount: Int
+    public var bookmarks: [MeetingBookmark]
 
     public init(
         latestSnapshot: AnalysisSnapshot? = nil,
@@ -984,7 +1194,8 @@ public struct MeetingAnalysisState: Codable, Equatable, Sendable {
         isCompleted: Bool = false,
         usageSummary: LLMUsageSummary = LLMUsageSummary(),
         attemptLogs: [AnalysisAttemptLog] = [],
-        analyzedTranscriptCharacterCount: Int = 0
+        analyzedTranscriptCharacterCount: Int = 0,
+        bookmarks: [MeetingBookmark] = []
     ) {
         self.latestSnapshot = latestSnapshot
         self.confirmedCandidateIDs = confirmedCandidateIDs
@@ -997,6 +1208,7 @@ public struct MeetingAnalysisState: Codable, Equatable, Sendable {
         self.usageSummary = usageSummary
         self.attemptLogs = attemptLogs
         self.analyzedTranscriptCharacterCount = analyzedTranscriptCharacterCount
+        self.bookmarks = bookmarks
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -1011,6 +1223,7 @@ public struct MeetingAnalysisState: Codable, Equatable, Sendable {
         case usageSummary
         case attemptLogs
         case analyzedTranscriptCharacterCount
+        case bookmarks
     }
 
     public init(from decoder: Decoder) throws {
@@ -1026,7 +1239,8 @@ public struct MeetingAnalysisState: Codable, Equatable, Sendable {
             isCompleted: (try? container.decode(Bool.self, forKey: .isCompleted)) ?? false,
             usageSummary: (try? container.decode(LLMUsageSummary.self, forKey: .usageSummary)) ?? LLMUsageSummary(),
             attemptLogs: (try? container.decode([AnalysisAttemptLog].self, forKey: .attemptLogs)) ?? [],
-            analyzedTranscriptCharacterCount: (try? container.decode(Int.self, forKey: .analyzedTranscriptCharacterCount)) ?? 0
+            analyzedTranscriptCharacterCount: (try? container.decode(Int.self, forKey: .analyzedTranscriptCharacterCount)) ?? 0,
+            bookmarks: (try? container.decode([MeetingBookmark].self, forKey: .bookmarks)) ?? []
         )
     }
 
@@ -1067,6 +1281,17 @@ public struct MeetingAnalysisState: Codable, Equatable, Sendable {
             deletedCandidateIDs.insert(id)
             restoreOriginalValuesBeforeRemovingEdits(id: id)
         }
+    }
+
+    public mutating func addBookmark(_ bookmark: MeetingBookmark) {
+        guard !bookmarks.contains(where: { $0.id == bookmark.id }) else {
+            return
+        }
+        bookmarks.append(bookmark)
+    }
+
+    public mutating func deleteBookmark(id: String) {
+        bookmarks.removeAll { $0.id == id }
     }
 
     public mutating func editDecisionCandidate(id: String, text: String) {
@@ -1217,6 +1442,8 @@ public struct AnalysisRequest: Equatable, Sendable {
     public var deletedCandidateIDs: Set<String>
     public var providerKind: LLMProviderKind
     public var modelPreset: LLMModelPreset
+    public var meetingTypePreset: MeetingTypePreset
+    public var bookmarks: [MeetingBookmark]
     public var reason: String
     public var lastAnalyzedTranscriptCharacterCount: Int
     public var contextPlan: AnalysisContextPlan?
@@ -1230,6 +1457,8 @@ public struct AnalysisRequest: Equatable, Sendable {
         deletedCandidateIDs: Set<String> = [],
         providerKind: LLMProviderKind = .codexExec,
         modelPreset: LLMModelPreset = .economy,
+        meetingTypePreset: MeetingTypePreset = .automatic,
+        bookmarks: [MeetingBookmark] = [],
         reason: String = "",
         lastAnalyzedTranscriptCharacterCount: Int = 0,
         contextPlan: AnalysisContextPlan? = nil
@@ -1242,6 +1471,8 @@ public struct AnalysisRequest: Equatable, Sendable {
         self.deletedCandidateIDs = deletedCandidateIDs
         self.providerKind = providerKind
         self.modelPreset = modelPreset
+        self.meetingTypePreset = meetingTypePreset
+        self.bookmarks = bookmarks
         self.reason = reason
         self.lastAnalyzedTranscriptCharacterCount = lastAnalyzedTranscriptCharacterCount
         self.contextPlan = contextPlan
@@ -1252,7 +1483,7 @@ public struct AnalysisRequest: Equatable, Sendable {
     }
 
     public static func usesFullSnapshotOutput(_ reason: String) -> Bool {
-        reason.hasPrefix("repair") || reason.hasPrefix("full-refresh")
+        reason.hasPrefix("repair") || reason.hasPrefix("full-refresh") || reason.hasPrefix("final")
     }
 
     public static func isAutomaticReason(_ reason: String) -> Bool {

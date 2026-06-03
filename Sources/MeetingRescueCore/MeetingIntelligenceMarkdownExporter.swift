@@ -20,7 +20,10 @@ public enum MeetingIntelligenceMarkdownExporter {
         lines.append("- Provider: \(snapshot.provider.displayName)")
         lines.append("")
 
-        lines.append("## 현재 이슈")
+        appendMeetingSummary(snapshot.meetingSummary, meetingType: snapshot.meetingType, to: &lines, metadata: metadata)
+        lines.append("")
+
+        lines.append("## 현재 논점")
         lines.append("")
         lines.append(snapshot.currentIssue.summary.isEmpty ? "-" : snapshot.currentIssue.summary)
         if !snapshot.currentIssue.openQuestions.isEmpty {
@@ -67,6 +70,35 @@ public enum MeetingIntelligenceMarkdownExporter {
         return lines.joined(separator: "\n")
     }
 
+    private static func appendMeetingSummary(
+        _ summary: MeetingSummary,
+        meetingType: MeetingTypePreset,
+        to lines: inout [String],
+        metadata: MeetingMetadata
+    ) {
+        lines.append("## 회의 요약")
+        lines.append("")
+        lines.append("- 유형: \(meetingType.displayName)")
+        lines.append("")
+        lines.append(summary.overview.isEmpty ? "-" : summary.overview)
+
+        if !summary.keyPoints.isEmpty {
+            lines.append("")
+            lines.append("### 핵심 포인트")
+            for item in summary.keyPoints {
+                lines.append("- \(item.text) \(summaryEvidenceText(item.evidence, metadata: metadata))")
+            }
+        }
+
+        if !summary.openQuestions.isEmpty {
+            lines.append("")
+            lines.append("### 열린 질문")
+            for item in summary.openQuestions {
+                lines.append("- \(item.text) \(summaryEvidenceText(item.evidence, metadata: metadata))")
+            }
+        }
+    }
+
     private static func appendDecisionCandidates(_ candidates: [DecisionCandidate], to lines: inout [String], metadata: MeetingMetadata) {
         let visible = candidates.filter { $0.status != .deleted }
         if visible.isEmpty {
@@ -99,5 +131,16 @@ public enum MeetingIntelligenceMarkdownExporter {
         let elapsed = MeetingTimestampFormatter.display(timestamp, meetingDateTime: metadata.dateTime)
         let speaker = speaker.map { " · \($0)" } ?? ""
         return "(\(elapsed)\(speaker))"
+    }
+
+    private static func summaryEvidenceText(_ evidence: [EvidenceReference], metadata: MeetingMetadata) -> String {
+        guard let first = evidence.first else {
+            return ""
+        }
+        let elapsed = MeetingTimestampFormatter.display(first.timestamp, meetingDateTime: metadata.dateTime)
+        let speaker = first.speaker.map { " · \($0)" } ?? ""
+        let excerpt = first.excerpt.trimmingCharacters(in: .whitespacesAndNewlines)
+        let excerptText = excerpt.isEmpty ? "" : " · \(excerpt)"
+        return "(\(elapsed)\(speaker)\(excerptText))"
     }
 }

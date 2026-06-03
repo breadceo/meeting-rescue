@@ -4,6 +4,126 @@ import Testing
 
 @Suite("Analysis state")
 struct AnalysisStateTests {
+    @Test("D0 snapshot은 meeting type과 evidence-backed summary를 decode한다")
+    func decodesD0SnapshotContract() throws {
+        let json = """
+        {
+          "meetingType": "decision",
+          "meetingSummary": {
+            "overview": "배포 방식과 책임자를 좁힌 회의다.",
+            "keyPoints": [
+              {
+                "id": "summary-1",
+                "text": "금요일 배포를 기준으로 준비한다.",
+                "evidence": [
+                  {
+                    "timestamp": "00:10",
+                    "speaker": "Alex",
+                    "excerpt": "금요일 배포로 가죠."
+                  }
+                ]
+              }
+            ],
+            "openQuestions": [
+              {
+                "id": "question-1",
+                "text": "롤백 담당자를 확정해야 한다.",
+                "evidence": [
+                  {
+                    "timestamp": "00:30",
+                    "speaker": "Blair",
+                    "excerpt": "롤백 담당자는 아직 없나요?"
+                  }
+                ]
+              }
+            ]
+          },
+          "currentIssue": {
+            "summary": "롤백 담당자 확정이 남아 있다.",
+            "openQuestions": ["롤백 담당자는 누구인가?"]
+          },
+          "topicTimeline": [],
+          "decisionCandidates": [],
+          "actionItemCandidates": [],
+          "risksOrNotes": []
+        }
+        """
+
+        let snapshot = try JSONDecoder().decode(AnalysisSnapshot.self, from: Data(json.utf8))
+
+        #expect(snapshot.meetingType == .decision)
+        #expect(snapshot.meetingSummary.overview == "배포 방식과 책임자를 좁힌 회의다.")
+        #expect(snapshot.meetingSummary.keyPoints.first?.evidence.first?.timestamp == "00:10")
+        #expect(snapshot.meetingSummary.openQuestions.first?.text == "롤백 담당자를 확정해야 한다.")
+    }
+
+    @Test("legacy snapshot은 D0 필드 없이도 기본값으로 decode한다")
+    func decodesLegacySnapshotWithoutD0Fields() throws {
+        let json = """
+        {
+          "currentIssue": {
+            "summary": "기존 요약",
+            "openQuestions": []
+          },
+          "topicTimeline": [],
+          "decisionCandidates": [],
+          "actionItemCandidates": [],
+          "risksOrNotes": []
+        }
+        """
+
+        let snapshot = try JSONDecoder().decode(AnalysisSnapshot.self, from: Data(json.utf8))
+
+        #expect(snapshot.meetingType == .automatic)
+        #expect(snapshot.meetingSummary.isEmpty)
+    }
+
+    @Test("partial meeting summary JSON preserves available summary text")
+    func decodesPartialMeetingSummaryWithDefaults() throws {
+        let json = """
+        {
+          "meetingType": "planning",
+          "meetingSummary": {
+            "overview": "계획을 정리했다.",
+            "keyPoints": [
+              {
+                "id": "summary-1",
+                "text": "마일스톤을 다음 주로 잡았다."
+              }
+            ]
+          },
+          "currentIssue": {
+            "summary": "다음 주 마일스톤",
+            "openQuestions": []
+          },
+          "topicTimeline": [],
+          "decisionCandidates": [],
+          "actionItemCandidates": [],
+          "risksOrNotes": []
+        }
+        """
+
+        let snapshot = try JSONDecoder().decode(AnalysisSnapshot.self, from: Data(json.utf8))
+
+        #expect(snapshot.meetingSummary.overview == "계획을 정리했다.")
+        #expect(snapshot.meetingSummary.keyPoints.first?.text == "마일스톤을 다음 주로 잡았다.")
+        #expect(snapshot.meetingSummary.keyPoints.first?.evidence.isEmpty == true)
+        #expect(snapshot.meetingSummary.openQuestions.isEmpty)
+    }
+
+    @Test("AppSettings stores meeting type preset with automatic legacy default")
+    func appSettingsStoresMeetingTypePreset() throws {
+        let legacyJSON = #"{"selectedProvider":"codexExec"}"#
+        let legacy = try JSONDecoder().decode(AppSettings.self, from: Data(legacyJSON.utf8))
+        #expect(legacy.meetingTypePreset == .automatic)
+
+        let settings = AppSettings(meetingTypePreset: .incident)
+        let data = try JSONEncoder().encode(settings)
+        let decoded = try JSONDecoder().decode(AppSettings.self, from: data)
+
+        #expect(decoded.meetingTypePreset == .incident)
+    }
+
     @Test("candidate id는 normalized text와 evidence timestamp 기준으로 stable하다")
     func stableCandidateIDs() {
         let first = CandidateIDGenerator.decisionID(text: "  배포를   금요일에 진행한다 ", evidenceTimestamp: "12:30")
@@ -57,6 +177,8 @@ struct AnalysisStateTests {
     @Test("live patch는 기존 snapshot에 변경분만 merge한다")
     func livePatchMergesIntoExistingSnapshot() {
         let previous = AnalysisSnapshot(
+            meetingType: .automatic,
+            meetingSummary: MeetingSummary(overview: "이전 요약"),
             currentIssue: CurrentIssue(summary: "이전 이슈"),
             topicTimeline: [
                 TopicTimelineItem(id: "topic-1", startTimestamp: "00:10", title: "기존 주제", summary: "기존 요약")
@@ -67,6 +189,23 @@ struct AnalysisStateTests {
             risksOrNotes: ["기존 note"]
         )
         let patch = AnalysisSnapshotPatch(
+            meetingType: .planning,
+            meetingSummary: MeetingSummary(
+                overview: "새 계획 요약",
+                keyPoints: [
+                    MeetingSummaryItem(
+                        id: "summary-plan",
+                        text: "마일스톤을 다음 주로 맞춘다.",
+                        evidence: [
+                            EvidenceReference(
+                                timestamp: "02:10",
+                                speaker: "Casey",
+                                excerpt: "다음 주 마일스톤으로 맞추겠습니다."
+                            )
+                        ]
+                    )
+                ]
+            ),
             currentIssue: CurrentIssue(summary: "새 이슈"),
             topicTimelineUpserts: [
                 TopicTimelineItem(id: "topic-1", startTimestamp: "00:10", endTimestamp: "01:00", title: "기존 주제", summary: "닫힌 요약"),
@@ -83,6 +222,9 @@ struct AnalysisStateTests {
 
         let merged = previous.applyingPatch(patch, provider: .customCommand)
 
+        #expect(merged.meetingType == .planning)
+        #expect(merged.meetingSummary.overview == "새 계획 요약")
+        #expect(merged.meetingSummary.keyPoints.first?.text == "마일스톤을 다음 주로 맞춘다.")
         #expect(merged.currentIssue.summary == "새 이슈")
         #expect(merged.topicTimeline.map(\.id) == ["topic-1", "topic-2"])
         #expect(merged.topicTimeline.first?.endTimestamp == "01:00")
@@ -106,6 +248,48 @@ struct AnalysisStateTests {
         let merged = previous.applyingPatch(patch, provider: .codexExec)
 
         #expect(merged.topicTimeline.map(\.id) == ["topic-1", "topic-2", "topic-3"])
+    }
+
+    @Test("meeting bookmarks를 저장하고 다시 불러온다")
+    func persistsMeetingBookmarks() throws {
+        let rootURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MeetingRescueBookmarks-\(UUID().uuidString)", isDirectory: true)
+        let store = ApplicationStateStore(rootURL: rootURL)
+        let transcriptURL = rootURL.appendingPathComponent("meeting.txt")
+        var state = MeetingAnalysisState()
+        state.addBookmark(
+            MeetingBookmark(
+                id: "bookmark-1",
+                timestamp: "[04:13]",
+                label: "결정 기준",
+                createdAt: Date(timeIntervalSince1970: 100),
+                excerpt: "결정 기준은 비용과 속도입니다."
+            )
+        )
+
+        try store.saveAnalysisState(state, for: transcriptURL)
+        let loaded = store.loadAnalysisState(for: transcriptURL)
+
+        #expect(loaded.bookmarks.map(\.id) == ["bookmark-1"])
+        #expect(loaded.bookmarks.first?.timestamp == "[04:13]")
+        #expect(loaded.bookmarks.first?.label == "결정 기준")
+
+        try? FileManager.default.removeItem(at: rootURL)
+    }
+
+    @Test("final analysis는 previous snapshot이 있어도 full snapshot output을 쓴다")
+    func finalAnalysisUsesFullSnapshotOutput() {
+        let request = AnalysisRequest(
+            meetingID: "meeting-1",
+            metadata: MeetingMetadata(room: "Room"),
+            rawTranscript: "[00:10] Alex: 정리합니다.",
+            previousSnapshot: AnalysisSnapshot(currentIssue: CurrentIssue(summary: "기존 요약")),
+            reason: "final",
+            lastAnalyzedTranscriptCharacterCount: 8
+        )
+
+        #expect(request.outputMode == .fullSnapshot)
+        #expect(AnalysisRequest.usesFullSnapshotOutput("final"))
     }
 
     @Test("candidate status는 confirm/delete 이후 다시 candidate로 되돌릴 수 있다")
