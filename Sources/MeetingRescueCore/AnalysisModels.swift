@@ -1182,6 +1182,8 @@ public struct MeetingAnalysisState: Codable, Equatable, Sendable {
     public var attemptLogs: [AnalysisAttemptLog]
     public var analyzedTranscriptCharacterCount: Int
     public var bookmarks: [MeetingBookmark]
+    public var dismissedCarryOverQuestionIDs: Set<String>
+    public var resolvedCarryOverQuestionIDs: Set<String>
 
     public init(
         latestSnapshot: AnalysisSnapshot? = nil,
@@ -1195,7 +1197,9 @@ public struct MeetingAnalysisState: Codable, Equatable, Sendable {
         usageSummary: LLMUsageSummary = LLMUsageSummary(),
         attemptLogs: [AnalysisAttemptLog] = [],
         analyzedTranscriptCharacterCount: Int = 0,
-        bookmarks: [MeetingBookmark] = []
+        bookmarks: [MeetingBookmark] = [],
+        dismissedCarryOverQuestionIDs: Set<String> = [],
+        resolvedCarryOverQuestionIDs: Set<String> = []
     ) {
         self.latestSnapshot = latestSnapshot
         self.confirmedCandidateIDs = confirmedCandidateIDs
@@ -1209,6 +1213,8 @@ public struct MeetingAnalysisState: Codable, Equatable, Sendable {
         self.attemptLogs = attemptLogs
         self.analyzedTranscriptCharacterCount = analyzedTranscriptCharacterCount
         self.bookmarks = bookmarks
+        self.dismissedCarryOverQuestionIDs = dismissedCarryOverQuestionIDs
+        self.resolvedCarryOverQuestionIDs = resolvedCarryOverQuestionIDs
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -1224,6 +1230,8 @@ public struct MeetingAnalysisState: Codable, Equatable, Sendable {
         case attemptLogs
         case analyzedTranscriptCharacterCount
         case bookmarks
+        case dismissedCarryOverQuestionIDs
+        case resolvedCarryOverQuestionIDs
     }
 
     public init(from decoder: Decoder) throws {
@@ -1240,7 +1248,9 @@ public struct MeetingAnalysisState: Codable, Equatable, Sendable {
             usageSummary: (try? container.decode(LLMUsageSummary.self, forKey: .usageSummary)) ?? LLMUsageSummary(),
             attemptLogs: (try? container.decode([AnalysisAttemptLog].self, forKey: .attemptLogs)) ?? [],
             analyzedTranscriptCharacterCount: (try? container.decode(Int.self, forKey: .analyzedTranscriptCharacterCount)) ?? 0,
-            bookmarks: (try? container.decode([MeetingBookmark].self, forKey: .bookmarks)) ?? []
+            bookmarks: (try? container.decode([MeetingBookmark].self, forKey: .bookmarks)) ?? [],
+            dismissedCarryOverQuestionIDs: (try? container.decode(Set<String>.self, forKey: .dismissedCarryOverQuestionIDs)) ?? [],
+            resolvedCarryOverQuestionIDs: (try? container.decode(Set<String>.self, forKey: .resolvedCarryOverQuestionIDs)) ?? []
         )
     }
 
@@ -1292,6 +1302,20 @@ public struct MeetingAnalysisState: Codable, Equatable, Sendable {
 
     public mutating func deleteBookmark(id: String) {
         bookmarks.removeAll { $0.id == id }
+    }
+
+    public mutating func setCarryOverQuestionStatus(id: String, status: CarryOverQuestionStatus) {
+        switch status {
+        case .active:
+            dismissedCarryOverQuestionIDs.remove(id)
+            resolvedCarryOverQuestionIDs.remove(id)
+        case .dismissed:
+            resolvedCarryOverQuestionIDs.remove(id)
+            dismissedCarryOverQuestionIDs.insert(id)
+        case .resolved:
+            dismissedCarryOverQuestionIDs.remove(id)
+            resolvedCarryOverQuestionIDs.insert(id)
+        }
     }
 
     public mutating func editDecisionCandidate(id: String, text: String) {

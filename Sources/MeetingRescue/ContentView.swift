@@ -6,6 +6,7 @@ private enum IntelligenceMode: String, CaseIterable, Identifiable {
     case overview = "요약"
     case timeline = "흐름"
     case candidates = "후보"
+    case workflow = "워크플로우"
 
     var id: String { rawValue }
 }
@@ -126,6 +127,22 @@ struct ContentView: View {
         }
         .sheet(item: $selectedAnalysisAttempt) { attempt in
             AnalysisAttemptDetailView(attempt: attempt)
+        }
+        .sheet(
+            isPresented: Binding(
+                get: { !viewModel.pendingMarkdownReadinessWarnings.isEmpty },
+                set: { isPresented in
+                    if !isPresented {
+                        viewModel.cancelMarkdownReadinessPreview()
+                    }
+                }
+            )
+        ) {
+            MarkdownReadinessPreviewSheet(warnings: viewModel.pendingMarkdownReadinessWarnings) {
+                viewModel.exportCurrentIntelligenceMarkdownIgnoringReadiness()
+            } onCancel: {
+                viewModel.cancelMarkdownReadinessPreview()
+            }
         }
         .onChange(of: sparkleUpdater.blockingSheetDismissalRequestID) {
             dismissBlockingSheetsForUpdate()
@@ -822,7 +839,7 @@ struct ContentView: View {
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
-                .frame(width: 210)
+                .frame(width: 300)
             }
             .padding(.trailing, 12)
 
@@ -842,6 +859,8 @@ struct ContentView: View {
                                 actionItems(snapshot.actionItemCandidates, compact: false)
                                 notes(snapshot.risksOrNotes)
                             }
+                        case .workflow:
+                            workflow(viewModel.personalWorkflowSnapshot)
                         }
                     }
                     .padding(16)
@@ -875,6 +894,183 @@ struct ContentView: View {
             usageSummary()
             analysisDiagnostics()
         }
+    }
+
+    private func workflow(_ snapshot: PersonalWorkflowSnapshot) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            decisionCoach(snapshot.coachCards)
+            shareReadiness(snapshot.readinessWarnings)
+            actionLedger(snapshot.actionLedgerItems)
+            carryOverQuestions(snapshot.carryOverCandidates)
+        }
+    }
+
+    private func decisionCoach(_ cards: [DecisionCoachCard]) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            sectionHeader("Decision Coach", systemImage: "lightbulb.max")
+            if cards.isEmpty {
+                placeholderLine("현재 막힌 논점으로 보이는 항목이 없습니다.")
+            }
+            ForEach(cards) { card in
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(alignment: .top, spacing: 8) {
+                        Image(systemName: card.severity == .warning ? "exclamationmark.triangle" : "sparkle.magnifyingglass")
+                            .foregroundStyle(card.severity == .warning ? Color.orange : Color.smoothAccent)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(card.title)
+                                .font(.callout.weight(.semibold))
+                                .foregroundStyle(Color.smoothInk)
+                            Text(card.stuckPoint)
+                                .font(.callout)
+                                .foregroundStyle(Color.smoothMuted)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Text("최소 결정: \(card.minimumDecision)")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(Color.smoothInk)
+                                .fixedSize(horizontal: false, vertical: true)
+                            if !card.missingInfo.isEmpty {
+                                Text("부족한 정보: \(card.missingInfo.joined(separator: ", "))")
+                                    .font(.caption)
+                                    .foregroundStyle(Color.smoothMuted)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            Text(card.nextQuestion)
+                                .font(.caption)
+                                .foregroundStyle(Color.smoothAccent)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                }
+                .padding(10)
+                .background(Color.smoothSurface, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(Color.smoothLine, lineWidth: 1)
+                )
+            }
+        }
+        .smoothCard(tint: Color.smoothMint)
+    }
+
+    private func shareReadiness(_ warnings: [ShareReadinessWarning]) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                sectionHeader("Share Readiness", systemImage: "checklist")
+                Spacer()
+                Text(warnings.isEmpty ? "Ready" : "\(warnings.count) warnings")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(warnings.isEmpty ? Color.smoothMint : Color.orange)
+            }
+            if warnings.isEmpty {
+                placeholderLine("공유 전 확인할 warning이 없습니다.")
+            }
+            ForEach(warnings) { warning in
+                Label {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(warning.title)
+                            .font(.callout.weight(.semibold))
+                        Text(warning.detail)
+                            .font(.caption)
+                            .foregroundStyle(Color.smoothMuted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                } icon: {
+                    Image(systemName: warning.severity == .warning ? "exclamationmark.circle" : "info.circle")
+                        .foregroundStyle(warning.severity == .warning ? Color.orange : Color.smoothAccent)
+                }
+            }
+        }
+        .smoothCard(tint: Color.smoothWarm)
+    }
+
+    private func actionLedger(_ items: [ActionLedgerItem]) -> some View {
+        let visibleItems = Array(items.prefix(12))
+        return VStack(alignment: .leading, spacing: 10) {
+            sectionHeader("Action Ledger", systemImage: "tray.full")
+            if visibleItems.isEmpty {
+                placeholderLine("확정된 action이 아직 없습니다.")
+            }
+            ForEach(visibleItems) { item in
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(alignment: .top, spacing: 8) {
+                        Image(systemName: "person.crop.circle.badge.checkmark")
+                            .foregroundStyle(Color.smoothAccent)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(item.task)
+                                .font(.callout.weight(.semibold))
+                                .foregroundStyle(Color.smoothInk)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Text(actionLedgerMetadata(item))
+                                .font(.caption)
+                                .foregroundStyle(Color.smoothMuted)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        Spacer(minLength: 0)
+                    }
+                }
+                .padding(.vertical, 4)
+                if item.id != visibleItems.last?.id {
+                    Divider().overlay(Color.smoothLine)
+                }
+            }
+        }
+        .smoothCard(tint: Color.smoothSky)
+    }
+
+    private func carryOverQuestions(_ candidates: [OpenQuestionCarryOverCandidate]) -> some View {
+        let visibleCandidates = Array(candidates.prefix(8))
+        return VStack(alignment: .leading, spacing: 10) {
+            sectionHeader("Open Question Carry-over", systemImage: "arrowshape.turn.up.right")
+            if visibleCandidates.isEmpty {
+                placeholderLine("관련 history에서 이어받을 열린 질문이 없습니다.")
+            }
+            ForEach(visibleCandidates) { candidate in
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(candidate.question)
+                        .font(.callout.weight(.semibold))
+                        .foregroundStyle(Color.smoothInk)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text("\(candidate.sourceTitle) · \(candidate.reason)")
+                        .font(.caption)
+                        .foregroundStyle(Color.smoothMuted)
+                    HStack(spacing: 8) {
+                        Button {
+                            viewModel.resolveCarryOverQuestion(id: candidate.id)
+                        } label: {
+                            Label("해결됨", systemImage: "checkmark.circle")
+                        }
+                        .buttonStyle(.borderless)
+
+                        Button {
+                            viewModel.dismissCarryOverQuestion(id: candidate.id)
+                        } label: {
+                            Label("숨기기", systemImage: "xmark.circle")
+                        }
+                        .buttonStyle(.borderless)
+                    }
+                    .font(.caption.weight(.semibold))
+                }
+                .padding(10)
+                .background(Color.smoothSurface, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(Color.smoothLine, lineWidth: 1)
+                )
+            }
+        }
+        .smoothCard()
+    }
+
+    private func actionLedgerMetadata(_ item: ActionLedgerItem) -> String {
+        [
+            item.assignee.map { "@\($0)" },
+            item.deadline.map { "기한 \($0)" },
+            item.meetingTitle,
+            MeetingTimestampFormatter.display(item.evidenceTimestamp, meetingDateTime: nil)
+        ]
+        .compactMap { $0 }
+        .filter { !$0.isEmpty }
+        .joined(separator: " · ")
     }
 
     private func currentIssue(_ issue: CurrentIssue) -> some View {
@@ -1688,7 +1884,7 @@ struct ContentView: View {
 
     private var markdownHeaderButton: some View {
         headerButton("Markdown", systemImage: "square.and.arrow.down") {
-            viewModel.exportCurrentIntelligenceMarkdown()
+            viewModel.requestCurrentIntelligenceMarkdownExport()
         }
         .disabled(viewModel.analysisState.latestSnapshot == nil)
     }
@@ -1765,7 +1961,7 @@ struct ContentView: View {
             Divider()
 
             Button {
-                viewModel.exportCurrentIntelligenceMarkdown()
+                viewModel.requestCurrentIntelligenceMarkdownExport()
             } label: {
                 Label("Markdown", systemImage: "square.and.arrow.down")
             }
@@ -3682,6 +3878,71 @@ private struct AnalysisAttemptTextView: NSViewRepresentable {
 
     final class Coordinator {
         var renderedText: String?
+    }
+}
+
+private struct MarkdownReadinessPreviewSheet: View {
+    let warnings: [ShareReadinessWarning]
+    let onContinue: () -> Void
+    let onCancel: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(spacing: 10) {
+                Image(systemName: "checklist")
+                    .foregroundStyle(Color.orange)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Share Readiness")
+                        .font(.headline)
+                    Text("공유 전에 확인할 항목이 있습니다.")
+                        .font(.caption)
+                        .foregroundStyle(Color.smoothMuted)
+                }
+                Spacer()
+            }
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 10) {
+                    ForEach(warnings) { warning in
+                        Label {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(warning.title)
+                                    .font(.callout.weight(.semibold))
+                                Text(warning.detail)
+                                    .font(.caption)
+                                    .foregroundStyle(Color.smoothMuted)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        } icon: {
+                            Image(systemName: warning.severity == .warning ? "exclamationmark.circle" : "info.circle")
+                                .foregroundStyle(warning.severity == .warning ? Color.orange : Color.smoothAccent)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(10)
+                        .background(Color.smoothSurface, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .stroke(Color.smoothLine, lineWidth: 1)
+                        )
+                    }
+                }
+            }
+            .frame(maxHeight: 320)
+
+            HStack {
+                Spacer()
+                Button("취소") {
+                    onCancel()
+                }
+                Button("계속 저장") {
+                    onContinue()
+                }
+                .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(20)
+        .frame(width: 460)
+        .background(Color.smoothCanvas)
     }
 }
 

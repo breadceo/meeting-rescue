@@ -609,6 +609,7 @@ final class AppViewModel: ObservableObject {
     @Published var settings: AppSettings
     @Published var analysisState = MeetingAnalysisState()
     @Published var analysisStatus: AnalysisRuntimeStatus = .idle
+    @Published var pendingMarkdownReadinessWarnings: [ShareReadinessWarning] = []
     @Published var transcriptUpdatedAt: Date?
     @Published var transcriptRunMode: TranscriptRunMode = .liveWatch
     @Published var testRunPlaybackStatus: TestRunPlaybackStatus = .idle
@@ -765,6 +766,22 @@ final class AppViewModel: ObservableObject {
 
     var filteredMeetingHistoryItems: [MeetingHistoryItem] {
         filteredMeetingHistorySearchResults.map(\.item)
+    }
+
+    var personalWorkflowSnapshot: PersonalWorkflowSnapshot {
+        guard activeTranscriptURL != nil || analysisState.latestSnapshot != nil else {
+            return PersonalWorkflowSnapshot()
+        }
+        return PersonalWorkflowAnalyzer.snapshot(
+            currentMeetingID: currentWorkflowMeetingID,
+            metadata: metadata,
+            state: analysisState,
+            historySources: workflowHistorySources(excluding: activeTranscriptURL)
+        )
+    }
+
+    var currentShareReadinessWarnings: [ShareReadinessWarning] {
+        personalWorkflowSnapshot.readinessWarnings
     }
 
     var historyFacetSelection: MeetingHistoryFacetSelection {
@@ -1284,6 +1301,25 @@ final class AppViewModel: ObservableObject {
         statusMessage = "북마크를 삭제했습니다."
     }
 
+    func dismissCarryOverQuestion(id: String) {
+        setCarryOverQuestionStatus(id: id, status: .dismissed)
+        statusMessage = "Carry-over 질문을 숨겼습니다."
+    }
+
+    func resolveCarryOverQuestion(id: String) {
+        setCarryOverQuestionStatus(id: id, status: .resolved)
+        statusMessage = "Carry-over 질문을 해결됨으로 표시했습니다."
+    }
+
+    private func setCarryOverQuestionStatus(id: String, status: CarryOverQuestionStatus) {
+        analysisState.setCarryOverQuestionStatus(id: id, status: status)
+        analysisState.updatedAt = Date()
+        if let activeTranscriptURL {
+            try? stateStore.saveAnalysisState(analysisState, for: activeTranscriptURL)
+            patchMeetingHistoryItem(for: activeTranscriptURL)
+        }
+    }
+
     func openGitHubIssueDraft(kind: GitHubIssueDraftKind) {
         let title = "\(kind.titlePrefix) "
         let body = githubIssueDraftBody(kind: kind)
@@ -1302,7 +1338,17 @@ final class AppViewModel: ObservableObject {
         statusMessage = "\(kind.displayName) issue 작성 화면을 브라우저로 열었습니다."
     }
 
-    func exportCurrentIntelligenceMarkdown() {
+    func requestCurrentIntelligenceMarkdownExport() {
+        let warnings = currentShareReadinessWarnings
+        guard !warnings.isEmpty else {
+            exportCurrentIntelligenceMarkdownIgnoringReadiness()
+            return
+        }
+        pendingMarkdownReadinessWarnings = warnings
+    }
+
+    func exportCurrentIntelligenceMarkdownIgnoringReadiness() {
+        pendingMarkdownReadinessWarnings = []
         guard let activeTranscriptURL, analysisState.latestSnapshot != nil else {
             statusMessage = "저장할 Meeting Intelligence가 아직 없습니다."
             return
@@ -1332,6 +1378,10 @@ final class AppViewModel: ObservableObject {
         } catch {
             statusMessage = "Markdown 저장 실패: \(error.localizedDescription)"
         }
+    }
+
+    func cancelMarkdownReadinessPreview() {
+        pendingMarkdownReadinessWarnings = []
     }
 
     private func githubIssueDraftBody(kind: GitHubIssueDraftKind) -> String {
@@ -1871,6 +1921,28 @@ final class AppViewModel: ObservableObject {
             searchSections: searchSections,
             summaryPreview: snapshot?.currentIssue.summary.truncatedForHistoryRow()
         )
+    }
+
+    private var currentWorkflowMeetingID: String {
+        activeTranscriptURL?.path ?? metadata.displayTitle
+    }
+
+    private func workflowHistorySources(excluding activeURL: URL?) -> [ActionLedgerMeetingSource] {
+        meetingHistoryItems.compactMap { item in
+            guard item.url != activeURL else {
+                return nil
+            }
+            let state = stateStore.loadAnalysisState(for: item.url)
+            guard let snapshot = state.latestSnapshot else {
+                return nil
+            }
+            return ActionLedgerMeetingSource(
+                meetingID: item.id,
+                sourceFileName: item.url.lastPathComponent,
+                metadata: item.metadata,
+                snapshot: snapshot
+            )
+        }
     }
 
     private func makeHistorySearchSections(
