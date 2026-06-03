@@ -1,0 +1,45 @@
+Sources/MeetingRescue/AppViewModel.swift
+  h_d82ccb34241a0d 1124,1165-1169,1255-1286,1595-1596,2316-2317,2407-2424,2667
+Sources/MeetingRescue/ContentView.swift
+  h_d82ccb34241a0d 866-869,883,915-1026,1564-1571,1611,1648-1688,1762-1766,2509-2518,2707-2714
+Sources/MeetingRescue/MeetingRescueApp.swift
+  h_d82ccb34241a0d 15-22
+Sources/MeetingRescue/Resources/analysis-output.schema.json
+  h_d82ccb34241a0d 5,7-73
+Sources/MeetingRescue/Resources/analysis-patch-output.schema.json
+  h_d82ccb34241a0d 5,7-81
+Sources/MeetingRescueCore/AnalysisModels.swift
+  h_d82ccb34241a0d 194-350,356,370,383,398,415,557-558,568-569,578-579,590-591,603-604,616-621,766-767,776-777,785-786,794-818,1184,1197-1198,1211,1226,1242-1243,1286-1296,1445-1446,1460-1461,1474-1475,1486
+Sources/MeetingRescueCore/AnalysisPromptBuilder.swift
+  h_d82ccb34241a0d 20-21,46,48-62,79-82,98-99,206-213,222-225
+Sources/MeetingRescueCore/LLMProvider.swift
+  h_d82ccb34241a0d 1145-1153,1156,1162
+Sources/MeetingRescueCore/LocalAnalysisFallback.swift
+  h_d82ccb34241a0d 41-63,66-67
+Sources/MeetingRescueCore/MeetingHistorySearch.swift
+  h_d82ccb34241a0d 32
+Sources/MeetingRescueCore/MeetingIntelligenceMarkdownExporter.swift
+  h_d82ccb34241a0d 23-26,73-101,135-145
+Tests/MeetingRescueCoreTests/AnalysisPromptBuilderTests.swift
+  h_d82ccb34241a0d 1,85-86,98-100,102,146-187,285
+Tests/MeetingRescueCoreTests/AnalysisStateTests.swift
+  h_d82ccb34241a0d 7-126,180-181,192-208,225-227,253-294
+Tests/MeetingRescueCoreTests/AnalysisTranscriptWindowTests.swift
+  h_d82ccb34241a0d 64-65,75-77
+Tests/MeetingRescueCoreTests/LLMProviderOutputTests.swift
+  h_d82ccb34241a0d 7-135,190-191,221-222,257-258,299-300
+Tests/MeetingRescueCoreTests/MarkdownExporterTests.swift
+  h_d82ccb34241a0d 15-44,83-90
+docs/superpowers/plans/2026-06-03-d0-meeting-intelligence-contract.md
+  h_d82ccb34241a0d 1-1840
+---
+{
+  "schema_version": "zax-attestation/1.1.0",
+  "base_commit_sha": "9f00d7c7b8305f3304f91d813436b7e09b9a63f2",
+  "prompts": {},
+  "humans": {
+    "h_d82ccb34241a0d": {
+      "author": "ethan@zigbang.com"
+    }
+  }
+}
