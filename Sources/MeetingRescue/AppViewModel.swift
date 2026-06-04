@@ -1658,7 +1658,11 @@ final class AppViewModel: ObservableObject {
             finalAnalysisTriggeredForMeetingID = nil
             clearFinalRetryCounts(for: fileURL)
             metadata = MeetingMetadata()
-            analysisState = MeetingAnalysisState()
+            let cachedCalendarContext = stateStore.loadAnalysisState(for: fileURL).calendarContext.cachedForTestRunReplay()
+            analysisState = MeetingAnalysisState(calendarContext: cachedCalendarContext)
+            calendarContextStatusMessage = cachedCalendarContext.hasReusableContext
+                ? "저장된 Calendar context를 Test Run에 적용했습니다."
+                : "Google Calendar MCP 확인 전"
             analysisStatus = .idle
             transcriptUpdatedAt = nil
             updateTestRunProgress(currentLine: 0, totalLines: replayCursor?.totalLines ?? 0)

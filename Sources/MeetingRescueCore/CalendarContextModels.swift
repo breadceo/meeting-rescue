@@ -5,6 +5,7 @@ public enum CalendarMCPStatus: String, Codable, Equatable, Sendable {
     case missing
     case connected
     case failed
+    case cachedReplay
 }
 
 public enum CalendarContextCandidateStatus: String, Codable, Equatable, Sendable {
@@ -180,6 +181,25 @@ public struct CalendarContextState: Codable, Equatable, Sendable {
         self.meetingIdentity = meetingIdentity
         self.lastFetchedAt = lastFetchedAt
         self.lastError = lastError
+    }
+
+    public var hasReusableContext: Bool {
+        !eventCandidates.isEmpty || !supplementalSources.isEmpty || meetingIdentity != nil
+    }
+
+    public func cachedForTestRunReplay() -> CalendarContextState {
+        guard hasReusableContext else {
+            return CalendarContextState()
+        }
+
+        return CalendarContextState(
+            mcpStatus: .cachedReplay,
+            eventCandidates: eventCandidates,
+            supplementalSources: supplementalSources,
+            meetingIdentity: meetingIdentity,
+            lastFetchedAt: lastFetchedAt,
+            lastError: nil
+        )
     }
 }
 

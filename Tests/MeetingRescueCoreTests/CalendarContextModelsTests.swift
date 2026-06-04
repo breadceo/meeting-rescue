@@ -66,6 +66,42 @@ struct CalendarContextModelsTests {
         #expect(legacyDecoded.calendarContext == CalendarContextState())
     }
 
+    @Test("test run replay는 저장된 calendar context만 재사용하고 MCP 상태를 cached로 표시한다")
+    func cachedCalendarContextForTestRunReplay() {
+        let context = CalendarContextState(
+            mcpStatus: .connected,
+            eventCandidates: [
+                CalendarEventCandidate(
+                    id: "event-1",
+                    title: "Launch Review",
+                    startDateText: "2026-06-03T10:00:00+09:00",
+                    endDateText: "2026-06-03T11:00:00+09:00",
+                    organizer: "alex@example.com",
+                    attendees: ["alex@example.com", "blair@example.com"],
+                    descriptionExcerpt: "Agenda",
+                    recurrenceID: "series-1",
+                    confidence: 0.88,
+                    status: .accepted
+                )
+            ],
+            supplementalSources: [
+                SupplementalContextSource(id: "ctx-1", kind: .calendarMetadata, title: "Launch Review", sourceName: "Google Calendar", excerpt: "Agenda", priority: .calendarMetadata, confidence: 0.88)
+            ],
+            meetingIdentity: MeetingIdentity(calendarEventID: "event-1", recurrenceID: "series-1", fallbackFingerprint: "fallback", confidence: 0.88, isConfirmed: true),
+            lastFetchedAt: Date(timeIntervalSince1970: 100),
+            lastError: "previous transient failure"
+        )
+
+        let replayContext = context.cachedForTestRunReplay()
+
+        #expect(replayContext.mcpStatus == .cachedReplay)
+        #expect(replayContext.eventCandidates.first?.id == "event-1")
+        #expect(replayContext.supplementalSources.first?.id == "ctx-1")
+        #expect(replayContext.meetingIdentity?.seriesKey == "calendar:series-1")
+        #expect(replayContext.lastFetchedAt == context.lastFetchedAt)
+        #expect(replayContext.lastError == nil)
+    }
+
     @Test("text attachment reader stores capped excerpt and source metadata")
     func readsCappedAttachmentExcerpt() throws {
         let url = FileManager.default.temporaryDirectory
