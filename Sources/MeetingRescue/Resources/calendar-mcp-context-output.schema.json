@@ -1,0 +1,41 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["events", "linkedSourceCandidates"],
+  "properties": {
+    "events": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "title", "startDateText", "endDateText", "organizer", "attendees", "descriptionExcerpt", "recurrenceID", "confidence"],
+        "properties": {
+          "id": { "type": "string" },
+          "title": { "type": "string" },
+          "startDateText": { "type": "string" },
+          "endDateText": { "type": "string" },
+          "organizer": { "type": ["string", "null"] },
+          "attendees": { "type": "array", "items": { "type": "string" } },
+          "descriptionExcerpt": { "type": "string" },
+          "recurrenceID": { "type": ["string", "null"] },
+          "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+        }
+      }
+    },
+    "linkedSourceCandidates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "title", "url", "sourceName", "confidence"],
+        "properties": {
+          "id": { "type": "string" },
+          "title": { "type": "string" },
+          "url": { "type": "string" },
+          "sourceName": { "type": "string" },
+          "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+        }
+      }
+    }
+  }
+}

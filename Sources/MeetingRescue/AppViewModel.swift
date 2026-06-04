@@ -609,6 +609,8 @@ final class AppViewModel: ObservableObject {
     @Published var settings: AppSettings
     @Published var analysisState = MeetingAnalysisState()
     @Published var analysisStatus: AnalysisRuntimeStatus = .idle
+    @Published var calendarContextStatusMessage = "Google Calendar MCP 확인 전"
+    @Published var isFetchingCalendarContext = false
     @Published var pendingMarkdownReadinessWarnings: [ShareReadinessWarning] = []
     @Published var transcriptUpdatedAt: Date?
     @Published var transcriptRunMode: TranscriptRunMode = .liveWatch
@@ -1269,6 +1271,138 @@ final class AppViewModel: ObservableObject {
         triggerAnalysis(reason: "manual")
     }
 
+    func fetchGoogleCalendarContext() {
+        guard !isFetchingCalendarContext else {
+            return
+        }
+        guard settings.selectedProvider != .customCommand else {
+            analysisState.calendarContext.mcpStatus = .missing
+            analysisState.calendarContext.lastError = "Google Calendar MCP는 Codex 또는 Claude Code provider에서만 사용할 수 있습니다."
+            calendarContextStatusMessage = analysisState.calendarContext.lastError ?? "Google Calendar MCP 설정이 필요합니다."
+            persistCandidateStateChange()
+            return
+        }
+        guard !rawTranscript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            calendarContextStatusMessage = "Calendar context를 가져올 transcript가 없습니다."
+            return
+        }
+
+        isFetchingCalendarContext = true
+        calendarContextStatusMessage = "Google Calendar MCP에서 회의 후보를 가져오는 중"
+        analysisState.calendarContext.mcpStatus = .unknown
+        analysisState.calendarContext.lastError = nil
+
+        let request = CalendarMCPFetchRequest(
+            metadata: metadata,
+            rawTranscriptPrefix: String(rawTranscript.prefix(3_000))
+        )
+        let providerKind = settings.selectedProvider
+        let modelPreset = settings.modelPreset
+        let timeoutSeconds = effectiveAnalysisTimeoutSeconds(for: "calendar-mcp")
+        let schemaURL = calendarContextSchemaURL()
+        let workingDirectoryURL = selectedFolderURL ?? URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+
+        Task { [weak self] in
+            guard let self else {
+                return
+            }
+            do {
+                let result = try await CalendarMCPContextFetcher.fetch(
+                    request: request,
+                    providerKind: providerKind,
+                    modelPreset: modelPreset,
+                    schemaURL: schemaURL,
+                    timeoutSeconds: timeoutSeconds,
+                    workingDirectoryURL: workingDirectoryURL
+                )
+                self.analysisState.calendarContext.mcpStatus = .connected
+                self.analysisState.calendarContext.eventCandidates = result.events
+                self.analysisState.calendarContext.lastFetchedAt = Date()
+                self.analysisState.calendarContext.lastError = nil
+                self.mergeCalendarLinkedSourceCandidates(result.linkedSourceCandidates)
+                self.calendarContextStatusMessage = "Calendar 후보 \(result.events.count)개 · linked source 후보 \(result.linkedSourceCandidates.count)개"
+                self.isFetchingCalendarContext = false
+                self.persistCandidateStateChange()
+            } catch {
+                self.analysisState.calendarContext.mcpStatus = .failed
+                self.analysisState.calendarContext.lastError = error.localizedDescription
+                self.calendarContextStatusMessage = "Calendar MCP 실패: \(error.localizedDescription)"
+                self.isFetchingCalendarContext = false
+                self.persistCandidateStateChange()
+            }
+        }
+    }
+
+    func acceptCalendarEventCandidate(id: String) {
+        guard let index = analysisState.calendarContext.eventCandidates.firstIndex(where: { $0.id == id }) else {
+            return
+        }
+        var candidate = analysisState.calendarContext.eventCandidates[index]
+        candidate.status = .accepted
+        analysisState.calendarContext.eventCandidates[index] = candidate
+        analysisState.calendarContext.meetingIdentity = MeetingIdentity(
+            calendarEventID: candidate.id,
+            recurrenceID: candidate.recurrenceID,
+            fallbackFingerprint: meetingIdentityFallbackFingerprint(),
+            confidence: candidate.confidence,
+            isConfirmed: true
+        )
+        analysisState.calendarContext.supplementalSources.removeAll { $0.id == "calendar:\(candidate.id)" }
+        analysisState.calendarContext.supplementalSources.append(
+            SupplementalContextSource(
+                id: "calendar:\(candidate.id)",
+                kind: .calendarMetadata,
+                title: candidate.title,
+                sourceName: "Google Calendar",
+                excerpt: calendarExcerpt(candidate),
+                priority: .calendarMetadata,
+                confidence: candidate.confidence
+            )
+        )
+        calendarContextStatusMessage = "Calendar event를 meeting identity로 사용합니다."
+        persistCandidateStateChange()
+    }
+
+    func dismissCalendarEventCandidate(id: String) {
+        guard let index = analysisState.calendarContext.eventCandidates.firstIndex(where: { $0.id == id }) else {
+            return
+        }
+        analysisState.calendarContext.eventCandidates[index].status = .dismissed
+        calendarContextStatusMessage = "Calendar 후보를 숨겼습니다."
+        persistCandidateStateChange()
+    }
+
+    func chooseSupplementalContextFile() {
+        let panel = NSOpenPanel()
+        panel.title = "Supplemental Context 첨부"
+        panel.prompt = "첨부"
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        panel.allowedContentTypes = [
+            UTType(filenameExtension: "md") ?? .plainText,
+            .plainText
+        ]
+        panel.directoryURL = activeTranscriptURL?.deletingLastPathComponent() ?? selectedFolderURL
+
+        guard panel.runModal() == .OK, let url = panel.url else {
+            return
+        }
+        attachSupplementalContextFile(url)
+    }
+
+    func attachSupplementalContextFile(_ url: URL) {
+        do {
+            let source = try SupplementalContextReader.source(from: url)
+            analysisState.calendarContext.supplementalSources.removeAll { $0.id == source.id }
+            analysisState.calendarContext.supplementalSources.append(source)
+            calendarContextStatusMessage = "Context 첨부 완료: \(source.sourceName)"
+            persistCandidateStateChange()
+        } catch {
+            calendarContextStatusMessage = "Context 첨부 실패: \(error.localizedDescription)"
+        }
+    }
+
     var canAddLiveBookmark: Bool {
         activeTranscriptURL != nil && !rawTranscriptPreviewLines.isEmpty
     }
@@ -1524,7 +1658,11 @@ final class AppViewModel: ObservableObject {
             finalAnalysisTriggeredForMeetingID = nil
             clearFinalRetryCounts(for: fileURL)
             metadata = MeetingMetadata()
-            analysisState = MeetingAnalysisState()
+            let cachedCalendarContext = stateStore.loadAnalysisState(for: fileURL).calendarContext.cachedForTestRunReplay()
+            analysisState = MeetingAnalysisState(calendarContext: cachedCalendarContext)
+            calendarContextStatusMessage = cachedCalendarContext.hasReusableContext
+                ? "저장된 Calendar context를 Test Run에 적용했습니다."
+                : "Google Calendar MCP 확인 전"
             analysisStatus = .idle
             transcriptUpdatedAt = nil
             updateTestRunProgress(currentLine: 0, totalLines: replayCursor?.totalLines ?? 0)
@@ -2388,7 +2526,8 @@ final class AppViewModel: ObservableObject {
             meetingTypePreset: settings.meetingTypePreset,
             bookmarks: analysisState.bookmarks,
             reason: reason,
-            lastAnalyzedTranscriptCharacterCount: transcriptWindow.lastAnalyzedTranscriptCharacterCount
+            lastAnalyzedTranscriptCharacterCount: transcriptWindow.lastAnalyzedTranscriptCharacterCount,
+            supplementalContextSources: analysisState.calendarContext.supplementalSources
         )
         let contextPlan = AnalysisContextPlanner.makePlan(
             for: request,
@@ -2821,6 +2960,45 @@ final class AppViewModel: ObservableObject {
         persistCandidateStateChange()
     }
 
+    private func mergeCalendarLinkedSourceCandidates(_ candidates: [CalendarLinkedSourceCandidate]) {
+        analysisState.calendarContext.supplementalSources.removeAll { $0.kind == .linkedSourceCandidate }
+        analysisState.calendarContext.supplementalSources.append(contentsOf: candidates.map { candidate in
+            SupplementalContextSource(
+                id: "calendar-link:\(candidate.id)",
+                kind: .linkedSourceCandidate,
+                title: candidate.title,
+                sourceName: candidate.sourceName,
+                excerpt: candidate.url,
+                priority: .linkedSourceCandidate,
+                confidence: candidate.confidence,
+                isAccepted: false
+            )
+        })
+    }
+
+    private func calendarExcerpt(_ candidate: CalendarEventCandidate) -> String {
+        [
+            "title: \(candidate.title)",
+            "time: \(candidate.startDateText)-\(candidate.endDateText)",
+            candidate.organizer.map { "organizer: \($0)" },
+            candidate.attendees.isEmpty ? nil : "attendees: \(candidate.attendees.joined(separator: ", "))",
+            candidate.descriptionExcerpt.isEmpty ? nil : "description: \(candidate.descriptionExcerpt)"
+        ]
+        .compactMap { $0 }
+        .joined(separator: "\n")
+    }
+
+    private func meetingIdentityFallbackFingerprint() -> String {
+        [
+            metadata.room ?? "",
+            metadata.displayTitle,
+            metadata.participants.sorted().joined(separator: ",")
+        ]
+        .joined(separator: "|")
+        .folding(options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive], locale: .current)
+        .lowercased()
+    }
+
     private func persistCandidateStateChange() {
         analysisState.updatedAt = Date()
         if let activeTranscriptURL {
@@ -2908,6 +3086,10 @@ final class AppViewModel: ObservableObject {
 
     private func analysisPatchSchemaURL() -> URL {
         resourceURL(named: "analysis-patch-output.schema.json")
+    }
+
+    private func calendarContextSchemaURL() -> URL {
+        resourceURL(named: "calendar-mcp-context-output.schema.json")
     }
 
     private func resourceURL(named fileName: String) -> URL {

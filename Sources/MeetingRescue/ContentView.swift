@@ -7,6 +7,7 @@ private enum IntelligenceMode: String, CaseIterable, Identifiable {
     case timeline = "흐름"
     case candidates = "후보"
     case workflow = "워크플로우"
+    case context = "컨텍스트"
 
     var id: String { rawValue }
 }
@@ -839,13 +840,19 @@ struct ContentView: View {
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
-                .frame(width: 300)
+                .frame(width: 360)
             }
             .padding(.trailing, 12)
 
             Divider().overlay(Color.smoothLine)
 
-            if let snapshot = viewModel.analysisState.latestSnapshot {
+            if intelligenceMode == .context {
+                ScrollView {
+                    contextPanel()
+                        .padding(16)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            } else if let snapshot = viewModel.analysisState.latestSnapshot {
                 ScrollView {
                     Group {
                         switch intelligenceMode {
@@ -861,6 +868,8 @@ struct ContentView: View {
                             }
                         case .workflow:
                             workflow(viewModel.personalWorkflowSnapshot)
+                        case .context:
+                            contextPanel()
                         }
                     }
                     .padding(16)
@@ -903,6 +912,153 @@ struct ContentView: View {
             actionLedger(snapshot.actionLedgerItems)
             carryOverQuestions(snapshot.carryOverCandidates)
         }
+    }
+
+    private func contextPanel() -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            calendarMCPStatusCard()
+            calendarEventCandidates(viewModel.analysisState.calendarContext.eventCandidates)
+            supplementalContextSources(viewModel.analysisState.calendarContext.supplementalSources)
+        }
+    }
+
+    private func calendarMCPStatusCard() -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                sectionHeader("Google Calendar MCP", systemImage: "calendar.badge.clock")
+                Button {
+                    viewModel.fetchGoogleCalendarContext()
+                } label: {
+                    Label(viewModel.isFetchingCalendarContext ? "가져오는 중" : "가져오기", systemImage: "arrow.clockwise")
+                }
+                .buttonStyle(.borderless)
+                .disabled(viewModel.isFetchingCalendarContext)
+
+                Button {
+                    viewModel.chooseSupplementalContextFile()
+                } label: {
+                    Label("첨부", systemImage: "paperclip")
+                }
+                .buttonStyle(.borderless)
+            }
+            Text(viewModel.calendarContextStatusMessage)
+                .font(.caption)
+                .foregroundStyle(Color.smoothMuted)
+                .fixedSize(horizontal: false, vertical: true)
+            if let identity = viewModel.analysisState.calendarContext.meetingIdentity {
+                Text("Identity: \(identity.seriesKey)")
+                    .font(.caption.monospaced())
+                    .foregroundStyle(Color.smoothMuted)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+        }
+        .smoothCard(tint: Color.smoothAccent)
+    }
+
+    private func calendarEventCandidates(_ candidates: [CalendarEventCandidate]) -> some View {
+        let visibleCandidates = candidates.filter { $0.status != .dismissed }
+        return VStack(alignment: .leading, spacing: 10) {
+            sectionHeader("Calendar Event Candidates", systemImage: "calendar")
+            if visibleCandidates.isEmpty {
+                placeholderLine("Google Calendar MCP에서 가져온 후보가 없습니다.")
+            }
+            ForEach(visibleCandidates) { candidate in
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(alignment: .top, spacing: 8) {
+                        Image(systemName: candidate.status == .accepted ? "checkmark.circle.fill" : "calendar")
+                            .foregroundStyle(candidate.status == .accepted ? Color.smoothMint : Color.smoothAccent)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(candidate.title)
+                                .font(.callout.weight(.semibold))
+                                .foregroundStyle(Color.smoothInk)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Text("\(candidate.startDateText)-\(candidate.endDateText)")
+                                .font(.caption)
+                                .foregroundStyle(Color.smoothMuted)
+                                .fixedSize(horizontal: false, vertical: true)
+                            if !candidate.descriptionExcerpt.isEmpty {
+                                Text(candidate.descriptionExcerpt)
+                                    .font(.caption)
+                                    .foregroundStyle(Color.smoothMuted)
+                                    .lineLimit(3)
+                            }
+                        }
+                    }
+                    HStack(spacing: 8) {
+                        Button {
+                            viewModel.acceptCalendarEventCandidate(id: candidate.id)
+                        } label: {
+                            Label(candidate.status == .accepted ? "사용 중" : "사용", systemImage: "checkmark.circle")
+                        }
+                        .buttonStyle(.borderless)
+                        .disabled(candidate.status == .accepted)
+
+                        Button {
+                            viewModel.dismissCalendarEventCandidate(id: candidate.id)
+                        } label: {
+                            Label("숨기기", systemImage: "xmark.circle")
+                        }
+                        .buttonStyle(.borderless)
+                    }
+                    .font(.caption.weight(.semibold))
+                }
+                .padding(10)
+                .background(Color.smoothSurface, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(Color.smoothLine, lineWidth: 1)
+                )
+            }
+        }
+        .smoothCard(tint: Color.smoothSky)
+    }
+
+    private func supplementalContextSources(_ sources: [SupplementalContextSource]) -> some View {
+        let acceptedSources = sources.sortedForPrompt()
+        let candidateSources = sources.filter { !$0.isAccepted }
+            .sorted { $0.confidence > $1.confidence }
+        return VStack(alignment: .leading, spacing: 10) {
+            sectionHeader("Supplemental Context", systemImage: "doc.text.magnifyingglass")
+            if acceptedSources.isEmpty && candidateSources.isEmpty {
+                placeholderLine("Prompt에 주입하거나 확인할 context가 없습니다.")
+            }
+            ForEach(acceptedSources) { source in
+                supplementalContextSourceRow(source, isCandidateOnly: false)
+            }
+            ForEach(candidateSources) { source in
+                supplementalContextSourceRow(source, isCandidateOnly: true)
+            }
+        }
+        .smoothCard()
+    }
+
+    private func supplementalContextSourceRow(_ source: SupplementalContextSource, isCandidateOnly: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(source.title)
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(Color.smoothInk)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(isCandidateOnly ? "후보" : "주입")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(isCandidateOnly ? Color.smoothMuted : Color.smoothMint)
+            }
+            Text("\(source.sourceName) · priority \(source.priority.rawValue) · confidence \(String(format: "%.2f", source.confidence))")
+                .font(.caption)
+                .foregroundStyle(Color.smoothMuted)
+                .fixedSize(horizontal: false, vertical: true)
+            Text(source.excerpt)
+                .font(.caption)
+                .foregroundStyle(Color.smoothMuted)
+                .lineLimit(4)
+        }
+        .padding(10)
+        .background(Color.smoothSurface, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.smoothLine, lineWidth: 1)
+        )
     }
 
     private func decisionCoach(_ cards: [DecisionCoachCard]) -> some View {

@@ -7,6 +7,7 @@ struct SchemaTests {
     func strictRequiredKeys() throws {
         try assertStrictRequiredKeys(inResource: "analysis-output.schema.json")
         try assertStrictRequiredKeys(inResource: "analysis-patch-output.schema.json")
+        try assertStrictRequiredKeys(inResource: "calendar-mcp-context-output.schema.json")
     }
 
     private func assertStrictRequiredKeys(inResource fileName: String) throws {

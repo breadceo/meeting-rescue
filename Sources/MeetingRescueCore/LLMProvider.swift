@@ -1244,7 +1244,7 @@ private extension AnalysisRunTraceEvent {
     }
 }
 
-private enum ProcessRunner {
+enum ProcessRunner {
     static func run(
         executableURL: URL,
         arguments: [String],

@@ -1184,6 +1184,7 @@ public struct MeetingAnalysisState: Codable, Equatable, Sendable {
     public var bookmarks: [MeetingBookmark]
     public var dismissedCarryOverQuestionIDs: Set<String>
     public var resolvedCarryOverQuestionIDs: Set<String>
+    public var calendarContext: CalendarContextState
 
     public init(
         latestSnapshot: AnalysisSnapshot? = nil,
@@ -1199,7 +1200,8 @@ public struct MeetingAnalysisState: Codable, Equatable, Sendable {
         analyzedTranscriptCharacterCount: Int = 0,
         bookmarks: [MeetingBookmark] = [],
         dismissedCarryOverQuestionIDs: Set<String> = [],
-        resolvedCarryOverQuestionIDs: Set<String> = []
+        resolvedCarryOverQuestionIDs: Set<String> = [],
+        calendarContext: CalendarContextState = CalendarContextState()
     ) {
         self.latestSnapshot = latestSnapshot
         self.confirmedCandidateIDs = confirmedCandidateIDs
@@ -1215,6 +1217,7 @@ public struct MeetingAnalysisState: Codable, Equatable, Sendable {
         self.bookmarks = bookmarks
         self.dismissedCarryOverQuestionIDs = dismissedCarryOverQuestionIDs
         self.resolvedCarryOverQuestionIDs = resolvedCarryOverQuestionIDs
+        self.calendarContext = calendarContext
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -1232,6 +1235,7 @@ public struct MeetingAnalysisState: Codable, Equatable, Sendable {
         case bookmarks
         case dismissedCarryOverQuestionIDs
         case resolvedCarryOverQuestionIDs
+        case calendarContext
     }
 
     public init(from decoder: Decoder) throws {
@@ -1250,7 +1254,8 @@ public struct MeetingAnalysisState: Codable, Equatable, Sendable {
             analyzedTranscriptCharacterCount: (try? container.decode(Int.self, forKey: .analyzedTranscriptCharacterCount)) ?? 0,
             bookmarks: (try? container.decode([MeetingBookmark].self, forKey: .bookmarks)) ?? [],
             dismissedCarryOverQuestionIDs: (try? container.decode(Set<String>.self, forKey: .dismissedCarryOverQuestionIDs)) ?? [],
-            resolvedCarryOverQuestionIDs: (try? container.decode(Set<String>.self, forKey: .resolvedCarryOverQuestionIDs)) ?? []
+            resolvedCarryOverQuestionIDs: (try? container.decode(Set<String>.self, forKey: .resolvedCarryOverQuestionIDs)) ?? [],
+            calendarContext: (try? container.decode(CalendarContextState.self, forKey: .calendarContext)) ?? CalendarContextState()
         )
     }
 
@@ -1471,6 +1476,7 @@ public struct AnalysisRequest: Equatable, Sendable {
     public var reason: String
     public var lastAnalyzedTranscriptCharacterCount: Int
     public var contextPlan: AnalysisContextPlan?
+    public var supplementalContextSources: [SupplementalContextSource]
 
     public init(
         meetingID: String,
@@ -1485,7 +1491,8 @@ public struct AnalysisRequest: Equatable, Sendable {
         bookmarks: [MeetingBookmark] = [],
         reason: String = "",
         lastAnalyzedTranscriptCharacterCount: Int = 0,
-        contextPlan: AnalysisContextPlan? = nil
+        contextPlan: AnalysisContextPlan? = nil,
+        supplementalContextSources: [SupplementalContextSource] = []
     ) {
         self.meetingID = meetingID
         self.metadata = metadata
@@ -1500,6 +1507,7 @@ public struct AnalysisRequest: Equatable, Sendable {
         self.reason = reason
         self.lastAnalyzedTranscriptCharacterCount = lastAnalyzedTranscriptCharacterCount
         self.contextPlan = contextPlan
+        self.supplementalContextSources = supplementalContextSources
     }
 
     public var outputMode: AnalysisOutputMode {
