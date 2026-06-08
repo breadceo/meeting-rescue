@@ -1,0 +1,49 @@
+Package.swift
+  h_d82ccb34241a0d 39-43
+Sources/MeetingRescue/AppViewModel.swift
+  h_d82ccb34241a0d 308-313,631,633-635,683,706,1303-1387,1795-1796,3118-3193
+Sources/MeetingRescue/ContentView.swift
+  h_d82ccb34241a0d 2978-2984,3029-3063
+Sources/MeetingRescue/GoogleCalendarIntegration.swift
+  h_d82ccb34241a0d 1-683
+Sources/MeetingRescue/GoogleCalendarSmokeRunner.swift
+  h_d82ccb34241a0d 1-256
+Sources/MeetingRescue/MeetingRescueApp.swift
+  h_d82ccb34241a0d 8-11
+Sources/MeetingRescueCore/GoogleCalendarAPIModels.swift
+  h_d82ccb34241a0d 1-179
+Sources/MeetingRescueCore/GoogleCalendarContextMapper.swift
+  h_d82ccb34241a0d 1-207
+Sources/MeetingRescueCore/GoogleCalendarOAuthModels.swift
+  h_d82ccb34241a0d 1-198
+Sources/MeetingRescueCore/GoogleCalendarTokenState.swift
+  h_d82ccb34241a0d 1-68
+Tests/MeetingRescueCoreTests/GoogleCalendarAPIModelsTests.swift
+  h_d82ccb34241a0d 1-77
+Tests/MeetingRescueCoreTests/GoogleCalendarContextMapperTests.swift
+  h_d82ccb34241a0d 1-87
+Tests/MeetingRescueCoreTests/GoogleCalendarOAuthModelsTests.swift
+  h_d82ccb34241a0d 1-123
+Tests/MeetingRescueCoreTests/GoogleCalendarTokenStateTests.swift
+  h_d82ccb34241a0d 1-68
+Tests/MeetingRescueTests/GoogleCalendarOAuthLoopbackServerTests.swift
+  h_d82ccb34241a0d 1-39
+Tests/google_calendar_oauth_poc_tests.py
+  h_d82ccb34241a0d 1-125
+docs/superpowers/plans/2026-06-08-direct-google-calendar-api-oauth-closeout-goal.md
+  h_d82ccb34241a0d 1-167
+scripts/build_app.sh
+  h_d82ccb34241a0d 29,59-67
+scripts/google_calendar_oauth_poc.py
+  h_d82ccb34241a0d 1-439
+---
+{
+  "schema_version": "zax-attestation/1.1.0",
+  "base_commit_sha": "10005dc8dbe09a5256f274d5a5578cf334f76b1e",
+  "prompts": {},
+  "humans": {
+    "h_d82ccb34241a0d": {
+      "author": "ethan@zigbang.com"
+    }
+  }
+}
