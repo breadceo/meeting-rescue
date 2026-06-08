@@ -70,25 +70,64 @@ enum GoogleCalendarIntegrationError: LocalizedError {
 
 enum GoogleCalendarOAuthConfigLoader {
     static let environmentPathKey = "MEETING_RESCUE_GOOGLE_CALENDAR_OAUTH_CONFIG"
+    private static let resourceBundleName = "MeetingRescue_MeetingRescue.bundle"
+    private static let configResourceName = "GoogleCalendarOAuthConfig"
+    private static let configFileName = "\(configResourceName).json"
 
     static func load(
-        bundle: Bundle = .module,
-        environment: [String: String] = ProcessInfo.processInfo.environment
+        bundle: Bundle? = nil,
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        runtimeResourceRoots: [URL] = Self.defaultRuntimeResourceRoots()
     ) throws -> GoogleCalendarOAuthClientConfig {
         if let path = environment[environmentPathKey],
            !path.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return try load(url: URL(fileURLWithPath: path))
         }
 
-        if let url = bundle.url(forResource: "GoogleCalendarOAuthConfig", withExtension: "json") {
-            return try load(url: url)
-        }
-
-        if let url = Bundle.main.url(forResource: "GoogleCalendarOAuthConfig", withExtension: "json") {
-            return try load(url: url)
+        for url in candidateConfigURLs(bundle: bundle, runtimeResourceRoots: runtimeResourceRoots) {
+            if FileManager.default.fileExists(atPath: url.path) {
+                return try load(url: url)
+            }
         }
 
         throw GoogleCalendarIntegrationError.missingConfig
+    }
+
+    private static func candidateConfigURLs(bundle: Bundle?, runtimeResourceRoots: [URL]) -> [URL] {
+        var candidates = [URL]()
+        if let url = bundle?.url(forResource: configResourceName, withExtension: "json") {
+            candidates.append(url)
+        }
+        if let url = Bundle.main.url(forResource: configResourceName, withExtension: "json") {
+            candidates.append(url)
+        }
+        for root in runtimeResourceRoots {
+            candidates.append(
+                root
+                    .appendingPathComponent(resourceBundleName, isDirectory: true)
+                    .appendingPathComponent(configFileName)
+            )
+            candidates.append(
+                root
+                    .appendingPathComponent(resourceBundleName, isDirectory: true)
+                    .appendingPathComponent("Resources", isDirectory: true)
+                    .appendingPathComponent(configFileName)
+            )
+            candidates.append(root.appendingPathComponent(configFileName))
+        }
+        return candidates.reduce(into: [URL]()) { uniqueCandidates, url in
+            if !uniqueCandidates.contains(url) {
+                uniqueCandidates.append(url)
+            }
+        }
+    }
+
+    private static func defaultRuntimeResourceRoots() -> [URL] {
+        [
+            Bundle.main.resourceURL,
+            Bundle.main.bundleURL,
+            Bundle.main.executableURL?.deletingLastPathComponent()
+        ].compactMap { $0 }
     }
 
     private static func load(url: URL) throws -> GoogleCalendarOAuthClientConfig {

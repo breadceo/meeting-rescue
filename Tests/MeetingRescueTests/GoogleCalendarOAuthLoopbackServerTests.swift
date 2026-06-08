@@ -3,6 +3,41 @@ import Testing
 @testable import MeetingRescue
 
 struct GoogleCalendarOAuthLoopbackServerTests {
+    @Test func configLoaderReadsPackagedAppResourceBundleConfig() throws {
+        let temporaryRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("meeting-rescue-oauth-loader-\(UUID().uuidString)", isDirectory: true)
+        let emptyBundleURL = temporaryRoot.appendingPathComponent("Empty.bundle", isDirectory: true)
+        let appResourcesURL = temporaryRoot.appendingPathComponent("Contents/Resources", isDirectory: true)
+        let packagedConfigURL = appResourcesURL
+            .appendingPathComponent("MeetingRescue_MeetingRescue.bundle", isDirectory: true)
+            .appendingPathComponent("GoogleCalendarOAuthConfig.json")
+        try FileManager.default.createDirectory(
+            at: packagedConfigURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try FileManager.default.createDirectory(at: emptyBundleURL, withIntermediateDirectories: true)
+        try """
+        {
+          "clientID": "packaged-client.apps.googleusercontent.com",
+          "clientSecret": "packaged-secret",
+          "redirectHost": "localhost"
+        }
+        """.write(to: packagedConfigURL, atomically: true, encoding: .utf8)
+        defer {
+            try? FileManager.default.removeItem(at: temporaryRoot)
+        }
+
+        let emptyBundle = try #require(Bundle(path: emptyBundleURL.path))
+        let config = try GoogleCalendarOAuthConfigLoader.load(
+            bundle: emptyBundle,
+            environment: [:],
+            runtimeResourceRoots: [appResourcesURL]
+        )
+
+        #expect(config.clientID == "packaged-client.apps.googleusercontent.com")
+        #expect(config.clientSecret == "packaged-secret")
+    }
+
     @Test func startWaitsUntilEphemeralPortIsAssigned() throws {
         for _ in 0..<10 {
             let server = try GoogleCalendarOAuthLoopbackServer()

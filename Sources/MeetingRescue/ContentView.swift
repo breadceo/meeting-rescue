@@ -1044,7 +1044,6 @@ struct ContentView: View {
     private func contextPanel() -> some View {
         VStack(alignment: .leading, spacing: 12) {
             googleCalendarAPIStatusCard()
-            calendarMCPStatusCard()
             calendarEventCandidates(viewModel.analysisState.calendarContext.eventCandidates)
             supplementalContextSources(viewModel.analysisState.calendarContext.supplementalSources)
         }
@@ -1129,7 +1128,7 @@ struct ContentView: View {
         return VStack(alignment: .leading, spacing: 10) {
             sectionHeader("Calendar Event Candidates", systemImage: "calendar")
             if visibleCandidates.isEmpty {
-                placeholderLine("Google Calendar MCP에서 가져온 후보가 없습니다.")
+                placeholderLine("Google Calendar에서 가져온 후보가 없습니다.")
             }
             ForEach(visibleCandidates) { candidate in
                 VStack(alignment: .leading, spacing: 6) {
