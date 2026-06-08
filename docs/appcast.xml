@@ -8,28 +8,26 @@
     <description>Meeting Rescue release updates.</description>
     <language>ko</language>
     <item>
-      <title>Meeting Rescue 0.1.13</title>
+      <title>Meeting Rescue 0.1.14</title>
       <description><![CDATA[
-        <h2>Meeting Rescue v0.1.13</h2>
+        <h2>Meeting Rescue v0.1.14</h2>
         <ul>
-        <li>Live Watch 분석이 성공했는데도 현재 이슈가 `-`로 남을 수 있던 문제를 수정했습니다.</li>
-        <li>첫 live patch 분석에서 이전 현재 이슈가 비어 있으면 새 transcript chunk의 핵심 논점을 반드시 현재 이슈로 채우도록 보강했습니다.</li>
-        <li>LLM provider가 여전히 `currentIssue`를 비워 반환해도 topic, 결정 후보, 액션 후보, note 근거로 현재 이슈를 보강하도록 했습니다.</li>
+        <li>릴리즈 노트 화면이 packaged app에서 resource bundle을 찾지 못하면 앱이 종료될 수 있던 문제를 수정했습니다.</li>
         </ul>
-        <p><a href="https://github.com/breadceo/meeting-rescue/releases/tag/v0.1.13">Release notes</a></p>
+        <p><a href="https://github.com/breadceo/meeting-rescue/releases/tag/v0.1.14">Release notes</a></p>
       ]]></description>
-      <pubDate>Thu, 28 May 2026 11:08:28 +0900</pubDate>
-      <sparkle:version>53</sparkle:version>
-      <sparkle:shortVersionString>0.1.13</sparkle:shortVersionString>
+      <pubDate>Thu, 04 Jun 2026 09:52:09 +0900</pubDate>
+      <sparkle:version>55</sparkle:version>
+      <sparkle:shortVersionString>0.1.14</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
       <enclosure
-        url="https://github.com/breadceo/meeting-rescue/releases/download/v0.1.13/Meeting-Rescue-v0.1.13-notarized.dmg"
-        sparkle:edSignature="u9TzbypNXsv33Wo8HZFHAtQGyhlJ/QDmQ7xegzSXOiFvdI7kKrjjNbCpUxEWCbFQimbV+6iM9/bbtjGYP4fnAw==" length="6431507"
+        url="https://github.com/breadceo/meeting-rescue/releases/download/v0.1.14/Meeting-Rescue-v0.1.14-notarized.dmg"
+        sparkle:edSignature="8TcQcZJMdGzMMnpOseCBsq33uuMdgMdFrPl+LkNvObXrgtO5inMJEIIpvtsQkpSlhs4Wdjr6KFgZC46VYZsvCw==" length="6431325"
         type="application/x-apple-diskimage" />
     </item>
   </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: HltF8BcmTkWa3yOJ4puNB2haKQBTx/+ErrMvED/hR0a59/GjgihPOzuKLYXw5NySr3VNsFPoR7EdiItuapGaDQ==
-length: 1764
+edSignature: IgBvy+flETpsVt0M/C6uOrDcSNXw3Sa11k4g/ueqdRec4lxeHzxBsiJOSwdBmY65kTvsvsNQIYLcQ9y2/urtCQ==
+length: 1425
 -->
