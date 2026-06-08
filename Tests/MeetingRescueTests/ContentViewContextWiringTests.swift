@@ -23,6 +23,23 @@ struct ContentViewContextWiringTests {
         #expect(!contextPanel.contains("calendarMCPStatusCard()"))
         #expect(!eventCandidates.contains("Google Calendar MCP"))
     }
+
+    @Test("context panel exposes Google Calendar API controls")
+    func contextPanelExposesGoogleCalendarAPIControls() throws {
+        let sourceURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent("Sources/MeetingRescue/ContentView.swift")
+        let source = try String(contentsOf: sourceURL, encoding: .utf8)
+        let contextPanel = try #require(source.slice(from: "private func contextPanel()", to: "private func googleCalendarAPIStatusCard()"))
+        let apiCard = try #require(source.slice(from: "private func googleCalendarAPIStatusCard()", to: "private var googleCalendarContextActions"))
+        let apiActions = try #require(source.slice(from: "private var googleCalendarContextActions", to: "private func calendarMCPStatusCard()"))
+
+        #expect(contextPanel.contains("googleCalendarAPIStatusCard()"))
+        #expect(apiCard.contains(#"sectionHeader("Google Calendar API""#))
+        #expect(apiCard.contains("googleCalendarContextActions"))
+        #expect(apiActions.contains("connectGoogleCalendar()"))
+        #expect(apiActions.contains("fetchGoogleCalendarAPIContext()"))
+        #expect(apiActions.contains("disconnectGoogleCalendar()"))
+    }
 }
 
 private extension String {

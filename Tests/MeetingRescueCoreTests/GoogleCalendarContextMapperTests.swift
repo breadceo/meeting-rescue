@@ -84,4 +84,106 @@ struct GoogleCalendarContextMapperTests {
         #expect(state.meetingIdentity == nil)
         #expect(state.supplementalSources.isEmpty)
     }
+
+    @Test("exact room and time match outranks participant-only overlap")
+    func exactRoomAndTimeOutranksParticipantOnlyOverlap() throws {
+        let response = GoogleCalendarEventsListResponse(items: [
+            GoogleCalendarEvent(
+                id: "participant-title-only",
+                summary: "Product Planning",
+                start: GoogleCalendarEventTime(dateTime: "2026-06-08T11:00:00+09:00"),
+                end: GoogleCalendarEventTime(dateTime: "2026-06-08T12:00:00+09:00"),
+                attendees: [GoogleCalendarPerson(displayName: "Ethan")],
+                location: "Zigbang(2F)"
+            ),
+            GoogleCalendarEvent(
+                id: "exact-room-time",
+                summary: "Different Calendar Title",
+                start: GoogleCalendarEventTime(dateTime: "2026-06-08T11:00:00+09:00"),
+                end: GoogleCalendarEventTime(dateTime: "2026-06-08T12:00:00+09:00"),
+                location: "Zigbang(2F)_Meeting Room L3"
+            )
+        ])
+
+        let state = GoogleCalendarContextMapper.map(
+            response,
+            metadata: MeetingMetadata(
+                room: "Zigbang(2F)_Meeting Room L3",
+                dateTime: "2026-06-08 11:05",
+                participants: ["Ethan"]
+            ),
+            meetingStart: ISO8601DateFormatter().date(from: "2026-06-08T11:00:00+09:00"),
+            meetingEnd: ISO8601DateFormatter().date(from: "2026-06-08T12:00:00+09:00"),
+            fetchedAt: Date(timeIntervalSince1970: 1_000)
+        )
+
+        #expect(Array(state.eventCandidates.map(\.id).prefix(2)) == ["google:exact-room-time", "google:participant-title-only"])
+        #expect(state.eventCandidates[0].status == CalendarContextCandidateStatus.accepted)
+        #expect(state.eventCandidates[1].status == CalendarContextCandidateStatus.candidate)
+        #expect(state.meetingIdentity?.calendarEventID == "google:exact-room-time")
+    }
+
+    @Test("events without useful overlap are not surfaced as calendar candidates")
+    func dropsEventsWithoutUsefulOverlap() {
+        let response = GoogleCalendarEventsListResponse(items: [
+            GoogleCalendarEvent(
+                id: "irrelevant",
+                summary: "Unrelated Offsite",
+                start: GoogleCalendarEventTime(dateTime: "2026-06-08T15:00:00+09:00"),
+                end: GoogleCalendarEventTime(dateTime: "2026-06-08T16:00:00+09:00"),
+                attendees: [GoogleCalendarPerson(displayName: "Morgan")],
+                location: "Other Room"
+            )
+        ])
+
+        let state = GoogleCalendarContextMapper.map(
+            response,
+            metadata: MeetingMetadata(
+                room: "Zigbang(2F)_Meeting Room L3",
+                dateTime: "2026-06-08 11:05",
+                participants: ["Ethan"]
+            ),
+            meetingStart: ISO8601DateFormatter().date(from: "2026-06-08T11:00:00+09:00"),
+            meetingEnd: ISO8601DateFormatter().date(from: "2026-06-08T12:00:00+09:00"),
+            fetchedAt: Date(timeIntervalSince1970: 1_000)
+        )
+
+        #expect(state.eventCandidates.isEmpty)
+        #expect(state.meetingIdentity == nil)
+        #expect(state.supplementalSources.isEmpty)
+    }
+
+    @Test("calendar description links become unaccepted supplemental context candidates")
+    func mapsDescriptionLinksToSupplementalContextCandidates() throws {
+        let response = GoogleCalendarEventsListResponse(items: [
+            GoogleCalendarEvent(
+                id: "link-rich",
+                summary: "Weekly Product Sync",
+                start: GoogleCalendarEventTime(dateTime: "2026-06-08T11:00:00+09:00"),
+                end: GoogleCalendarEventTime(dateTime: "2026-06-08T12:00:00+09:00"),
+                location: "Zigbang(2F)_Meeting Room L3",
+                description: """
+                Agenda:
+                - review open launch questions
+                Spec: https://docs.google.com/document/d/sanitized-doc-id/edit
+                Board: https://example.com/team/board?item=42
+                """
+            )
+        ])
+
+        let state = GoogleCalendarContextMapper.map(
+            response,
+            metadata: MeetingMetadata(room: "Zigbang(2F)_Meeting Room L3", dateTime: "2026-06-08 11:05"),
+            meetingStart: ISO8601DateFormatter().date(from: "2026-06-08T11:00:00+09:00"),
+            meetingEnd: ISO8601DateFormatter().date(from: "2026-06-08T12:00:00+09:00"),
+            fetchedAt: Date(timeIntervalSince1970: 1_000)
+        )
+
+        let linkedSources = state.supplementalSources.filter { $0.kind == .linkedSourceCandidate }
+        #expect(linkedSources.count == 2)
+        #expect(linkedSources.allSatisfy { !$0.isAccepted })
+        #expect(linkedSources.map(\.excerpt).contains("https://docs.google.com/document/d/sanitized-doc-id/edit"))
+        #expect(linkedSources.map(\.excerpt).contains("https://example.com/team/board?item=42"))
+        #expect(linkedSources.allSatisfy { $0.priority == .linkedSourceCandidate })
+    }
 }

@@ -8,13 +8,16 @@ public enum GoogleCalendarContextMapper {
         meetingEnd: Date?,
         fetchedAt: Date = Date()
     ) -> CalendarContextState {
-        let mapped = response.items.map { event -> CalendarEventCandidate in
+        let mapped = response.items.compactMap { event -> CalendarEventCandidate? in
             let confidence = confidence(
                 for: event,
                 metadata: metadata,
                 meetingStart: meetingStart,
                 meetingEnd: meetingEnd
             )
+            guard confidence > 0.1 else {
+                return nil
+            }
             return CalendarEventCandidate(
                 id: "google:\(event.id)",
                 title: event.summary,
@@ -39,7 +42,10 @@ public enum GoogleCalendarContextMapper {
         return CalendarContextState(
             mcpStatus: .connected,
             eventCandidates: sorted,
-            supplementalSources: accepted.map { [supplementalSource(for: $0, location: location(for: $0, in: response))] } ?? [],
+            supplementalSources: accepted.map { candidate in
+                [supplementalSource(for: candidate, location: location(for: candidate, in: response))]
+                    + linkedSourceCandidates(for: candidate)
+            } ?? [],
             meetingIdentity: accepted.map {
                 MeetingIdentity(
                     calendarEventID: $0.id,
@@ -101,6 +107,64 @@ public enum GoogleCalendarContextMapper {
         ]
         .compactMap { $0 }
         .joined(separator: "\n")
+    }
+
+    private static func linkedSourceCandidates(for candidate: CalendarEventCandidate) -> [SupplementalContextSource] {
+        links(in: candidate.descriptionExcerpt).enumerated().map { index, link in
+            SupplementalContextSource(
+                id: "calendar-link:\(candidate.id):\(index + 1)",
+                kind: .linkedSourceCandidate,
+                title: linkTitle(for: link, index: index),
+                sourceName: sourceName(for: link),
+                excerpt: link,
+                priority: .linkedSourceCandidate,
+                confidence: candidate.confidence,
+                isAccepted: false
+            )
+        }
+    }
+
+    private static func links(in value: String) -> [String] {
+        guard let regex = try? NSRegularExpression(pattern: #"https?://[^\s<>)"]+"#) else {
+            return []
+        }
+        let range = NSRange(value.startIndex..<value.endIndex, in: value)
+        let matches = regex.matches(in: value, range: range)
+        var links: [String] = []
+        for match in matches {
+            guard let matchRange = Range(match.range, in: value) else {
+                continue
+            }
+            let link = String(value[matchRange])
+                .trimmingCharacters(in: CharacterSet(charactersIn: ".,;:!?]}'\""))
+            if !links.contains(link) {
+                links.append(link)
+            }
+        }
+        return links
+    }
+
+    private static func sourceName(for link: String) -> String {
+        guard let host = URL(string: link)?.host?.lowercased() else {
+            return "Calendar Link"
+        }
+        if host.contains("docs.google.com") {
+            return "Google Docs"
+        }
+        if host.contains("slack.com") {
+            return "Slack"
+        }
+        if host.contains("atlassian.net") || host.contains("jira") {
+            return "Jira"
+        }
+        return host
+    }
+
+    private static func linkTitle(for link: String, index: Int) -> String {
+        if let host = URL(string: link)?.host, !host.isEmpty {
+            return "Calendar linked source \(index + 1): \(host)"
+        }
+        return "Calendar linked source \(index + 1)"
     }
 
     private static func location(for candidate: CalendarEventCandidate, in response: GoogleCalendarEventsListResponse) -> String? {

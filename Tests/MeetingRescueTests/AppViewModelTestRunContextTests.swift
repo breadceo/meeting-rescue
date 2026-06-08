@@ -25,6 +25,25 @@ struct AppViewModelTestRunContextTests {
         let stateStore = ApplicationStateStore(rootURL: rootURL.appendingPathComponent("state", isDirectory: true))
         let savedContext = CalendarContextState(
             mcpStatus: .connected,
+            eventCandidates: [
+                CalendarEventCandidate(
+                    id: "google:event-1",
+                    title: "원오빌 통합광고 싱크업",
+                    startDateText: "2026-06-08T11:30:00+09:00",
+                    endDateText: "2026-06-08T12:00:00+09:00",
+                    recurrenceID: "series-1",
+                    confidence: 0.92,
+                    status: .accepted
+                ),
+                CalendarEventCandidate(
+                    id: "google:event-ignored",
+                    title: "다른 회의",
+                    startDateText: "2026-06-08T11:30:00+09:00",
+                    endDateText: "2026-06-08T12:00:00+09:00",
+                    confidence: 0.45,
+                    status: .dismissed
+                )
+            ],
             supplementalSources: [
                 SupplementalContextSource(
                     id: "calendar:sync",
@@ -69,8 +88,33 @@ struct AppViewModelTestRunContextTests {
 
         #expect(viewModel.transcriptRunMode == .testRun)
         #expect(viewModel.analysisState.calendarContext.mcpStatus == .cachedReplay)
+        #expect(viewModel.analysisState.calendarContext.eventCandidates == savedContext.eventCandidates)
         #expect(viewModel.analysisState.calendarContext.supplementalSources == savedContext.supplementalSources)
         #expect(viewModel.analysisState.calendarContext.meetingIdentity?.seriesKey == "calendar:series-1")
         #expect(viewModel.calendarContextStatusMessage == "저장된 Google Calendar context를 Test Run에 적용했습니다.")
+    }
+
+    @Test("Test Run start path does not fetch live Google Calendar or Calendar MCP context")
+    func testRunStartPathDoesNotFetchLiveCalendarContext() throws {
+        let sourceURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent("Sources/MeetingRescue/AppViewModel.swift")
+        let source = try String(contentsOf: sourceURL, encoding: .utf8)
+        let startTestRun = try #require(source.slice(from: "private func startTestRun(fileURL: URL)", to: "private func appendReplayPreambleIfNeeded()"))
+
+        #expect(startTestRun.contains("cachedForTestRunReplay()"))
+        #expect(!startTestRun.contains("fetchGoogleCalendarAPIContext()"))
+        #expect(!startTestRun.contains("fetchGoogleCalendarContext()"))
+        #expect(!startTestRun.contains("makeGoogleCalendarService()"))
+        #expect(!startTestRun.contains("CalendarMCPContextFetcher"))
+    }
+}
+
+private extension String {
+    func slice(from startMarker: String, to endMarker: String) -> String? {
+        guard let start = range(of: startMarker),
+              let end = range(of: endMarker, range: start.upperBound..<endIndex) else {
+            return nil
+        }
+        return String(self[start.lowerBound..<end.lowerBound])
     }
 }
