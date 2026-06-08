@@ -60,7 +60,7 @@ public enum AnalysisPromptBuilder {
         meetingSummary는 회의 전체 wrap-up입니다. overview는 2-4문장으로 작성하고, keyPoints/openQuestions는 각 항목마다 evidence를 1개 이상 붙이세요.
         evidence.timestamp는 원문 회의 경과 시간만 사용하세요. 예: "04:13" 또는 "[04:13]". ISO 날짜를 만들지 마세요.
         evidence.excerpt는 payload 원문에서 근거가 되는 짧은 발화 일부를 그대로 옮기세요.
-        bookmarks가 있으면 bookmark 주변 발화를 summary evidence로 우선 고려하세요.
+        bookmarks가 있으면 중요 시점 주변 발화를 summary evidence로 우선 고려하세요.
         currentIssue는 현재 논점 또는 Live Focus입니다. meetingSummary와 중복되는 전체 요약을 쓰지 마세요.
         timestamp는 원문 회의 경과 시간만 사용하세요. 예: "04:13" 또는 "[04:13]". ISO 날짜를 만들지 마세요.
         topicTimeline은 시간순이며 agenda/논점/대상/실행 방향이 바뀌면 나누세요. 전체 6개 이하를 권장합니다.

@@ -52,7 +52,7 @@ struct PersonalWorkflowAnalyzerTests {
         #expect(decoded.resolvedCarryOverQuestionIDs.isEmpty)
     }
 
-    @Test("decision coach는 미확정 결정과 부족한 기준을 decision card로 만든다")
+    @Test("decision coach는 AI 결정 후보를 유효한 결정으로 사용한다")
     func createsDecisionCoachCards() {
         let snapshot = AnalysisSnapshot(
             meetingType: .decision,
@@ -80,10 +80,9 @@ struct PersonalWorkflowAnalyzerTests {
 
         let cards = PersonalWorkflowAnalyzer.decisionCoachCards(for: snapshot)
 
-        #expect(cards.map(\.kind).contains(.unconfirmedDecision))
+        #expect(cards.map(\.kind).contains(.unconfirmedDecision) == false)
         #expect(cards.map(\.kind).contains(.missingCriteria))
         #expect(cards.map(\.kind).contains(.openQuestion))
-        #expect(cards.first { $0.kind == .unconfirmedDecision }?.minimumDecision.contains("금요일에 배포한다.") == true)
     }
 
     @Test("share readiness는 공유 전 수정할 warning을 계산한다")
@@ -101,22 +100,52 @@ struct PersonalWorkflowAnalyzerTests {
         let cards = [
             DecisionCoachCard(
                 id: "coach-1",
-                kind: .unconfirmedDecision,
+                kind: .missingOwner,
                 severity: .warning,
-                title: "결정 확인 필요",
-                stuckPoint: "결정 후보가 확정되지 않았습니다.",
-                minimumDecision: "일정을 다음 주로 미룰지 결정",
-                nextQuestion: "이 결정을 확정할까요?"
+                title: "담당자 확인 필요",
+                stuckPoint: "액션 담당자가 비어 있습니다.",
+                minimumDecision: "담당자 지정",
+                nextQuestion: "누가 맡나요?"
             )
         ]
 
         let warnings = PersonalWorkflowAnalyzer.shareReadinessWarnings(for: snapshot, coachCards: cards)
 
         #expect(warnings.map(\.kind).contains(.emptySummary))
-        #expect(warnings.map(\.kind).contains(.unconfirmedDecision))
+        #expect(warnings.map(\.kind).contains(.unconfirmedDecision) == false)
         #expect(warnings.map(\.kind).contains(.missingActionOwner))
         #expect(warnings.map(\.kind).contains(.missingActionDeadline))
         #expect(warnings.map(\.kind).contains(.unresolvedDecisionCoachCard))
+    }
+
+    @Test("workflow 사용자 문구는 한글 기능명과 용어로 표시된다")
+    func localizesPersonalWorkflowCopy() {
+        let snapshot = AnalysisSnapshot(
+            meetingType: .planning,
+            meetingSummary: MeetingSummary(
+                overview: "릴리즈 공유 방식을 논의했다.",
+                openQuestions: [
+                    MeetingSummaryItem(id: "q1", text: "릴리즈 승인자는 누구인가?")
+                ]
+            ),
+            actionItemCandidates: [
+                ActionItemCandidate(id: "a1", assignee: nil, task: "릴리즈 체크리스트 정리", deadline: nil, status: .confirmed, evidenceTimestamp: "00:30"),
+                ActionItemCandidate(id: "a2", assignee: "Alex", task: "릴리즈 공지 초안 작성", status: .candidate, evidenceTimestamp: "00:40")
+            ]
+        )
+
+        let cards = PersonalWorkflowAnalyzer.decisionCoachCards(for: snapshot)
+        let warnings = PersonalWorkflowAnalyzer.shareReadinessWarnings(for: snapshot, coachCards: cards)
+        let visibleCopy = (
+            cards.flatMap { [$0.title, $0.stuckPoint, $0.minimumDecision, $0.nextQuestion] + $0.missingInfo }
+                + warnings.flatMap { [$0.title, $0.detail] }
+        ).joined(separator: " ")
+
+        #expect(cards.first { $0.kind == .missingOwner }?.title == "담당자 없는 액션")
+        #expect(warnings.first { $0.kind == .unconfirmedAction }?.title == "확정되지 않은 액션 후보")
+        #expect(visibleCopy.contains("owner") == false)
+        #expect(visibleCopy.contains("action") == false)
+        #expect(visibleCopy.contains("follow-up") == false)
     }
 
     @Test("action ledger는 confirmed action만 회의 source와 함께 모은다")
@@ -145,13 +174,13 @@ struct PersonalWorkflowAnalyzerTests {
         let current = CarryOverMeetingSource(
             meetingID: "current",
             sourceFileName: "current.txt",
-            metadata: MeetingMetadata(room: "Launch", participants: ["Alex", "Blair"]),
+            metadata: MeetingMetadata(room: "Launch", dateTime: "2026-06-10 10:00", participants: ["Alex", "Blair"]),
             snapshot: AnalysisSnapshot(currentIssue: CurrentIssue(summary: "Launch 준비"))
         )
         let previous = CarryOverMeetingSource(
             meetingID: "previous",
             sourceFileName: "previous.txt",
-            metadata: MeetingMetadata(room: "Launch", participants: ["Alex"]),
+            metadata: MeetingMetadata(room: "Launch", dateTime: "2026-06-03 10:00", participants: ["Alex"]),
             snapshot: AnalysisSnapshot(
                 meetingSummary: MeetingSummary(
                     overview: "Launch 준비",
@@ -183,7 +212,225 @@ struct PersonalWorkflowAnalyzerTests {
 
         #expect(all.count == 1)
         #expect(all[0].question == "Slack 공유 대상은 누구인가?")
-        #expect(all[0].reason.contains("room") == true)
+        #expect(all[0].reason == "반복 회의 이전 회차")
+        #expect(all[0].category == .recurring)
         #expect(hidden.isEmpty)
+    }
+
+    @Test("carry-over는 같은 room의 주간 회의면 minute이 달라도 반복 회의로 본다")
+    func treatsSameRoomWeeklyMeetingInSameHourAsRecurring() {
+        let current = CarryOverMeetingSource(
+            meetingID: "current",
+            sourceFileName: "current.txt",
+            metadata: MeetingMetadata(room: "Zigbang(2F)_Meeting Room L3", dateTime: "2026-06-04 12:31", participants: ["Ethan"]),
+            snapshot: AnalysisSnapshot(currentIssue: CurrentIssue(summary: "햄버거 메뉴 정리"))
+        )
+        let previous = CarryOverMeetingSource(
+            meetingID: "previous",
+            sourceFileName: "previous.txt",
+            metadata: MeetingMetadata(room: "Zigbang(2F)_Meeting Room L3", dateTime: "2026-05-28 12:03", participants: ["Ethan"]),
+            snapshot: AnalysisSnapshot(
+                meetingSummary: MeetingSummary(openQuestions: [
+                    MeetingSummaryItem(id: "q1", text: "상단 써머리 섹션을 어느 수준까지 핵심만 담도록 재구성할지?")
+                ])
+            )
+        )
+
+        let candidates = PersonalWorkflowAnalyzer.openQuestionCarryOverCandidates(
+            current: current,
+            previous: [previous],
+            dismissedIDs: [],
+            resolvedIDs: []
+        )
+
+        #expect(candidates.count == 1)
+        #expect(candidates.first?.reason == "반복 회의 이전 회차")
+        #expect(candidates.first?.category == .recurring)
+    }
+
+    @Test("carry-over는 같은 room의 주간 회의가 인접 hour여도 30분 이내면 반복 회의로 본다")
+    func treatsSameRoomWeeklyMeetingWithinThirtyMinutesAsRecurring() {
+        let current = CarryOverMeetingSource(
+            meetingID: "current",
+            sourceFileName: "current.txt",
+            metadata: MeetingMetadata(room: "Zigbang(2F)_Meeting Room L3", dateTime: "2026-06-04 13:05", participants: ["Ethan"]),
+            snapshot: AnalysisSnapshot(currentIssue: CurrentIssue(summary: "햄버거 메뉴 정리"))
+        )
+        let previous = CarryOverMeetingSource(
+            meetingID: "previous",
+            sourceFileName: "previous.txt",
+            metadata: MeetingMetadata(room: "Zigbang(2F)_Meeting Room L3", dateTime: "2026-05-28 12:45", participants: ["Ethan"]),
+            snapshot: AnalysisSnapshot(
+                meetingSummary: MeetingSummary(openQuestions: [
+                    MeetingSummaryItem(id: "q1", text: "상단 써머리 섹션을 어느 수준까지 핵심만 담도록 재구성할지?")
+                ])
+            )
+        )
+
+        let candidates = PersonalWorkflowAnalyzer.openQuestionCarryOverCandidates(
+            current: current,
+            previous: [previous],
+            dismissedIDs: [],
+            resolvedIDs: []
+        )
+
+        #expect(candidates.count == 1)
+        #expect(candidates.first?.reason == "반복 회의 이전 회차")
+        #expect(candidates.first?.category == .recurring)
+    }
+
+    @Test("carry-over는 room이 다르면 같은 주간 시간대여도 반복 회의로 보지 않는다")
+    func doesNotTreatDifferentRoomWeeklyMeetingAsRecurring() {
+        let current = CarryOverMeetingSource(
+            meetingID: "current",
+            sourceFileName: "current.txt",
+            metadata: MeetingMetadata(room: "Zigbang(2F)_Meeting Room L3", dateTime: "2026-06-04 12:31"),
+            snapshot: AnalysisSnapshot(currentIssue: CurrentIssue(summary: "햄버거 메뉴 정리"))
+        )
+        let previous = CarryOverMeetingSource(
+            meetingID: "previous",
+            sourceFileName: "previous.txt",
+            metadata: MeetingMetadata(room: "Zigbang(2F)", dateTime: "2026-05-28 12:03"),
+            snapshot: AnalysisSnapshot(
+                meetingSummary: MeetingSummary(openQuestions: [
+                    MeetingSummaryItem(id: "q1", text: "상단 써머리 섹션을 어느 수준까지 핵심만 담도록 재구성할지?")
+                ])
+            )
+        )
+
+        let candidates = PersonalWorkflowAnalyzer.openQuestionCarryOverCandidates(
+            current: current,
+            previous: [previous],
+            dismissedIDs: [],
+            resolvedIDs: []
+        )
+
+        #expect(candidates.isEmpty)
+    }
+
+    @Test("carry-over는 반복 회의가 아니면 같은 room만으로 이전 질문을 붙이지 않는다")
+    func ignoresSameRoomWhenNotRecurring() {
+        let current = CarryOverMeetingSource(
+            meetingID: "current",
+            sourceFileName: "current.txt",
+            metadata: MeetingMetadata(room: "Launch", dateTime: "2026-06-10 10:00"),
+            snapshot: AnalysisSnapshot(currentIssue: CurrentIssue(summary: "이번 주 릴리즈 상태"))
+        )
+        let previousSameRoom = CarryOverMeetingSource(
+            meetingID: "previous",
+            sourceFileName: "previous.txt",
+            metadata: MeetingMetadata(room: "Launch", dateTime: "2026-06-09 10:00"),
+            snapshot: AnalysisSnapshot(
+                meetingSummary: MeetingSummary(openQuestions: [
+                    MeetingSummaryItem(id: "q1", text: "어제 회의 질문은 무엇인가?")
+                ])
+            )
+        )
+
+        let candidates = PersonalWorkflowAnalyzer.openQuestionCarryOverCandidates(
+            current: current,
+            previous: [previousSameRoom],
+            dismissedIDs: [],
+            resolvedIDs: []
+        )
+
+        #expect(candidates.isEmpty)
+    }
+
+    @Test("carry-over는 오래된 같은 room이나 participant만으로 이전 질문을 붙이지 않는다")
+    func ignoresStaleRoomOrParticipantOnlyCarryOverCandidates() {
+        let current = CarryOverMeetingSource(
+            meetingID: "current",
+            sourceFileName: "current.txt",
+            metadata: MeetingMetadata(room: "Weekly", participants: ["Alex", "Blair"]),
+            occurredAt: Date(timeIntervalSince1970: 10_000_000),
+            snapshot: AnalysisSnapshot(currentIssue: CurrentIssue(summary: "이번 주 릴리즈 상태"))
+        )
+        let staleSameRoom = CarryOverMeetingSource(
+            meetingID: "stale-room",
+            sourceFileName: "stale-room.txt",
+            metadata: MeetingMetadata(room: "Weekly", participants: ["Alex"]),
+            occurredAt: Date(timeIntervalSince1970: 10_000_000 - 60 * 86_400),
+            snapshot: AnalysisSnapshot(
+                meetingSummary: MeetingSummary(openQuestions: [
+                    MeetingSummaryItem(id: "q1", text: "오래된 주간 질문은 무엇인가?")
+                ])
+            )
+        )
+
+        let candidates = PersonalWorkflowAnalyzer.openQuestionCarryOverCandidates(
+            current: current,
+            previous: [staleSameRoom],
+            dismissedIDs: [],
+            resolvedIDs: []
+        )
+
+        #expect(candidates.isEmpty)
+    }
+
+    @Test("carry-over는 최근 기타 회의에서 participant와 topic이 함께 맞으면 유지한다")
+    func keepsRecentRelatedCarryOverWithParticipantAndTopicOverlap() {
+        let current = CarryOverMeetingSource(
+            meetingID: "current",
+            sourceFileName: "current.txt",
+            metadata: MeetingMetadata(room: "Ad hoc", dateTime: "2026-06-10 10:00", participants: ["Alex", "Blair"]),
+            snapshot: AnalysisSnapshot(currentIssue: CurrentIssue(summary: "Calendar MCP 인증 경로를 다시 검토한다."))
+        )
+        let previousSpot = CarryOverMeetingSource(
+            meetingID: "previous-spot",
+            sourceFileName: "previous-spot.txt",
+            metadata: MeetingMetadata(room: "Support", dateTime: "2026-06-04 13:00", participants: ["Alex"]),
+            snapshot: AnalysisSnapshot(
+                meetingSummary: MeetingSummary(
+                    overview: "Calendar MCP 인증 경로가 막혔다.",
+                    openQuestions: [
+                        MeetingSummaryItem(id: "q1", text: "Codex MCP 인증은 어떤 방식으로 우회할 수 있는가?")
+                    ]
+                )
+            )
+        )
+
+        let candidates = PersonalWorkflowAnalyzer.openQuestionCarryOverCandidates(
+            current: current,
+            previous: [previousSpot],
+            dismissedIDs: [],
+            resolvedIDs: []
+        )
+
+        #expect(candidates.count == 1)
+        #expect(candidates.first?.reason == "최근 참석자/주제 일치")
+        #expect(candidates.first?.category == .related)
+    }
+
+    @Test("carry-over는 오래된 기타 회의의 participant/topic match를 붙이지 않는다")
+    func ignoresStaleRelatedCarryOverWithParticipantAndTopicOverlap() {
+        let current = CarryOverMeetingSource(
+            meetingID: "current",
+            sourceFileName: "current.txt",
+            metadata: MeetingMetadata(room: "Ad hoc", dateTime: "2026-06-10 10:00", participants: ["Alex", "Blair"]),
+            snapshot: AnalysisSnapshot(currentIssue: CurrentIssue(summary: "Calendar MCP 인증 경로를 다시 검토한다."))
+        )
+        let previousSpot = CarryOverMeetingSource(
+            meetingID: "previous-spot",
+            sourceFileName: "previous-spot.txt",
+            metadata: MeetingMetadata(room: "Support", dateTime: "2026-04-26 13:00", participants: ["Alex"]),
+            snapshot: AnalysisSnapshot(
+                meetingSummary: MeetingSummary(
+                    overview: "Calendar MCP 인증 경로가 막혔다.",
+                    openQuestions: [
+                        MeetingSummaryItem(id: "q1", text: "Codex MCP 인증은 어떤 방식으로 우회할 수 있는가?")
+                    ]
+                )
+            )
+        )
+
+        let candidates = PersonalWorkflowAnalyzer.openQuestionCarryOverCandidates(
+            current: current,
+            previous: [previousSpot],
+            dismissedIDs: [],
+            resolvedIDs: []
+        )
+
+        #expect(candidates.isEmpty)
     }
 }

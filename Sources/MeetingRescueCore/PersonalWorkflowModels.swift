@@ -90,17 +90,20 @@ public struct ActionLedgerMeetingSource: Codable, Equatable, Sendable {
     public var meetingID: String
     public var sourceFileName: String
     public var metadata: MeetingMetadata
+    public var occurredAt: Date?
     public var snapshot: AnalysisSnapshot
 
     public init(
         meetingID: String,
         sourceFileName: String,
         metadata: MeetingMetadata,
+        occurredAt: Date? = nil,
         snapshot: AnalysisSnapshot
     ) {
         self.meetingID = meetingID
         self.sourceFileName = sourceFileName
         self.metadata = metadata
+        self.occurredAt = occurredAt
         self.snapshot = snapshot
     }
 }
@@ -145,21 +148,29 @@ public enum CarryOverQuestionStatus: String, Codable, Equatable, Sendable {
     case resolved
 }
 
+public enum CarryOverMatchCategory: String, Codable, Equatable, Sendable {
+    case recurring
+    case related
+}
+
 public struct CarryOverMeetingSource: Codable, Equatable, Sendable {
     public var meetingID: String
     public var sourceFileName: String
     public var metadata: MeetingMetadata
+    public var occurredAt: Date?
     public var snapshot: AnalysisSnapshot
 
     public init(
         meetingID: String,
         sourceFileName: String,
         metadata: MeetingMetadata,
+        occurredAt: Date? = nil,
         snapshot: AnalysisSnapshot
     ) {
         self.meetingID = meetingID
         self.sourceFileName = sourceFileName
         self.metadata = metadata
+        self.occurredAt = occurredAt
         self.snapshot = snapshot
     }
 }
@@ -171,6 +182,7 @@ public struct OpenQuestionCarryOverCandidate: Codable, Equatable, Identifiable, 
     public var sourceTitle: String
     public var sourceFileName: String
     public var reason: String
+    public var category: CarryOverMatchCategory
     public var status: CarryOverQuestionStatus
     public var evidence: [EvidenceReference]
 
@@ -181,6 +193,7 @@ public struct OpenQuestionCarryOverCandidate: Codable, Equatable, Identifiable, 
         sourceTitle: String,
         sourceFileName: String,
         reason: String,
+        category: CarryOverMatchCategory = .related,
         status: CarryOverQuestionStatus = .active,
         evidence: [EvidenceReference] = []
     ) {
@@ -190,8 +203,34 @@ public struct OpenQuestionCarryOverCandidate: Codable, Equatable, Identifiable, 
         self.sourceTitle = sourceTitle
         self.sourceFileName = sourceFileName
         self.reason = reason
+        self.category = category
         self.status = status
         self.evidence = evidence
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case question
+        case sourceMeetingID
+        case sourceTitle
+        case sourceFileName
+        case reason
+        case category
+        case status
+        case evidence
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        question = try container.decode(String.self, forKey: .question)
+        sourceMeetingID = try container.decode(String.self, forKey: .sourceMeetingID)
+        sourceTitle = try container.decode(String.self, forKey: .sourceTitle)
+        sourceFileName = try container.decode(String.self, forKey: .sourceFileName)
+        reason = try container.decode(String.self, forKey: .reason)
+        category = (try? container.decode(CarryOverMatchCategory.self, forKey: .category)) ?? .related
+        status = (try? container.decode(CarryOverQuestionStatus.self, forKey: .status)) ?? .active
+        evidence = (try? container.decode([EvidenceReference].self, forKey: .evidence)) ?? []
     }
 }
 

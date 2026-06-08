@@ -166,7 +166,7 @@ struct AnalysisPromptBuilderTests {
         #expect(prompt.contains(#""meetingTypePreset":"decision""#))
         #expect(prompt.contains(#""bookmarks""#))
         #expect(prompt.contains("결정 기준"))
-        #expect(prompt.contains("bookmark 주변 발화를 summary evidence로 우선 고려하세요"))
+        #expect(prompt.contains("중요 시점 주변 발화를 summary evidence로 우선 고려하세요"))
     }
 
     @Test("full prompt explains current issue as live focus and summary as whole-meeting wrap-up")

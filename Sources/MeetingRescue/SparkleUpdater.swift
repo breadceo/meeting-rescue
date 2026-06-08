@@ -1,4 +1,5 @@
 import Foundation
+import MeetingRescueCore
 import Sparkle
 
 @MainActor
@@ -10,22 +11,45 @@ final class SparkleUpdater: NSObject, ObservableObject {
     @Published private(set) var blockingSheetDismissalRequestID = UUID()
     @Published private(set) var availableUpdate: AvailableUpdate?
 
-    private lazy var controller = SPUStandardUpdaterController(
-        startingUpdater: true,
-        updaterDelegate: self,
-        userDriverDelegate: self
-    )
+    private let isSparkleConfigured: Bool
+
+    override init() {
+        self.isSparkleConfigured = UpdateFeedConfiguration.isSparkleConfigured(
+            infoDictionary: Bundle.main.infoDictionary ?? [:]
+        )
+        super.init()
+    }
+
+    private lazy var controller: SPUStandardUpdaterController? = {
+        guard isSparkleConfigured else {
+            return nil
+        }
+
+        return SPUStandardUpdaterController(
+            startingUpdater: true,
+            updaterDelegate: self,
+            userDriverDelegate: self
+        )
+    }()
 
     var canCheckForUpdates: Bool {
-        controller.updater.canCheckForUpdates
+        controller?.updater.canCheckForUpdates ?? false
     }
 
     func checkForUpdates() {
+        guard let controller else {
+            return
+        }
+
         requestBlockingSheetDismissal()
         controller.checkForUpdates(nil)
     }
 
     func showAvailableUpdate() {
+        guard let controller else {
+            return
+        }
+
         requestBlockingSheetDismissal()
         controller.checkForUpdates(nil)
     }

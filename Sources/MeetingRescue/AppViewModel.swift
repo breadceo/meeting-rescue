@@ -107,6 +107,19 @@ enum TranscriptRunMode: Equatable {
     }
 }
 
+private extension TranscriptRunMode {
+    var momentMarkerRunMode: MomentMarkerRunMode {
+        switch self {
+        case .liveWatch:
+            return .liveWatch
+        case .history:
+            return .history
+        case .testRun:
+            return .testRun
+        }
+    }
+}
+
 enum TestRunPlaybackStatus: Equatable {
     case idle
     case running
@@ -778,12 +791,17 @@ final class AppViewModel: ObservableObject {
             currentMeetingID: currentWorkflowMeetingID,
             metadata: metadata,
             state: analysisState,
+            currentOccurredAt: currentWorkflowOccurredAt,
             historySources: workflowHistorySources(excluding: activeTranscriptURL)
         )
     }
 
     var currentShareReadinessWarnings: [ShareReadinessWarning] {
         personalWorkflowSnapshot.readinessWarnings
+    }
+
+    var canRefreshCarryOverQuestions: Bool {
+        selectedFolderURL != nil && (activeTranscriptURL != nil || analysisState.latestSnapshot != nil)
     }
 
     var historyFacetSelection: MeetingHistoryFacetSelection {
@@ -1403,13 +1421,21 @@ final class AppViewModel: ObservableObject {
         }
     }
 
+    var shouldShowMomentMarker: Bool {
+        MomentMarkerAvailability.isVisible(runMode: transcriptRunMode.momentMarkerRunMode)
+    }
+
     var canAddLiveBookmark: Bool {
-        activeTranscriptURL != nil && !rawTranscriptPreviewLines.isEmpty
+        MomentMarkerAvailability.canAdd(
+            runMode: transcriptRunMode.momentMarkerRunMode,
+            hasActiveTranscript: activeTranscriptURL != nil,
+            hasTranscriptPreview: !rawTranscriptPreviewLines.isEmpty
+        )
     }
 
     func addLiveBookmark(label: String? = nil) {
         guard let activeTranscriptURL, canAddLiveBookmark else {
-            statusMessage = "북마크할 transcript가 없습니다."
+            statusMessage = "중요 시점으로 표시할 transcript가 없습니다."
             return
         }
 
@@ -1422,7 +1448,7 @@ final class AppViewModel: ObservableObject {
         analysisState.addBookmark(bookmark)
         analysisState.updatedAt = Date()
         try? stateStore.saveAnalysisState(analysisState, for: activeTranscriptURL)
-        statusMessage = "북마크 저장: \(bookmark.timestamp)"
+        statusMessage = "중요 시점 저장: \(bookmark.timestamp)"
     }
 
     func deleteLiveBookmark(id: String) {
@@ -1432,17 +1458,26 @@ final class AppViewModel: ObservableObject {
         analysisState.deleteBookmark(id: id)
         analysisState.updatedAt = Date()
         try? stateStore.saveAnalysisState(analysisState, for: activeTranscriptURL)
-        statusMessage = "북마크를 삭제했습니다."
+        statusMessage = "중요 시점을 삭제했습니다."
     }
 
     func dismissCarryOverQuestion(id: String) {
         setCarryOverQuestionStatus(id: id, status: .dismissed)
-        statusMessage = "Carry-over 질문을 숨겼습니다."
+        statusMessage = "이어받은 질문을 숨겼습니다."
     }
 
     func resolveCarryOverQuestion(id: String) {
         setCarryOverQuestionStatus(id: id, status: .resolved)
-        statusMessage = "Carry-over 질문을 해결됨으로 표시했습니다."
+        statusMessage = "이어받은 질문을 해결됨으로 표시했습니다."
+    }
+
+    func refreshCarryOverQuestions() {
+        guard canRefreshCarryOverQuestions else {
+            statusMessage = "이어받은 질문을 새로고침하려면 transcript 폴더와 분석 결과가 필요합니다."
+            return
+        }
+        statusMessage = "이어받은 질문을 새로고침합니다."
+        refreshMeetingHistory(force: true)
     }
 
     private func setCarryOverQuestionStatus(id: String, status: CarryOverQuestionStatus) {
@@ -2065,6 +2100,13 @@ final class AppViewModel: ObservableObject {
         activeTranscriptURL?.path ?? metadata.displayTitle
     }
 
+    private var currentWorkflowOccurredAt: Date? {
+        guard let activeTranscriptURL else {
+            return nil
+        }
+        return try? activeTranscriptURL.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
+    }
+
     private func workflowHistorySources(excluding activeURL: URL?) -> [ActionLedgerMeetingSource] {
         meetingHistoryItems.compactMap { item in
             guard item.url != activeURL else {
@@ -2078,6 +2120,7 @@ final class AppViewModel: ObservableObject {
                 meetingID: item.id,
                 sourceFileName: item.url.lastPathComponent,
                 metadata: item.metadata,
+                occurredAt: item.modificationDate,
                 snapshot: snapshot
             )
         }

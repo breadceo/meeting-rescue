@@ -10,6 +10,25 @@ private enum IntelligenceMode: String, CaseIterable, Identifiable {
     case context = "컨텍스트"
 
     var id: String { rawValue }
+
+    var laneID: String {
+        switch self {
+        case .overview:
+            return "overview"
+        case .timeline:
+            return "timeline"
+        case .candidates:
+            return "candidates"
+        case .workflow:
+            return "workflow"
+        case .context:
+            return "context"
+        }
+    }
+
+    static var visibleModes: [IntelligenceMode] {
+        allCases.filter { MeetingIntelligenceFeatureGate.isVisibleLane($0.laneID) }
+    }
 }
 
 private enum EditingCandidateKind {
@@ -44,14 +63,6 @@ private enum AdaptivePane: CaseIterable, Hashable {
         }
     }
 
-    var collapsedSubtitle: String {
-        switch self {
-        case .meetings:
-            return "history"
-        case .intelligence:
-            return "summary"
-        }
-    }
 }
 
 private enum AdaptiveLayoutMode {
@@ -199,7 +210,7 @@ struct ContentView: View {
                     collapsedPaneRail(.intelligence)
                         .frame(minWidth: 46, idealWidth: 46, maxWidth: 46, maxHeight: .infinity)
                 } else {
-                    intelligenceContent
+                    intelligenceContent()
                         .frame(minWidth: 330, idealWidth: 460, maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
@@ -769,7 +780,7 @@ struct ContentView: View {
 
     private var transcriptContent: some View {
         VStack(alignment: .leading, spacing: 0) {
-            paneTitle("Raw Transcript", systemImage: "doc.text", trailing: "\(viewModel.rawTranscriptLineCount) lines")
+            rawTranscriptHeader
             Divider().overlay(Color.smoothLine)
             Group {
                 if viewModel.activeTranscriptURL == nil {
@@ -790,6 +801,54 @@ struct ContentView: View {
             }
         }
         .smoothPanel()
+    }
+
+    private var rawTranscriptHeader: some View {
+        HStack(spacing: 10) {
+            Label("Raw Transcript", systemImage: "doc.text")
+                .font(.headline)
+                .foregroundStyle(Color.smoothInk)
+
+            Spacer(minLength: 8)
+
+            Text("\(viewModel.rawTranscriptLineCount) lines")
+                .font(.caption)
+                .foregroundStyle(Color.smoothMuted)
+
+            if viewModel.shouldShowMomentMarker {
+                momentMarkerTranscriptMenu
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+    }
+
+    private var momentMarkerTranscriptMenu: some View {
+        Menu {
+            momentMarkerMenuItems
+        } label: {
+            ViewThatFits(in: .horizontal) {
+                Label("중요 시점", systemImage: "flag")
+                    .font(.caption.weight(.semibold))
+                    .lineLimit(1)
+
+                Image(systemName: "flag")
+                    .font(.caption.weight(.semibold))
+                    .frame(width: 18, height: 18)
+            }
+            .foregroundStyle(Color.smoothInk)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .background(Color.smoothControl, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .stroke(Color.smoothLine, lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .menuStyle(.borderlessButton)
+        .disabled(!viewModel.canAddLiveBookmark)
+        .help("현재 transcript 마지막 시점을 중요 시점으로 표시")
     }
 
     private var rawTranscriptScroll: some View {
@@ -828,34 +887,27 @@ struct ContentView: View {
         .textSelection(.enabled)
     }
 
-    private var intelligenceContent: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 12) {
-                paneTitle("Meeting Intelligence", systemImage: "sparkles", compact: true, collapsePane: .intelligence)
-                Spacer()
-                Picker("view", selection: $intelligenceMode) {
-                    ForEach(IntelligenceMode.allCases) { mode in
-                        Text(mode.rawValue).tag(mode)
-                    }
+    private func intelligenceContent(compact: Bool = false, availableWidth: CGFloat? = nil) -> some View {
+        let selectedMode = visibleIntelligenceMode
+        return VStack(alignment: .leading, spacing: 0) {
+            if compact {
+                compactIntelligenceHeader(availableWidth: availableWidth)
+            } else {
+                HStack(spacing: 12) {
+                    paneTitle("Meeting Intelligence", systemImage: "sparkles", compact: true, collapsePane: .intelligence)
+                    Spacer()
+                    intelligenceModeSegmentedControl()
+                        .frame(width: 360)
                 }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .frame(width: 360)
+                .padding(.trailing, 12)
             }
-            .padding(.trailing, 12)
 
             Divider().overlay(Color.smoothLine)
 
-            if intelligenceMode == .context {
-                ScrollView {
-                    contextPanel()
-                        .padding(16)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-            } else if let snapshot = viewModel.analysisState.latestSnapshot {
+            if let snapshot = viewModel.analysisState.latestSnapshot {
                 ScrollView {
                     Group {
-                        switch intelligenceMode {
+                        switch selectedMode {
                         case .overview:
                             overview(snapshot)
                         case .timeline:
@@ -869,7 +921,7 @@ struct ContentView: View {
                         case .workflow:
                             workflow(viewModel.personalWorkflowSnapshot)
                         case .context:
-                            contextPanel()
+                            EmptyView()
                         }
                     }
                     .padding(16)
@@ -888,12 +940,87 @@ struct ContentView: View {
         .smoothPanel()
     }
 
+    private var visibleIntelligenceMode: IntelligenceMode {
+        IntelligenceMode.visibleModes.contains(intelligenceMode) ? intelligenceMode : .overview
+    }
+
+    private func compactIntelligenceHeader(availableWidth: CGFloat?) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                Label("Meeting Intelligence", systemImage: "sparkles")
+                    .font(.headline)
+                    .foregroundStyle(Color.smoothInk)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.82)
+
+                Spacer(minLength: 8)
+
+                Button {
+                    withAnimation(.easeInOut(duration: 0.16)) {
+                        activeOverlayPane = nil
+                    }
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(Color.smoothMuted)
+                        .frame(width: 26, height: 26)
+                        .background(Color.smoothControl, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .help("Meeting Intelligence 닫기")
+            }
+
+            if (availableWidth ?? 420) < 370 {
+                intelligenceModeMenu()
+            } else {
+                intelligenceModeSegmentedControl()
+                    .frame(maxWidth: .infinity)
+                    .controlSize(.small)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+    }
+
+    private func intelligenceModeSegmentedControl() -> some View {
+        Picker("view", selection: $intelligenceMode) {
+            ForEach(IntelligenceMode.visibleModes) { mode in
+                Text(mode.rawValue).tag(mode)
+            }
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+    }
+
+    private func intelligenceModeMenu() -> some View {
+        Menu {
+            Picker("view", selection: $intelligenceMode) {
+                ForEach(IntelligenceMode.visibleModes) { mode in
+                    Text(mode.rawValue).tag(mode)
+                }
+            }
+        } label: {
+            HStack(spacing: 8) {
+                Text(visibleIntelligenceMode.rawValue)
+                    .font(.caption.weight(.semibold))
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.down")
+                    .font(.caption2.weight(.bold))
+            }
+            .foregroundStyle(Color.smoothInk)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .background(Color.smoothControl, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+        }
+        .menuStyle(.borderlessButton)
+    }
+
     private func overview(_ snapshot: AnalysisSnapshot) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             currentIssue(snapshot.currentIssue)
             meetingSummary(snapshot.meetingSummary, meetingType: snapshot.meetingType)
             if !viewModel.analysisState.bookmarks.isEmpty {
-                bookmarks(viewModel.analysisState.bookmarks)
+                importantMoments(viewModel.analysisState.bookmarks)
             }
             metricsRow(snapshot)
             decisions(snapshot.decisionCandidates, compact: true)
@@ -933,13 +1060,6 @@ struct ContentView: View {
                 }
                 .buttonStyle(.borderless)
                 .disabled(viewModel.isFetchingCalendarContext)
-
-                Button {
-                    viewModel.chooseSupplementalContextFile()
-                } label: {
-                    Label("첨부", systemImage: "paperclip")
-                }
-                .buttonStyle(.borderless)
             }
             Text(viewModel.calendarContextStatusMessage)
                 .font(.caption)
@@ -1019,7 +1139,15 @@ struct ContentView: View {
         let candidateSources = sources.filter { !$0.isAccepted }
             .sorted { $0.confidence > $1.confidence }
         return VStack(alignment: .leading, spacing: 10) {
-            sectionHeader("Supplemental Context", systemImage: "doc.text.magnifyingglass")
+            HStack(spacing: 10) {
+                sectionHeader("Supplemental Context", systemImage: "doc.text.magnifyingglass")
+                Button {
+                    viewModel.chooseSupplementalContextFile()
+                } label: {
+                    Label("파일 첨부", systemImage: "paperclip")
+                }
+                .buttonStyle(.borderless)
+            }
             if acceptedSources.isEmpty && candidateSources.isEmpty {
                 placeholderLine("Prompt에 주입하거나 확인할 context가 없습니다.")
             }
@@ -1063,7 +1191,7 @@ struct ContentView: View {
 
     private func decisionCoach(_ cards: [DecisionCoachCard]) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            sectionHeader("Decision Coach", systemImage: "lightbulb.max")
+            sectionHeader("결정 코치", systemImage: "lightbulb.max")
             if cards.isEmpty {
                 placeholderLine("현재 막힌 논점으로 보이는 항목이 없습니다.")
             }
@@ -1111,14 +1239,14 @@ struct ContentView: View {
     private func shareReadiness(_ warnings: [ShareReadinessWarning]) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                sectionHeader("Share Readiness", systemImage: "checklist")
+                sectionHeader("공유 준비도", systemImage: "checklist")
                 Spacer()
-                Text(warnings.isEmpty ? "Ready" : "\(warnings.count) warnings")
+                Text(warnings.isEmpty ? "공유 가능" : "\(warnings.count)개 경고")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(warnings.isEmpty ? Color.smoothMint : Color.orange)
             }
             if warnings.isEmpty {
-                placeholderLine("공유 전 확인할 warning이 없습니다.")
+                placeholderLine("공유 전 확인할 경고가 없습니다.")
             }
             ForEach(warnings) { warning in
                 Label {
@@ -1142,9 +1270,9 @@ struct ContentView: View {
     private func actionLedger(_ items: [ActionLedgerItem]) -> some View {
         let visibleItems = Array(items.prefix(12))
         return VStack(alignment: .leading, spacing: 10) {
-            sectionHeader("Action Ledger", systemImage: "tray.full")
+            sectionHeader("액션 장부", systemImage: "tray.full")
             if visibleItems.isEmpty {
-                placeholderLine("확정된 action이 아직 없습니다.")
+                placeholderLine("확정된 액션이 아직 없습니다.")
             }
             ForEach(visibleItems) { item in
                 VStack(alignment: .leading, spacing: 4) {
@@ -1174,47 +1302,78 @@ struct ContentView: View {
     }
 
     private func carryOverQuestions(_ candidates: [OpenQuestionCarryOverCandidate]) -> some View {
-        let visibleCandidates = Array(candidates.prefix(8))
+        let recurringCandidates = Array(candidates.filter { $0.category == .recurring }.prefix(8))
+        let relatedCandidates = Array(candidates.filter { $0.category == .related }.prefix(8))
         return VStack(alignment: .leading, spacing: 10) {
-            sectionHeader("Open Question Carry-over", systemImage: "arrowshape.turn.up.right")
-            if visibleCandidates.isEmpty {
-                placeholderLine("관련 history에서 이어받을 열린 질문이 없습니다.")
-            }
-            ForEach(visibleCandidates) { candidate in
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(candidate.question)
-                        .font(.callout.weight(.semibold))
-                        .foregroundStyle(Color.smoothInk)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Text("\(candidate.sourceTitle) · \(candidate.reason)")
-                        .font(.caption)
-                        .foregroundStyle(Color.smoothMuted)
-                    HStack(spacing: 8) {
-                        Button {
-                            viewModel.resolveCarryOverQuestion(id: candidate.id)
-                        } label: {
-                            Label("해결됨", systemImage: "checkmark.circle")
-                        }
-                        .buttonStyle(.borderless)
-
-                        Button {
-                            viewModel.dismissCarryOverQuestion(id: candidate.id)
-                        } label: {
-                            Label("숨기기", systemImage: "xmark.circle")
-                        }
-                        .buttonStyle(.borderless)
-                    }
-                    .font(.caption.weight(.semibold))
+            HStack(spacing: 8) {
+                sectionHeader("이어받은 미해결 질문", systemImage: "arrowshape.turn.up.right")
+                Button {
+                    viewModel.refreshCarryOverQuestions()
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.caption.weight(.semibold))
+                        .frame(width: 18, height: 18)
                 }
-                .padding(10)
-                .background(Color.smoothSurface, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .stroke(Color.smoothLine, lineWidth: 1)
-                )
+                .buttonStyle(.borderless)
+                .disabled(!viewModel.canRefreshCarryOverQuestions)
+                .help("이어받은 미해결 질문 새로고침")
+            }
+            if recurringCandidates.isEmpty && relatedCandidates.isEmpty {
+                placeholderLine("관련 히스토리에서 이어받을 미해결 질문이 없습니다.")
+            }
+            if !recurringCandidates.isEmpty {
+                carryOverQuestionGroup("반복 회의", candidates: recurringCandidates)
+            }
+            if !relatedCandidates.isEmpty {
+                carryOverQuestionGroup("기타 관련 회의", candidates: relatedCandidates)
             }
         }
         .smoothCard()
+    }
+
+    private func carryOverQuestionGroup(_ title: String, candidates: [OpenQuestionCarryOverCandidate]) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(Color.smoothMuted)
+            ForEach(candidates) { candidate in
+                carryOverQuestionRow(candidate)
+            }
+        }
+    }
+
+    private func carryOverQuestionRow(_ candidate: OpenQuestionCarryOverCandidate) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(candidate.question)
+                .font(.callout.weight(.semibold))
+                .foregroundStyle(Color.smoothInk)
+                .fixedSize(horizontal: false, vertical: true)
+            Text("\(candidate.sourceTitle) · \(candidate.reason)")
+                .font(.caption)
+                .foregroundStyle(Color.smoothMuted)
+            HStack(spacing: 8) {
+                Button {
+                    viewModel.resolveCarryOverQuestion(id: candidate.id)
+                } label: {
+                    Label("해결됨", systemImage: "checkmark.circle")
+                }
+                .buttonStyle(.borderless)
+
+                Button {
+                    viewModel.dismissCarryOverQuestion(id: candidate.id)
+                } label: {
+                    Label("숨기기", systemImage: "xmark.circle")
+                }
+                .buttonStyle(.borderless)
+            }
+            .font(.caption.weight(.semibold))
+        }
+        .padding(10)
+        .background(Color.smoothSurface, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.smoothLine, lineWidth: 1)
+        )
     }
 
     private func actionLedgerMetadata(_ item: ActionLedgerItem) -> String {
@@ -1332,10 +1491,10 @@ struct ContentView: View {
         }
     }
 
-    private func bookmarks(_ bookmarks: [MeetingBookmark]) -> some View {
+    private func importantMoments(_ bookmarks: [MeetingBookmark]) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Label("Bookmarks", systemImage: "bookmark")
+                Label("중요 시점", systemImage: "flag")
                     .font(.headline)
                 Spacer()
                 Text("\(bookmarks.count)")
@@ -1351,7 +1510,7 @@ struct ContentView: View {
                         .frame(width: 58, alignment: .leading)
 
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(bookmark.label ?? "Bookmark")
+                        Text(bookmark.label ?? "중요 시점")
                             .font(.callout.weight(.semibold))
                         if !bookmark.excerpt.isEmpty {
                             Text(bookmark.excerpt)
@@ -1369,7 +1528,7 @@ struct ContentView: View {
                         Image(systemName: "xmark")
                     }
                     .buttonStyle(.borderless)
-                    .help("북마크 삭제")
+                    .help("중요 시점 삭제")
                 }
             }
         }
@@ -1960,7 +2119,6 @@ struct ContentView: View {
     private var fullHeaderActions: some View {
         HStack(spacing: 8) {
             analysisHeaderButton
-            bookmarkHeaderButton
             issueDraftMenu
             markdownHeaderButton
             testRunHeaderActions
@@ -1997,44 +2155,30 @@ struct ContentView: View {
         .disabled(viewModel.activeTranscriptURL == nil || viewModel.rawTranscript.isEmpty || viewModel.isAnalysisRunning)
     }
 
-    private var bookmarkHeaderButton: some View {
-        Menu {
-            bookmarkMenuItems
-        } label: {
-            Label("Bookmark", systemImage: "bookmark")
-                .font(.callout.weight(.semibold))
-                .lineLimit(1)
-        }
-        .buttonStyle(SmoothActionButtonStyle())
-        .menuStyle(.button)
-        .controlSize(.regular)
-        .disabled(!viewModel.canAddLiveBookmark)
-    }
-
     @ViewBuilder
-    private var bookmarkMenuItems: some View {
+    private var momentMarkerMenuItems: some View {
         Button {
             viewModel.addLiveBookmark()
         } label: {
-            Label("일반", systemImage: "bookmark")
+            Label("지금 표시", systemImage: "flag")
         }
 
         Button {
             viewModel.addLiveBookmark(label: "결정")
         } label: {
-            Label("결정", systemImage: "checkmark.seal")
+            Label("결정 시점", systemImage: "checkmark.seal")
         }
 
         Button {
             viewModel.addLiveBookmark(label: "액션")
         } label: {
-            Label("액션", systemImage: "person.crop.circle.badge.checkmark")
+            Label("액션 시점", systemImage: "person.crop.circle.badge.checkmark")
         }
 
         Button {
             viewModel.addLiveBookmark(label: "열린 질문")
         } label: {
-            Label("열린 질문", systemImage: "questionmark.circle")
+            Label("미해결 질문", systemImage: "questionmark.circle")
         }
     }
 
@@ -2108,11 +2252,6 @@ struct ContentView: View {
                     Label(kind.displayName, systemImage: kind.systemImage)
                 }
             }
-
-            Divider()
-
-            bookmarkMenuItems
-                .disabled(!viewModel.canAddLiveBookmark)
 
             Divider()
 
@@ -2421,11 +2560,11 @@ struct ContentView: View {
                 Spacer(minLength: 0)
             }
 
-            overlayDrawerContent(pane)
+            overlayDrawerContent(pane, availableWidth: overlayDrawerWidth(for: availableWidth, pane: pane))
                 .frame(
-                    minWidth: overlayDrawerWidth(for: availableWidth),
-                    idealWidth: overlayDrawerWidth(for: availableWidth),
-                    maxWidth: overlayDrawerWidth(for: availableWidth),
+                    minWidth: overlayDrawerWidth(for: availableWidth, pane: pane),
+                    idealWidth: overlayDrawerWidth(for: availableWidth, pane: pane),
+                    maxWidth: overlayDrawerWidth(for: availableWidth, pane: pane),
                     maxHeight: .infinity
                 )
                 .transition(.move(edge: pane == .meetings ? .leading : .trailing).combined(with: .opacity))
@@ -2440,17 +2579,18 @@ struct ContentView: View {
     }
 
     @ViewBuilder
-    private func overlayDrawerContent(_ pane: AdaptivePane) -> some View {
+    private func overlayDrawerContent(_ pane: AdaptivePane, availableWidth: CGFloat) -> some View {
         switch pane {
         case .meetings:
             historySidebar
         case .intelligence:
-            intelligenceContent
+            intelligenceContent(compact: true, availableWidth: availableWidth)
         }
     }
 
-    private func overlayDrawerWidth(for availableWidth: CGFloat) -> CGFloat {
-        min(430, max(300, availableWidth - 32))
+    private func overlayDrawerWidth(for availableWidth: CGFloat, pane: AdaptivePane) -> CGFloat {
+        let maximumWidth: CGFloat = pane == .intelligence ? 520 : 430
+        return min(maximumWidth, max(300, availableWidth - 20))
     }
 
     private func collapsedPaneRail(_ pane: AdaptivePane) -> some View {
@@ -2469,12 +2609,6 @@ struct ContentView: View {
                     .rotationEffect(.degrees(-90))
                     .fixedSize()
                     .frame(width: 30, height: 82)
-                Text(pane.collapsedSubtitle)
-                    .font(.caption2)
-                    .foregroundStyle(Color.smoothMuted)
-                    .rotationEffect(.degrees(-90))
-                    .fixedSize()
-                    .frame(width: 30, height: 58)
                 Spacer(minLength: 0)
             }
             .padding(.vertical, 12)
@@ -4048,7 +4182,7 @@ private struct MarkdownReadinessPreviewSheet: View {
                 Image(systemName: "checklist")
                     .foregroundStyle(Color.orange)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Share Readiness")
+                    Text("공유 준비도")
                         .font(.headline)
                     Text("공유 전에 확인할 항목이 있습니다.")
                         .font(.caption)

@@ -13,7 +13,7 @@ struct MeetingRescueApp: App {
         }
         .commands {
             CommandMenu("Meeting") {
-                Button("Bookmark Current Moment") {
+                Button("현재 시점 표시") {
                     viewModel.addLiveBookmark()
                 }
                 .keyboardShortcut("b", modifiers: [.command])
