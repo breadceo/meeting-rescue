@@ -26,6 +26,7 @@ RESOURCES_DIR="$CONTENTS_DIR/Resources"
 FRAMEWORKS_DIR="$CONTENTS_DIR/Frameworks"
 APP_ICON_SOURCE="$ROOT_DIR/Sources/MeetingRescue/Resources/AppIcon.png"
 APP_ICON_NAME="AppIcon"
+GOOGLE_CALENDAR_OAUTH_CONFIG_FILE="${GOOGLE_CALENDAR_OAUTH_CONFIG_FILE:-}"
 
 cd "$ROOT_DIR"
 
@@ -53,6 +54,15 @@ fi
 
 if [[ -d "$RESOURCE_BUNDLE" ]]; then
   cp -R "$RESOURCE_BUNDLE" "$RESOURCES_DIR/MeetingRescue_MeetingRescue.bundle"
+fi
+
+if [[ -n "$GOOGLE_CALENDAR_OAUTH_CONFIG_FILE" ]]; then
+  if [[ ! -f "$GOOGLE_CALENDAR_OAUTH_CONFIG_FILE" ]]; then
+    printf 'error: GOOGLE_CALENDAR_OAUTH_CONFIG_FILE not found: %s\n' "$GOOGLE_CALENDAR_OAUTH_CONFIG_FILE" >&2
+    exit 1
+  fi
+  mkdir -p "$RESOURCES_DIR/MeetingRescue_MeetingRescue.bundle"
+  cp "$GOOGLE_CALENDAR_OAUTH_CONFIG_FILE" "$RESOURCES_DIR/MeetingRescue_MeetingRescue.bundle/GoogleCalendarOAuthConfig.json"
 fi
 
 if [[ -f "$APP_ICON_SOURCE" ]] && command -v iconutil >/dev/null 2>&1; then

@@ -2975,6 +2975,13 @@ struct SettingsView: View {
     }
 
     private var analysisSettings: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            meetingIntelligenceSettingsCard
+            googleCalendarSettingsCard
+        }
+    }
+
+    private var meetingIntelligenceSettingsCard: some View {
         settingsCard("Meeting Intelligence", systemImage: "sparkles") {
             settingsRow("Automatic analysis", detail: "끄면 live/test run 자동 분석과 회의 종료 final analysis를 실행하지 않습니다.") {
                 Toggle("automatic meeting intelligence", isOn: automaticAnalysisBinding)
@@ -3016,6 +3023,41 @@ struct SettingsView: View {
                 .labelsHidden()
                 .frame(width: 220)
             }
+        }
+    }
+
+    private var googleCalendarSettingsCard: some View {
+        settingsCard("Google Calendar", systemImage: "calendar.badge.clock") {
+            actionRow("연결 상태", detail: viewModel.googleCalendarStatusMessage) {
+                googleCalendarSettingsActions
+            }
+        }
+    }
+
+    private var googleCalendarSettingsActions: some View {
+        HStack(spacing: 8) {
+            Button {
+                viewModel.connectGoogleCalendar()
+            } label: {
+                Label(viewModel.isGoogleCalendarConnecting ? "연결 중" : "연결", systemImage: "link")
+            }
+            .buttonStyle(SmoothActionButtonStyle())
+            .disabled(viewModel.isGoogleCalendarConnecting)
+
+            Button {
+                viewModel.fetchGoogleCalendarAPIContext()
+            } label: {
+                Label(viewModel.isFetchingGoogleCalendarAPIContext ? "가져오는 중" : "가져오기", systemImage: "arrow.clockwise")
+            }
+            .buttonStyle(SmoothActionButtonStyle())
+            .disabled(viewModel.isFetchingGoogleCalendarAPIContext || viewModel.activeTranscriptURL == nil)
+
+            Button {
+                viewModel.disconnectGoogleCalendar()
+            } label: {
+                Label("해제", systemImage: "xmark.circle")
+            }
+            .buttonStyle(SmoothActionButtonStyle())
         }
     }
 
