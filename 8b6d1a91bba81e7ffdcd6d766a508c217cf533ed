@@ -1,0 +1,21 @@
+Sources/MeetingRescue/ContentView.swift
+  h_d82ccb34241a0d 1131
+Sources/MeetingRescue/GoogleCalendarIntegration.swift
+  h_d82ccb34241a0d 73-75,78-80,87-90,93-102,104-123,125-130
+Tests/MeetingRescueTests/ContentViewContextWiringTests.swift
+  h_d82ccb34241a0d 14-35
+Tests/MeetingRescueTests/GoogleCalendarOAuthLoopbackServerTests.swift
+  h_d82ccb34241a0d 6-40
+docs/superpowers/plans/2026-06-08-google-calendar-quality-validation-hardening-goal.md
+  h_d82ccb34241a0d 1-176
+---
+{
+  "schema_version": "zax-attestation/1.1.0",
+  "base_commit_sha": "8b6d1a91bba81e7ffdcd6d766a508c217cf533ed",
+  "prompts": {},
+  "humans": {
+    "h_d82ccb34241a0d": {
+      "author": "ethan@zigbang.com"
+    }
+  }
+}
