@@ -1,5 +1,5 @@
 public enum MeetingIntelligenceFeatureGate {
-    public static func isVisibleLane(_ laneID: String) -> Bool {
-        laneID != "context"
+    public static func isVisibleLane(_: String) -> Bool {
+        true
     }
 }

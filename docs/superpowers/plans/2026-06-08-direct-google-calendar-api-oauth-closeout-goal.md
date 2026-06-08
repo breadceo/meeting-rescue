@@ -100,7 +100,7 @@ Closeout work:
 
 5. GC6 App wiring and UI:
    - Add Settings connection controls for Google Calendar.
-   - Add fetch/status affordance where context is introduced, without exposing the hidden Context tab prematurely.
+   - Add fetch/status affordance where context is introduced.
    - Keep Calendar MCP status separate from Google Calendar API status.
    - Calendar context fetch failure must not block analysis.
 
@@ -110,8 +110,8 @@ Closeout work:
    - Verify Test Run uses the saved context snapshot without live Google API calls.
 
 7. GC8 Context tab re-enable gate:
-   - Keep the Context tab hidden until Google Calendar API UX/data path is usable.
-   - If re-enabling, add/adjust feature gate tests.
+   - Re-enable the Context tab now that Google Calendar API UX/data path is usable.
+   - Add/adjust feature gate tests.
 
 8. Documentation/tasks:
    - Keep `tasks.md` statuses current after each GC step.
@@ -156,6 +156,9 @@ Closeout evidence captured on 2026-06-08:
   - loopback server waits for a nonzero assigned port before creating the redirect URI.
   - loopback redirect parser waits for a complete HTTP request before reading the authorization code.
   - Calendar API query builder percent-encodes RFC3339 timezone `+` as `%2B`.
+- Context tab re-enable follow-up:
+  - `MeetingIntelligenceFeatureGate` now exposes the `context` lane.
+  - `AppViewModel` Test Run coverage verifies saved calendar context loads as `cachedReplay` with Google Calendar supplemental context preserved.
 
 Non-goals for this closeout:
 - Full calendar sync.
