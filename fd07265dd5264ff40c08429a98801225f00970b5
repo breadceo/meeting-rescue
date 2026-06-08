@@ -1,0 +1,25 @@
+Sources/MeetingRescueCore/AnalysisPromptBuilder.swift
+  h_d82ccb34241a0d 49,86
+Sources/MeetingRescueCore/GoogleCalendarContextMapper.swift
+  h_d82ccb34241a0d 11,18-20,45-48,112-169
+Tests/MeetingRescueCoreTests/AnalysisPromptBuilderTests.swift
+  h_d82ccb34241a0d 314-364
+Tests/MeetingRescueCoreTests/GoogleCalendarContextMapperTests.swift
+  h_d82ccb34241a0d 87-188
+Tests/MeetingRescueTests/AppViewModelTestRunContextTests.swift
+  h_d82ccb34241a0d 28-46,91,96-119
+Tests/MeetingRescueTests/ContentViewContextWiringTests.swift
+  h_d82ccb34241a0d 26-42
+docs/calendar-quality-validation.md
+  h_d82ccb34241a0d 1-84
+---
+{
+  "schema_version": "zax-attestation/1.1.0",
+  "base_commit_sha": "fd07265dd5264ff40c08429a98801225f00970b5",
+  "prompts": {},
+  "humans": {
+    "h_d82ccb34241a0d": {
+      "author": "ethan@zigbang.com"
+    }
+  }
+}
