@@ -1,0 +1,21 @@
+config/release.env.example
+  h_d82ccb34241a0d 16-20
+docs/calendar-quality-validation.md
+  h_d82ccb34241a0d 1,14,16,18-49,53-54,56,59-60,63-64,70,72,74-109,111-113
+docs/superpowers/plans/2026-06-08-direct-google-calendar-api-oauth-closeout-goal.md
+  h_d82ccb34241a0d 125-126,154
+docs/superpowers/plans/2026-06-08-google-calendar-quality-validation-hardening-goal.md
+  h_d82ccb34241a0d 138-139
+scripts/build_app.sh
+  h_d82ccb34241a0d 30-34
+---
+{
+  "schema_version": "zax-attestation/1.1.0",
+  "base_commit_sha": "d723910374f1965091a3423da1cb1d2b104c0c34",
+  "prompts": {},
+  "humans": {
+    "h_d82ccb34241a0d": {
+      "author": "ethan@zigbang.com"
+    }
+  }
+}
