@@ -1,0 +1,15 @@
+Sources/MeetingRescueCore/GoogleCalendarContextMapper.swift
+  h_d82ccb34241a0d 11,21-34,38-39,41-42,44-51,54-57,96-117,224,267,278,307-328,514-518,527
+Tests/MeetingRescueCoreTests/GoogleCalendarContextMapperTests.swift
+  h_d82ccb34241a0d 123-240
+---
+{
+  "schema_version": "zax-attestation/1.1.0",
+  "base_commit_sha": "01c0617a37434beb954dac6d1f673e0dc027467f",
+  "prompts": {},
+  "humans": {
+    "h_d82ccb34241a0d": {
+      "author": "ethan@zigbang.com"
+    }
+  }
+}
