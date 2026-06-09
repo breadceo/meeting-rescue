@@ -122,7 +122,8 @@ Manual smoke setup:
 - Debug/dev app can read the downloaded Google OAuth client JSON through:
   - `MEETING_RESCUE_GOOGLE_CALENDAR_OAUTH_CONFIG=/path/to/client_secret_*.json swift run MeetingRescue`
 - Release app build can inject an untracked config through:
-  - `GOOGLE_CALENDAR_OAUTH_CONFIG_FILE=/path/to/client_secret_*.json scripts/build_app.sh`
+  - `private/GoogleCalendarOAuthConfig.json` plus `scripts/build_app.sh`
+  - or `GOOGLE_CALENDAR_OAUTH_CONFIG_FILE=/path/to/client_secret_*.json scripts/build_app.sh` when overriding the local path
 - Do not commit the downloaded OAuth client JSON.
 
 Verification required before closing:
@@ -150,7 +151,7 @@ Closeout evidence captured on 2026-06-08:
 - `swift test`: passed, 170 tests / 33 suites.
 - `python3 -m unittest Tests/google_calendar_oauth_poc_tests.py`: passed, 4 tests.
 - `swift run MeetingRescue --google-calendar-smoke ... --connect --reset-before-connect --disconnect-after`: passed. OAuth connect, Keychain token present, Calendar fetch 7 events, persisted candidates 7, cached replay `cachedReplay`, disconnect verified.
-- Release-style build with `GOOGLE_CALENDAR_OAUTH_CONFIG_FILE=/Users/ethan/Downloads/client_secret_...json scripts/build_app.sh`: passed, and `GoogleCalendarOAuthConfig.json` exists in the app bundle resource directory.
+- Release-style build with local untracked OAuth config injection: passed, and `GoogleCalendarOAuthConfig.json` exists in the app bundle resource directory.
 - Secret/token leak check: passed for tracked diff and untracked repo files.
 - Fixes verified during closeout:
   - loopback server waits for a nonzero assigned port before creating the redirect URI.

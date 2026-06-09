@@ -135,7 +135,8 @@ Hardening work:
 
 8. Build/smoke validation
 - Build local app with OAuth config injection:
-  - `GOOGLE_CALENDAR_OAUTH_CONFIG_FILE=/path/to/client_secret_*.json scripts/build_app.sh`
+  - `scripts/build_app.sh` uses `private/GoogleCalendarOAuthConfig.json` automatically when present.
+  - Use `GOOGLE_CALENDAR_OAUTH_CONFIG_FILE=/path/to/client_secret_*.json scripts/build_app.sh` only to override the local path.
 - Verify the config file exists inside the app bundle.
 - Smoke behavior:
   - If no token is stored, smoke should pass config loading and fail at the expected login/token state, not `OAuth config가 없습니다`.
