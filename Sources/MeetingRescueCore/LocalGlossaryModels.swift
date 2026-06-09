@@ -107,7 +107,7 @@ public struct LocalGlossarySuggestion: Codable, Equatable, Identifiable, Sendabl
     ) {
         self.id = id
         self.suggestedCanonical = suggestedCanonical.trimmedGlossaryText
-        self.aliases = aliases.normalizedGlossaryValues(excluding: [suggestedCanonical])
+        self.aliases = aliases.normalizedGlossaryValues()
         self.evidence = Array(evidence.prefix(5))
         self.occurrenceCount = max(0, occurrenceCount)
         self.meetingCount = max(0, meetingCount)
