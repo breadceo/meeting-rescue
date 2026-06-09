@@ -1,0 +1,23 @@
+Sources/MeetingRescueCore/ApplicationStateStore.swift
+  h_d82ccb34241a0d 111-127,147-150
+Sources/MeetingRescueCore/CalendarContextModels.swift
+  h_d82ccb34241a0d 86,95
+Sources/MeetingRescueCore/LocalGlossaryModels.swift
+  h_d82ccb34241a0d 1-251
+Tests/MeetingRescueCoreTests/CalendarContextModelsTests.swift
+  h_d82ccb34241a0d 119-129
+Tests/MeetingRescueCoreTests/LocalGlossaryModelsTests.swift
+  h_d82ccb34241a0d 1-89
+docs/superpowers/plans/2026-06-09-local-glossary-suggestions.md
+  h_d82ccb34241a0d 1-1846
+---
+{
+  "schema_version": "zax-attestation/1.1.0",
+  "base_commit_sha": "175cf0cd04853fc4edeb2d9747fb834dc5d0c0ab",
+  "prompts": {},
+  "humans": {
+    "h_d82ccb34241a0d": {
+      "author": "ethan@zigbang.com"
+    }
+  }
+}
