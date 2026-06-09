@@ -67,9 +67,10 @@ if [[ -n "$GOOGLE_CALENDAR_OAUTH_CONFIG_FILE" ]]; then
     exit 1
   fi
   mkdir -p "$RESOURCES_DIR/MeetingRescue_MeetingRescue.bundle"
-  cp "$GOOGLE_CALENDAR_OAUTH_CONFIG_FILE" "$RESOURCES_DIR/MeetingRescue_MeetingRescue.bundle/GoogleCalendarOAuthConfig.json"
-  xattr -d com.apple.quarantine "$RESOURCES_DIR/MeetingRescue_MeetingRescue.bundle/GoogleCalendarOAuthConfig.json" 2>/dev/null || true
-  xattr -d com.apple.macl "$RESOURCES_DIR/MeetingRescue_MeetingRescue.bundle/GoogleCalendarOAuthConfig.json" 2>/dev/null || true
+  oauth_config_destination="$RESOURCES_DIR/MeetingRescue_MeetingRescue.bundle/GoogleCalendarOAuthConfig.json"
+  rm -f "$oauth_config_destination"
+  install -m 0644 "$GOOGLE_CALENDAR_OAUTH_CONFIG_FILE" "$oauth_config_destination"
+  xattr -c "$oauth_config_destination" 2>/dev/null || true
 fi
 
 if [[ -f "$APP_ICON_SOURCE" ]] && command -v iconutil >/dev/null 2>&1; then
