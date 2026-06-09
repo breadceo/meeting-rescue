@@ -40,6 +40,19 @@ struct ContentViewContextWiringTests {
         #expect(apiActions.contains("fetchGoogleCalendarAPIContext()"))
         #expect(apiActions.contains("disconnectGoogleCalendar()"))
     }
+
+    @Test("settings exposes local glossary controls")
+    func settingsExposeLocalGlossaryControls() throws {
+        let sourceURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent("Sources/MeetingRescue/ContentView.swift")
+        let source = try String(contentsOf: sourceURL, encoding: .utf8)
+
+        #expect(source.contains("case glossary = \"Glossary\""))
+        #expect(source.contains("localGlossarySettings"))
+        #expect(source.contains("용어 후보 생성"))
+        #expect(source.contains("사전에 추가"))
+        #expect(source.contains("다시 보지 않기"))
+    }
 }
 
 private extension String {

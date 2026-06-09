@@ -661,6 +661,8 @@ final class AppViewModel: ObservableObject {
     @Published var statusMessage = "transcript 폴더를 선택해 주세요."
     @Published var settings: AppSettings
     @Published var localGlossaryState = LocalGlossaryState()
+    @Published var localGlossaryStatusMessage = "로컬 용어 사전 준비"
+    @Published var isGeneratingLocalGlossarySuggestions = false
     @Published var analysisState = MeetingAnalysisState()
     @Published var analysisStatus: AnalysisRuntimeStatus = .idle
     @Published var calendarContextStatusMessage = "Google Calendar context 확인 전"
@@ -1225,6 +1227,61 @@ final class AppViewModel: ObservableObject {
         if !isEnabled {
             cancelAutomaticAnalysisIfNeeded()
         }
+    }
+
+    func setLocalGlossaryEnabled(_ isEnabled: Bool) {
+        settings.localGlossaryEnabled = isEnabled
+        saveSettings()
+        refreshMeetingHistory(force: true)
+    }
+
+    func refreshLocalGlossarySuggestions() {
+        guard !isGeneratingLocalGlossarySuggestions else {
+            return
+        }
+        isGeneratingLocalGlossarySuggestions = true
+        localGlossaryStatusMessage = "회의 history에서 용어 후보를 찾는 중"
+
+        let documents = meetingHistoryItems.map { item in
+            LocalGlossarySourceDocument(id: item.id, title: item.title, sections: item.searchSections)
+        }
+        let currentState = localGlossaryState
+
+        Task { @MainActor in
+            let suggestions = await Task.detached(priority: .utility) {
+                LocalGlossarySuggestionEngine.suggestions(from: documents, existingState: currentState)
+            }.value
+            for suggestion in suggestions {
+                localGlossaryState.upsertSuggestion(suggestion)
+            }
+            try? stateStore.saveLocalGlossaryState(localGlossaryState)
+            localGlossaryStatusMessage = suggestions.isEmpty ? "새 용어 후보 없음" : "용어 후보 \(suggestions.count)개"
+            isGeneratingLocalGlossarySuggestions = false
+        }
+    }
+
+    func acceptLocalGlossarySuggestion(
+        id: String,
+        canonical: String,
+        category: LocalGlossaryCategory = .domainTerm
+    ) {
+        localGlossaryState.acceptSuggestion(id: id, canonical: canonical, category: category)
+        try? stateStore.saveLocalGlossaryState(localGlossaryState)
+        localGlossaryStatusMessage = "용어 사전에 추가했습니다."
+        refreshMeetingHistory(force: true)
+    }
+
+    func dismissLocalGlossarySuggestion(id: String) {
+        localGlossaryState.dismissSuggestion(id: id)
+        try? stateStore.saveLocalGlossaryState(localGlossaryState)
+        localGlossaryStatusMessage = "용어 후보를 숨겼습니다."
+    }
+
+    func deleteLocalGlossaryTerm(id: String) {
+        localGlossaryState.deleteTerm(id: id)
+        try? stateStore.saveLocalGlossaryState(localGlossaryState)
+        localGlossaryStatusMessage = "용어를 삭제했습니다."
+        refreshMeetingHistory(force: true)
     }
 
     func updateProvider(_ provider: LLMProviderKind) {

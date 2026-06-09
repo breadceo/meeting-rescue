@@ -2935,6 +2935,8 @@ struct SettingsView: View {
             return "provider, model preset, execution mode를 조정합니다."
         case .analysis:
             return "자동 분석, trigger, timeout, context retrieval을 조정합니다."
+        case .glossary:
+            return "회의 history에서 자주 헷갈리는 사내 용어를 로컬 사전으로 정리합니다."
         case .app:
             return "폴더, 업데이트, 릴리즈 노트, onboarding을 관리합니다."
         case .danger:
@@ -2960,6 +2962,8 @@ struct SettingsView: View {
             llmSettings
         case .analysis:
             analysisSettings
+        case .glossary:
+            localGlossarySettings
         case .app:
             appSettings
         case .danger:
@@ -3106,6 +3110,115 @@ struct SettingsView: View {
             }
             .buttonStyle(SmoothActionButtonStyle())
         }
+    }
+
+    private var localGlossarySettings: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            settingsCard("Local Glossary", systemImage: "text.book.closed") {
+                settingsRow("사용", detail: "raw transcript는 수정하지 않고 분석/search용 low-priority 용어 힌트만 사용합니다.") {
+                    Toggle("local glossary", isOn: Binding(
+                        get: { viewModel.settings.localGlossaryEnabled },
+                        set: { viewModel.setLocalGlossaryEnabled($0) }
+                    ))
+                    .labelsHidden()
+                }
+
+                actionRow("용어 후보", detail: viewModel.localGlossaryStatusMessage) {
+                    Button {
+                        viewModel.refreshLocalGlossarySuggestions()
+                    } label: {
+                        Label(
+                            viewModel.isGeneratingLocalGlossarySuggestions ? "생성 중" : "용어 후보 생성",
+                            systemImage: "wand.and.stars"
+                        )
+                    }
+                    .buttonStyle(SmoothActionButtonStyle())
+                    .disabled(viewModel.isGeneratingLocalGlossarySuggestions || viewModel.meetingHistoryItems.isEmpty)
+                }
+            }
+
+            settingsCard("Suggestions", systemImage: "lightbulb") {
+                if viewModel.localGlossaryState.suggestions.isEmpty {
+                    Text("표시할 용어 후보가 없습니다.")
+                        .font(.callout)
+                        .foregroundStyle(Color.smoothMuted)
+                } else {
+                    ForEach(viewModel.localGlossaryState.suggestions.prefix(8)) { suggestion in
+                        localGlossarySuggestionRow(suggestion)
+                    }
+                }
+            }
+
+            settingsCard("Accepted Terms", systemImage: "checkmark.seal") {
+                if viewModel.localGlossaryState.terms.isEmpty {
+                    Text("아직 추가된 용어가 없습니다.")
+                        .font(.callout)
+                        .foregroundStyle(Color.smoothMuted)
+                } else {
+                    ForEach(viewModel.localGlossaryState.terms) { term in
+                        localGlossaryTermRow(term)
+                    }
+                }
+            }
+        }
+    }
+
+    private func localGlossarySuggestionRow(_ suggestion: LocalGlossarySuggestion) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(suggestion.aliases.joined(separator: ", "))
+                        .font(.callout.weight(.semibold))
+                        .foregroundStyle(Color.smoothInk)
+                    Text("회의 \(suggestion.meetingCount)개 · 출현 \(suggestion.occurrenceCount)회")
+                        .font(.caption)
+                        .foregroundStyle(Color.smoothMuted)
+                }
+                Spacer()
+                Button {
+                    viewModel.acceptLocalGlossarySuggestion(id: suggestion.id, canonical: suggestion.suggestedCanonical)
+                } label: {
+                    Label("사전에 추가", systemImage: "checkmark")
+                }
+                .buttonStyle(SmoothActionButtonStyle())
+
+                Button {
+                    viewModel.dismissLocalGlossarySuggestion(id: suggestion.id)
+                } label: {
+                    Label("다시 보지 않기", systemImage: "eye.slash")
+                }
+                .buttonStyle(SmoothActionButtonStyle())
+            }
+
+            if let evidence = suggestion.evidence.first {
+                Text(evidence.excerpt)
+                    .font(.caption)
+                    .foregroundStyle(Color.smoothMuted)
+                    .lineLimit(2)
+            }
+        }
+        .padding(.vertical, 6)
+    }
+
+    private func localGlossaryTermRow(_ term: LocalGlossaryTerm) -> some View {
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(term.canonical)
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(Color.smoothInk)
+                Text(term.aliases.joined(separator: ", "))
+                    .font(.caption)
+                    .foregroundStyle(Color.smoothMuted)
+            }
+            Spacer()
+            Button(role: .destructive) {
+                viewModel.deleteLocalGlossaryTerm(id: term.id)
+            } label: {
+                Label("삭제", systemImage: "trash")
+            }
+            .buttonStyle(SmoothActionButtonStyle(kind: .destructive))
+        }
+        .padding(.vertical, 6)
     }
 
     private var appSettings: some View {
@@ -3390,6 +3503,7 @@ private enum ReleaseNoteBlock: Identifiable {
 private enum SettingsSection: String, CaseIterable, Identifiable {
     case llm = "LLM"
     case analysis = "Analysis"
+    case glossary = "Glossary"
     case app = "App"
     case danger = "Danger"
 
@@ -3401,6 +3515,8 @@ private enum SettingsSection: String, CaseIterable, Identifiable {
             return "cpu"
         case .analysis:
             return "sparkles"
+        case .glossary:
+            return "text.book.closed"
         case .app:
             return "macwindow"
         case .danger:
