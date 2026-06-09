@@ -1,0 +1,17 @@
+Sources/MeetingRescueCore/LocalGlossaryModels.swift
+  h_d82ccb34241a0d 110
+Sources/MeetingRescueCore/LocalGlossarySuggestionEngine.swift
+  h_d82ccb34241a0d 1-225
+Tests/MeetingRescueCoreTests/LocalGlossarySuggestionEngineTests.swift
+  h_d82ccb34241a0d 1-78
+---
+{
+  "schema_version": "zax-attestation/1.1.0",
+  "base_commit_sha": "dce6ddebf658069a167a1cd09b4c9366175a7696",
+  "prompts": {},
+  "humans": {
+    "h_d82ccb34241a0d": {
+      "author": "ethan@zigbang.com"
+    }
+  }
+}
