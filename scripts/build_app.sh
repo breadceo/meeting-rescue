@@ -69,7 +69,8 @@ if [[ -n "$GOOGLE_CALENDAR_OAUTH_CONFIG_FILE" ]]; then
   mkdir -p "$RESOURCES_DIR/MeetingRescue_MeetingRescue.bundle"
   oauth_config_destination="$RESOURCES_DIR/MeetingRescue_MeetingRescue.bundle/GoogleCalendarOAuthConfig.json"
   rm -f "$oauth_config_destination"
-  install -m 0644 "$GOOGLE_CALENDAR_OAUTH_CONFIG_FILE" "$oauth_config_destination"
+  cat "$GOOGLE_CALENDAR_OAUTH_CONFIG_FILE" > "$oauth_config_destination"
+  chmod 0644 "$oauth_config_destination"
   xattr -c "$oauth_config_destination" 2>/dev/null || true
 fi
 
