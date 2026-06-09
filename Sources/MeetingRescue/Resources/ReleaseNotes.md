@@ -1,8 +1,8 @@
-# Meeting Rescue v0.1.15
+# Meeting Rescue v0.1.16
 
 
-- Meeting Intelligence의 `컨텍스트` 탭을 릴리스 UI에서 숨겨 Calendar context lane 정리 전 사용자 노출을 막았습니다.
-- Live/Test Run 중 `Raw Transcript`에서 현재 시점을 `중요 시점`으로 표시할 수 있게 위치와 이름을 정리했습니다.
-- 이어받은 미해결 질문을 반복 회의와 최근 참석자/주제 일치 회의로 나누고, 같은 회의실의 주간 반복 회의 판정을 보강했습니다.
-- Decision Coach와 Share Readiness가 사용자의 수동 체크 없이 AI 결정 후보를 바로 기준으로 삼도록 조정했습니다.
-- 업데이트 feed가 설정되지 않은 개발 빌드에서 불필요한 업데이트 확인 팝업이 뜨지 않도록 했습니다.
+- Google Calendar API 직접 연결을 추가해 현재 회의와 겹치는 캘린더 일정을 컨텍스트로 가져올 수 있게 했습니다.
+- Test Run에서도 저장된 Calendar context snapshot을 재사용해 실제 회의 없이 캘린더 컨텍스트 반영 흐름을 검증할 수 있게 했습니다.
+- 컨텍스트 탭을 다시 열고, 사용자에게 불필요한 Google Calendar MCP 메뉴는 숨긴 상태로 정리했습니다.
+- 회의실/room code/title 매칭을 보강해 반복 회의와 관련 회의 연결의 정확도를 높였습니다.
+- 가장 잘 맞는 캘린더 후보가 명확하면 기본으로 선택하고, room code 충돌이나 애매한 후보는 수동 선택으로 남기도록 했습니다.
