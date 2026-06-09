@@ -85,6 +85,160 @@ struct GoogleCalendarContextMapperTests {
         #expect(state.supplementalSources.isEmpty)
     }
 
+    @Test("calendar title에 active room code가 있으면 recurring event를 자동 accepted로 승격한다")
+    func acceptsRecurringEventWhenRoomCodeAppearsInCalendarTitle() throws {
+        let response = GoogleCalendarEventsListResponse(items: [
+            event(
+                id: "evt-recurring-r3",
+                summary: "[table:HD-R3] Weekly Product Sync",
+                start: "2026-06-09T10:30:00+09:00",
+                end: "2026-06-09T11:00:00+09:00",
+                attendees: [person(email: "ethan@example.com")],
+                location: nil,
+                description: "Notes: https://docs.example.com/meeting-r3",
+                recurringEventID: "series-product-sync"
+            )
+        ])
+
+        let state = GoogleCalendarContextMapper.map(
+            response,
+            metadata: MeetingMetadata(
+                room: "Zigbang(2F)_R3",
+                dateTime: "2026-06-09 10:32",
+                participants: ["ethan@example.com"]
+            ),
+            meetingStart: date("2026-06-09T10:32:36+09:00"),
+            meetingEnd: date("2026-06-09T11:02:00+09:00"),
+            fetchedAt: Date(timeIntervalSince1970: 1_000)
+        )
+
+        let candidate = try #require(state.eventCandidates.first)
+        #expect(candidate.id == "google:evt-recurring-r3")
+        #expect(candidate.status == .accepted)
+        #expect(state.meetingIdentity?.seriesKey == "calendar:series-product-sync")
+        #expect(state.supplementalSources.first?.kind == .calendarMetadata)
+        #expect(state.supplementalSources.contains { $0.kind == .linkedSourceCandidate })
+    }
+
+    @Test("all-day나 긴 generic busy event는 시간대가 겹쳐도 accepted로 승격하지 않는다")
+    func doesNotAcceptAllDayOrLongBusyEventsAroundMeeting() {
+        let response = GoogleCalendarEventsListResponse(items: [
+            event(
+                id: "evt-all-day",
+                summary: "Office Day",
+                startDate: "2026-06-09",
+                endDate: "2026-06-10",
+                attendees: [],
+                location: "Zigbang(2F)",
+                description: nil,
+                recurringEventID: nil
+            ),
+            event(
+                id: "evt-work-block",
+                summary: "Work from office",
+                start: "2026-06-09T09:30:00+09:00",
+                end: "2026-06-09T18:30:00+09:00",
+                attendees: [person(email: "ethan@example.com")],
+                location: "Zigbang(2F)",
+                description: nil,
+                recurringEventID: nil
+            )
+        ])
+
+        let state = GoogleCalendarContextMapper.map(
+            response,
+            metadata: MeetingMetadata(
+                room: "Zigbang(2F)_R3",
+                dateTime: "2026-06-09 10:32",
+                participants: ["ethan@example.com"]
+            ),
+            meetingStart: date("2026-06-09T10:32:36+09:00"),
+            meetingEnd: date("2026-06-09T11:02:00+09:00"),
+            fetchedAt: Date(timeIntervalSince1970: 1_000)
+        )
+
+        #expect(!state.eventCandidates.contains { $0.status == .accepted })
+        #expect(state.meetingIdentity == nil)
+        #expect(state.supplementalSources.isEmpty)
+    }
+
+    @Test("다른 room code는 recurring event여도 candidate로 유지한다")
+    func keepsDifferentRoomCodeCandidateOnly() throws {
+        let response = GoogleCalendarEventsListResponse(items: [
+            event(
+                id: "evt-l3",
+                summary: "[table:HD-L3] Weekly Product Sync",
+                start: "2026-06-09T10:30:00+09:00",
+                end: "2026-06-09T11:00:00+09:00",
+                attendees: [person(email: "ethan@example.com")],
+                location: nil,
+                description: nil,
+                recurringEventID: "series-product-sync"
+            )
+        ])
+
+        let state = GoogleCalendarContextMapper.map(
+            response,
+            metadata: MeetingMetadata(
+                room: "Zigbang(2F)_R3",
+                dateTime: "2026-06-09 10:32",
+                participants: ["ethan@example.com"]
+            ),
+            meetingStart: date("2026-06-09T10:32:36+09:00"),
+            meetingEnd: date("2026-06-09T11:02:00+09:00"),
+            fetchedAt: Date(timeIntervalSince1970: 1_000)
+        )
+
+        let candidate = try #require(state.eventCandidates.first)
+        #expect(candidate.status == .candidate)
+        #expect(state.meetingIdentity == nil)
+        #expect(state.supplementalSources.isEmpty)
+    }
+
+    @Test("specific recurring room title match가 긴 busy overlap보다 먼저 accepted된다")
+    func prefersSpecificRecurringRoomTitleMatchOverLongBusyOverlap() throws {
+        let response = GoogleCalendarEventsListResponse(items: [
+            event(
+                id: "evt-work-block",
+                summary: "Work from office",
+                start: "2026-06-09T09:30:00+09:00",
+                end: "2026-06-09T18:30:00+09:00",
+                attendees: [person(email: "ethan@example.com")],
+                location: "Zigbang(2F)",
+                description: nil,
+                recurringEventID: nil
+            ),
+            event(
+                id: "evt-recurring-r3",
+                summary: "[table:HD-R3] Weekly Product Sync",
+                start: "2026-06-09T10:30:00+09:00",
+                end: "2026-06-09T11:00:00+09:00",
+                attendees: [person(email: "ethan@example.com")],
+                location: nil,
+                description: nil,
+                recurringEventID: "series-product-sync"
+            )
+        ])
+
+        let state = GoogleCalendarContextMapper.map(
+            response,
+            metadata: MeetingMetadata(
+                room: "Zigbang(2F)_R3",
+                dateTime: "2026-06-09 10:32",
+                participants: ["ethan@example.com"]
+            ),
+            meetingStart: date("2026-06-09T10:32:36+09:00"),
+            meetingEnd: date("2026-06-09T11:02:00+09:00"),
+            fetchedAt: Date(timeIntervalSince1970: 1_000)
+        )
+
+        let first = try #require(state.eventCandidates.first)
+        #expect(first.id == "google:evt-recurring-r3")
+        #expect(first.status == .accepted)
+        #expect(state.meetingIdentity?.seriesKey == "calendar:series-product-sync")
+        #expect(state.eventCandidates.dropFirst().allSatisfy { $0.status == .candidate })
+    }
+
     @Test("exact room and time match outranks participant-only overlap")
     func exactRoomAndTimeOutranksParticipantOnlyOverlap() throws {
         let response = GoogleCalendarEventsListResponse(items: [
@@ -185,5 +339,37 @@ struct GoogleCalendarContextMapperTests {
         #expect(linkedSources.map(\.excerpt).contains("https://docs.google.com/document/d/sanitized-doc-id/edit"))
         #expect(linkedSources.map(\.excerpt).contains("https://example.com/team/board?item=42"))
         #expect(linkedSources.allSatisfy { $0.priority == .linkedSourceCandidate })
+    }
+
+    private func event(
+        id: String,
+        summary: String,
+        start: String? = nil,
+        end: String? = nil,
+        startDate: String? = nil,
+        endDate: String? = nil,
+        attendees: [GoogleCalendarPerson],
+        location: String?,
+        description: String?,
+        recurringEventID: String?
+    ) -> GoogleCalendarEvent {
+        GoogleCalendarEvent(
+            id: id,
+            summary: summary,
+            start: GoogleCalendarEventTime(dateTime: start, date: startDate),
+            end: GoogleCalendarEventTime(dateTime: end, date: endDate),
+            attendees: attendees,
+            location: location,
+            description: description,
+            recurringEventID: recurringEventID
+        )
+    }
+
+    private func person(email: String? = nil, displayName: String? = nil) -> GoogleCalendarPerson {
+        GoogleCalendarPerson(email: email, displayName: displayName)
+    }
+
+    private func date(_ value: String) -> Date? {
+        ISO8601DateFormatter().date(from: value)
     }
 }
