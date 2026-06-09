@@ -7,6 +7,7 @@ struct MeetingRescueApp: App {
 
     init() {
         _ = GoogleCalendarSmokeRunner.runFromCommandLineIfRequested()
+        _ = CalendarQualityABRunner.runFromCommandLineIfRequested()
     }
 
     var body: some Scene {
