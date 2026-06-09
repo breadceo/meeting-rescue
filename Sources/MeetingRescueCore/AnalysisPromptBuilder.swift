@@ -46,7 +46,7 @@ public enum AnalysisPromptBuilder {
         newTranscriptChunk가 있으면 primary source로 쓰고 recentTranscriptContext/relatedTranscriptChunks는 연결 맥락으로만 쓰세요.
         final/full-refresh에서는 회의 전체 wrap-up을 다시 구성하세요.
         과거 맥락을 새 결정처럼 반복하지 말고, 불확실하면 candidate/note로 남기세요.
-        Supplemental context는 transcript보다 낮은 우선순위의 보조 근거입니다. transcript가 supplemental context와 충돌하면 transcript를 우선하고, confirmed local artifact가 있으면 calendar metadata보다 우선하세요. calendar metadata로 meetingMetadata를 덮어쓰지 마세요. Calendar linked source candidate는 자동으로 읽은 문서가 아니라 사용자가 확인해야 할 후보로만 취급하세요.
+        Supplemental context는 transcript보다 낮은 우선순위의 보조 근거입니다. transcript가 supplemental context와 충돌하면 transcript를 우선하고, confirmed local artifact가 있으면 calendar metadata보다 우선하세요. calendar metadata로 meetingMetadata를 덮어쓰지 마세요. Calendar linked source candidate는 자동으로 읽은 문서가 아니라 사용자가 확인해야 할 후보로만 취급하세요. Domain glossary는 low-priority STT 용어 힌트입니다. raw transcript를 수정하지 말고 원문 evidence를 유지하세요. 문맥이 맞을 때만 canonical term으로 해석하고, glossary만 보고 decision/action을 만들지 마세요.
 
         meetingTypePreset이 automatic이면 transcript를 보고 meetingType을 decision/planning/incident/oneOnOne/brainstorm/status 중 하나로 추정하세요.
         meetingTypePreset이 automatic이 아니면 그 값을 meetingType으로 사용하세요.
@@ -76,17 +76,17 @@ public enum AnalysisPromptBuilder {
         """
         당신은 실시간 회의 분석 assistant입니다. 모든 사용자-facing 응답은 한글로 작성하세요.
 
-        아래 payload만 근거로 지정된 JSON schema의 JSON patch 객체 하나만 반환하세요.
-        전체 AnalysisSnapshot을 쓰지 마세요. 이번 newTranscriptChunk 때문에 추가/수정할 항목만 patch로 반환하세요.
-        meetingType은 automatic 추정이 새로 확실해졌거나 수동 preset과 맞춰야 할 때만 채우고, 변화가 없으면 null로 두세요.
-        meetingSummary는 이번 chunk 또는 bookmark 때문에 회의 전체 결론, 핵심 포인트, 열린 질문이 바뀌었을 때만 채우고, 변화가 없으면 null로 두세요.
-        meetingSummary를 채울 때는 evidence.timestamp/speaker/excerpt를 함께 채우세요.
-        currentIssue는 현재 논점 또는 Live Focus입니다. 실제 변화가 있을 때만 채우고, 변화가 작으면 null로 두세요.
-        단, previousAnalysisSnapshot.currentIssue.summary가 비어 있으면 이번 chunk의 핵심 논점으로 currentIssue를 반드시 채우세요.
-        Supplemental context는 transcript보다 낮은 우선순위의 보조 근거입니다. transcript가 supplemental context와 충돌하면 transcript를 우선하고, confirmed local artifact가 있으면 calendar metadata보다 우선하세요. calendar metadata로 meetingMetadata를 덮어쓰지 마세요. Calendar linked source candidate는 자동으로 읽은 문서가 아니라 사용자가 확인해야 할 후보로만 취급하세요.
-        topicTimelineUpserts/decisionCandidateUpserts/actionItemCandidateUpserts/risksOrNotesAppend는 보통 0-2개, 최대 3개로 제한하세요.
+        아래 payload만 근거로 JSON patch 객체 하나만 반환하세요.
+        전체 AnalysisSnapshot을 쓰지 마세요. 이번 newTranscriptChunk 변화만 patch로 반환하세요.
+        meetingType은 새 추정/수동 preset 보정이 필요할 때만 채우고, 아니면 null로 두세요.
+        meetingSummary는 이번 chunk/bookmark 때문에 전체 결론, 핵심 포인트, 열린 질문이 바뀔 때만 채우고, 아니면 null로 두세요.
+        meetingSummary에는 evidence.timestamp/speaker/excerpt를 채우세요.
+        currentIssue는 현재 논점 또는 Live Focus입니다. 변화가 작으면 null로 두세요.
+        단, previousAnalysisSnapshot.currentIssue.summary가 비어 있으면 currentIssue를 반드시 채우세요.
+        Supplemental context는 transcript보다 낮은 우선순위의 보조 근거입니다. transcript가 supplemental context와 충돌하면 transcript를 우선하고, confirmed local artifact가 있으면 calendar metadata보다 우선하세요. calendar metadata로 meetingMetadata를 덮어쓰지 마세요. Calendar linked source candidate는 자동으로 읽은 문서가 아니라 사용자가 확인해야 할 후보로만 취급하세요. Domain glossary는 low-priority hint입니다. raw transcript를 수정하지 말고 원문 evidence를 유지하세요. 문맥이 맞을 때만 canonical term으로 해석하고, glossary만 보고 decision/action을 만들지 마세요.
+        topicTimelineUpserts/decisionCandidateUpserts/actionItemCandidateUpserts/risksOrNotesAppend는 보통 0-2개, 최대 3개입니다.
         기존 후보/노트/토픽을 반복하지 말고, confirmed/deleted 상태를 되돌리지 마세요.
-        relatedTranscriptChunks는 생략된 현재 회의 맥락 연결용입니다. 관련성이 낮으면 무시하세요.
+        relatedTranscriptChunks는 생략된 현재 회의 맥락 연결용이며 관련성이 낮으면 무시하세요.
         timestamp는 원문 회의 경과 시간만 사용하세요. 예: "04:13" 또는 "[04:13]". ISO 날짜를 만들지 마세요.
         topicTimelineUpserts의 startTimestamp와 endTimestamp는 둘 다 채우세요. 한 발화짜리 topic이면 같은 timestamp를 넣으세요.
         optional 값은 null 또는 빈 배열로 채우세요.

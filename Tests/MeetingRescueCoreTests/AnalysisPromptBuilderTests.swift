@@ -362,4 +362,32 @@ struct AnalysisPromptBuilderTests {
 
         #expect(!prompt.contains("https://docs.google.com/document/d/sanitized-doc-id/edit"))
     }
+
+    @Test("prompt includes domain glossary as low-priority interpretation hints")
+    func promptIncludesDomainGlossaryPriorityRules() throws {
+        let request = AnalysisRequest(
+            meetingID: "meeting-1",
+            metadata: MeetingMetadata(room: "R3"),
+            rawTranscript: "[03:12] Alex: jax 품질을 봅시다.",
+            supplementalContextSources: [
+                SupplementalContextSource(
+                    id: "glossary:term-zax",
+                    kind: .domainGlossary,
+                    title: "용어 힌트: zax",
+                    sourceName: "Local Glossary",
+                    excerpt: "canonical: zax\nmatched aliases: jax\nrule: low-priority interpretation hint",
+                    priority: .domainGlossary,
+                    confidence: 0.9
+                )
+            ]
+        )
+
+        let prompt = try AnalysisPromptBuilder.buildPrompt(for: request)
+
+        #expect(prompt.contains("domainGlossary"))
+        #expect(prompt.contains("canonical: zax"))
+        #expect(prompt.contains("Domain glossary"))
+        #expect(prompt.contains("raw transcript를 수정하지 말고"))
+        #expect(prompt.contains("glossary만 보고 decision/action을 만들지 마세요"))
+    }
 }
