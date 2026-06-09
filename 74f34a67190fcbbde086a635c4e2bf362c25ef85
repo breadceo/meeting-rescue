@@ -1,0 +1,19 @@
+Sources/MeetingRescueCore/AnalysisPromptBuilder.swift
+  h_d82ccb34241a0d 49,79-87,89
+Sources/MeetingRescueCore/LocalGlossaryMatcher.swift
+  h_d82ccb34241a0d 1-121
+Tests/MeetingRescueCoreTests/AnalysisPromptBuilderTests.swift
+  h_d82ccb34241a0d 365-392
+Tests/MeetingRescueCoreTests/LocalGlossaryMatcherTests.swift
+  h_d82ccb34241a0d 1-64
+---
+{
+  "schema_version": "zax-attestation/1.1.0",
+  "base_commit_sha": "74f34a67190fcbbde086a635c4e2bf362c25ef85",
+  "prompts": {},
+  "humans": {
+    "h_d82ccb34241a0d": {
+      "author": "ethan@zigbang.com"
+    }
+  }
+}
