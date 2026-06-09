@@ -120,6 +120,124 @@ struct GoogleCalendarContextMapperTests {
         #expect(state.supplementalSources.contains { $0.kind == .linkedSourceCandidate })
     }
 
+    @Test("명확한 단일 time/participant 후보는 기본 accepted로 선택한다")
+    func defaultsSingleTimeParticipantCandidateToAccepted() throws {
+        let response = GoogleCalendarEventsListResponse(items: [
+            event(
+                id: "evt-team-sync",
+                summary: "Team Sync",
+                start: "2026-06-09T10:30:00+09:00",
+                end: "2026-06-09T11:00:00+09:00",
+                attendees: [person(email: "ethan@example.com")],
+                location: nil,
+                description: nil,
+                recurringEventID: nil
+            )
+        ])
+
+        let state = GoogleCalendarContextMapper.map(
+            response,
+            metadata: MeetingMetadata(
+                dateTime: "2026-06-09 10:32",
+                participants: ["ethan@example.com"]
+            ),
+            meetingStart: date("2026-06-09T10:32:36+09:00"),
+            meetingEnd: date("2026-06-09T11:02:00+09:00"),
+            fetchedAt: Date(timeIntervalSince1970: 1_000)
+        )
+
+        let candidate = try #require(state.eventCandidates.first)
+        #expect(candidate.id == "google:evt-team-sync")
+        #expect(candidate.status == .accepted)
+        #expect(state.meetingIdentity?.calendarEventID == "google:evt-team-sync")
+        #expect(state.supplementalSources.first?.kind == .calendarMetadata)
+    }
+
+    @Test("candidate 간 confidence 차이가 작으면 기본 선택하지 않는다")
+    func keepsAmbiguousTimeParticipantCandidatesManual() throws {
+        let response = GoogleCalendarEventsListResponse(items: [
+            event(
+                id: "evt-team-sync-a",
+                summary: "Team Sync A",
+                start: "2026-06-09T10:30:00+09:00",
+                end: "2026-06-09T11:00:00+09:00",
+                attendees: [person(email: "ethan@example.com")],
+                location: nil,
+                description: nil,
+                recurringEventID: nil
+            ),
+            event(
+                id: "evt-team-sync-b",
+                summary: "Team Sync B",
+                start: "2026-06-09T10:30:00+09:00",
+                end: "2026-06-09T11:00:00+09:00",
+                attendees: [person(email: "ethan@example.com")],
+                location: nil,
+                description: nil,
+                recurringEventID: nil
+            )
+        ])
+
+        let state = GoogleCalendarContextMapper.map(
+            response,
+            metadata: MeetingMetadata(
+                dateTime: "2026-06-09 10:32",
+                participants: ["ethan@example.com"]
+            ),
+            meetingStart: date("2026-06-09T10:32:36+09:00"),
+            meetingEnd: date("2026-06-09T11:02:00+09:00"),
+            fetchedAt: Date(timeIntervalSince1970: 1_000)
+        )
+
+        #expect(state.eventCandidates.count == 2)
+        #expect(!state.eventCandidates.contains { $0.status == .accepted })
+        #expect(state.meetingIdentity == nil)
+        #expect(state.supplementalSources.isEmpty)
+    }
+
+    @Test("room code와 시간이 명확한 1등 후보는 strict threshold 아래여도 기본 accepted로 선택한다")
+    func defaultsClearRoomCodeBestCandidateToAccepted() throws {
+        let response = GoogleCalendarEventsListResponse(items: [
+            event(
+                id: "evt-r3",
+                summary: "[table:HD-R3] Product Planning",
+                start: "2026-06-09T10:30:00+09:00",
+                end: "2026-06-09T11:00:00+09:00",
+                attendees: [],
+                location: nil,
+                description: nil,
+                recurringEventID: nil
+            ),
+            event(
+                id: "evt-busy",
+                summary: "Busy",
+                start: "2026-06-09T10:30:00+09:00",
+                end: "2026-06-09T11:00:00+09:00",
+                attendees: [],
+                location: nil,
+                description: nil,
+                recurringEventID: nil
+            )
+        ])
+
+        let state = GoogleCalendarContextMapper.map(
+            response,
+            metadata: MeetingMetadata(
+                room: "Zigbang(2F)_R3",
+                dateTime: "2026-06-09 10:32"
+            ),
+            meetingStart: date("2026-06-09T10:32:36+09:00"),
+            meetingEnd: date("2026-06-09T11:02:00+09:00"),
+            fetchedAt: Date(timeIntervalSince1970: 1_000)
+        )
+
+        let first = try #require(state.eventCandidates.first)
+        #expect(first.id == "google:evt-r3")
+        #expect(first.status == .accepted)
+        #expect(state.eventCandidates.dropFirst().allSatisfy { $0.status == .candidate })
+        #expect(state.meetingIdentity?.calendarEventID == "google:evt-r3")
+    }
+
     @Test("all-day나 긴 generic busy event는 시간대가 겹쳐도 accepted로 승격하지 않는다")
     func doesNotAcceptAllDayOrLongBusyEventsAroundMeeting() {
         let response = GoogleCalendarEventsListResponse(items: [

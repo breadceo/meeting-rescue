@@ -8,7 +8,7 @@ public enum GoogleCalendarContextMapper {
         meetingEnd: Date?,
         fetchedAt: Date = Date()
     ) -> CalendarContextState {
-        let mapped = response.items.compactMap { event -> CalendarEventCandidate? in
+        let mapped = response.items.compactMap { event -> MappedCalendarCandidate? in
             let details = matchDetails(
                 for: event,
                 metadata: metadata,
@@ -18,36 +18,43 @@ public enum GoogleCalendarContextMapper {
             guard details.confidence > 0.1 else {
                 return nil
             }
-            return CalendarEventCandidate(
-                id: "google:\(event.id)",
-                title: event.summary,
-                startDateText: event.start.displayText,
-                endDateText: event.end.displayText,
-                organizer: event.organizer?.displayText.nonEmpty,
-                attendees: event.attendees.map(\.displayText).filter { !$0.isEmpty },
-                descriptionExcerpt: (event.description ?? "").capped(at: 1_200),
-                recurrenceID: event.recurringEventID,
-                confidence: details.confidence,
-                status: details.shouldAutoAccept ? .accepted : .candidate
+            return MappedCalendarCandidate(
+                candidate: CalendarEventCandidate(
+                    id: "google:\(event.id)",
+                    title: event.summary,
+                    startDateText: event.start.displayText,
+                    endDateText: event.end.displayText,
+                    organizer: event.organizer?.displayText.nonEmpty,
+                    attendees: event.attendees.map(\.displayText).filter { !$0.isEmpty },
+                    descriptionExcerpt: (event.description ?? "").capped(at: 1_200),
+                    recurrenceID: event.recurringEventID,
+                    confidence: details.confidence,
+                    status: details.shouldAutoAccept ? .accepted : .candidate
+                ),
+                details: details
             )
         }
         let sorted = mapped.sorted { lhs, rhs in
-            if lhs.status != rhs.status {
-                return lhs.status == .accepted
+            if lhs.candidate.status != rhs.candidate.status {
+                return lhs.candidate.status == .accepted
             }
-            if lhs.confidence != rhs.confidence {
-                return lhs.confidence > rhs.confidence
+            if lhs.candidate.confidence != rhs.candidate.confidence {
+                return lhs.candidate.confidence > rhs.candidate.confidence
             }
-            return lhs.startDateText < rhs.startDateText
+            return lhs.candidate.startDateText < rhs.candidate.startDateText
         }
-        let acceptedID = sorted.first { $0.status == .accepted }?.id
-        let normalizedCandidates = sorted.map { candidate in
-            guard candidate.status == .accepted, candidate.id != acceptedID else {
+        let acceptedID = sorted.first { $0.candidate.status == .accepted }?.candidate.id
+            ?? defaultAcceptedCandidateID(in: sorted)
+        let normalizedCandidates = sorted.map { mappedCandidate in
+            var candidate = mappedCandidate.candidate
+            if let acceptedID, candidate.id == acceptedID {
+                candidate.status = .accepted
                 return candidate
             }
-            var demoted = candidate
-            demoted.status = .candidate
-            return demoted
+            if candidate.status == .accepted {
+                candidate.status = .candidate
+            }
+            return candidate
         }
         let accepted = normalizedCandidates.first { $0.status == .accepted }
 
@@ -84,6 +91,28 @@ public enum GoogleCalendarContextMapper {
             meetingStart: meetingStart,
             meetingEnd: meetingEnd
         ).confidence
+    }
+
+    private static func defaultAcceptedCandidateID(in sorted: [MappedCalendarCandidate]) -> String? {
+        guard let best = sorted.first else {
+            return nil
+        }
+
+        let details = best.details
+        guard details.hasSpecificTimedOverlap,
+              !details.isAllDay,
+              !details.hasRoomCodeConflict,
+              details.confidence >= 0.50,
+              details.roomSignal.isStrong || details.hasParticipantOverlap || details.hasTitleOverlap else {
+            return nil
+        }
+
+        if let second = sorted.dropFirst().first,
+           details.confidence - second.details.confidence < 0.20 {
+            return nil
+        }
+
+        return best.candidate.id
     }
 
     private static func supplementalSource(for candidate: CalendarEventCandidate, location: String?) -> SupplementalContextSource {
@@ -192,6 +221,7 @@ public enum GoogleCalendarContextMapper {
     ) -> CalendarEventMatchDetails {
         let timeOverlap = overlaps(event: event, meetingStart: meetingStart, meetingEnd: meetingEnd)
         let room = roomSignal(event: event, metadataRoom: metadata.room)
+        let roomConflict = roomCodeConflict(event: event, metadataRoom: metadata.room)
         let specificTimedOverlap = hasSpecificTimedOverlap(
             event: event,
             meetingStart: meetingStart,
@@ -234,6 +264,7 @@ public enum GoogleCalendarContextMapper {
         let shouldAutoAccept = specificTimedOverlap
             && confidence >= 0.80
             && !allDay
+            && !roomConflict
             && (room.isStrong || recurringParticipantTitleSignal)
 
         return CalendarEventMatchDetails(
@@ -244,6 +275,7 @@ public enum GoogleCalendarContextMapper {
             hasSpecificTimedOverlap: specificTimedOverlap,
             hasParticipantOverlap: participant,
             hasTitleOverlap: title,
+            hasRoomCodeConflict: roomConflict,
             isAllDay: allDay,
             isLongEvent: long
         )
@@ -272,20 +304,34 @@ public enum GoogleCalendarContextMapper {
             return .none
         }
 
-        let eventRoomText = [
+        let sharedCodes = metadataCodes.intersection(roomCodes(in: roomSearchText(for: event)))
+        guard let code = sharedCodes.sorted().first else {
+            return .none
+        }
+
+        return .codeMatch(code)
+    }
+
+    private static func roomCodeConflict(event: GoogleCalendarEvent, metadataRoom: String?) -> Bool {
+        guard !exactRoomMatch(eventLocation: event.location, metadataRoom: metadataRoom) else {
+            return false
+        }
+        let metadataCodes = roomCodes(in: metadataRoom)
+        let eventCodes = roomCodes(in: roomSearchText(for: event))
+        guard !metadataCodes.isEmpty, !eventCodes.isEmpty else {
+            return false
+        }
+        return metadataCodes.isDisjoint(with: eventCodes)
+    }
+
+    private static func roomSearchText(for event: GoogleCalendarEvent) -> String {
+        [
             event.location,
             event.summary,
             boundedDescriptionText(event.description)
         ]
             .compactMap { $0 }
             .joined(separator: " ")
-
-        let sharedCodes = metadataCodes.intersection(roomCodes(in: eventRoomText))
-        guard let code = sharedCodes.sorted().first else {
-            return .none
-        }
-
-        return .codeMatch(code)
     }
 
     private static func participantOverlap(
@@ -465,6 +511,11 @@ private enum CalendarRoomSignal: Equatable {
     }
 }
 
+private struct MappedCalendarCandidate {
+    let candidate: CalendarEventCandidate
+    let details: CalendarEventMatchDetails
+}
+
 private struct CalendarEventMatchDetails {
     let confidence: Double
     let shouldAutoAccept: Bool
@@ -473,6 +524,7 @@ private struct CalendarEventMatchDetails {
     let hasSpecificTimedOverlap: Bool
     let hasParticipantOverlap: Bool
     let hasTitleOverlap: Bool
+    let hasRoomCodeConflict: Bool
     let isAllDay: Bool
     let isLongEvent: Bool
 }
