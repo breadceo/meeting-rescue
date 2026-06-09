@@ -14,6 +14,7 @@ public enum MeetingHistorySearchField: String, Equatable, Sendable {
     case action
     case topic
     case note
+    case glossary
     case rawTranscript
 
     public var displayName: String {
@@ -42,6 +43,8 @@ public enum MeetingHistorySearchField: String, Equatable, Sendable {
             return "흐름"
         case .note:
             return "note"
+        case .glossary:
+            return "용어 사전"
         case .rawTranscript:
             return "원문"
         }

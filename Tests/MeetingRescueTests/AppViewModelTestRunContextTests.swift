@@ -107,6 +107,31 @@ struct AppViewModelTestRunContextTests {
         #expect(!startTestRun.contains("makeGoogleCalendarService()"))
         #expect(!startTestRun.contains("CalendarMCPContextFetcher"))
     }
+
+    @Test("analysis request includes local glossary supplemental context")
+    @MainActor
+    func analysisRequestIncludesLocalGlossaryContext() throws {
+        let rootURL = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("meeting-rescue-glossary-request-\(UUID().uuidString)", isDirectory: true)
+        defer {
+            try? FileManager.default.removeItem(at: rootURL)
+        }
+
+        let stateStore = ApplicationStateStore(rootURL: rootURL.appendingPathComponent("state", isDirectory: true))
+        try stateStore.saveLocalGlossaryState(LocalGlossaryState(terms: [
+            LocalGlossaryTerm(id: "term-zax", canonical: "zax", aliases: ["jax"], category: .project)
+        ]))
+        let transcriptURL = rootURL.appendingPathComponent("meeting.txt")
+        try FileManager.default.createDirectory(at: rootURL, withIntermediateDirectories: true)
+        try "[03:12] Alex: jax workflow를 봅시다.".write(to: transcriptURL, atomically: true, encoding: .utf8)
+
+        let viewModel = AppViewModel(stateStore: stateStore)
+        viewModel.loadTranscriptForTesting(url: transcriptURL, rawTranscript: "[03:12] Alex: jax workflow를 봅시다.")
+
+        let request = try #require(viewModel.analysisRequestForTesting(reason: "manual-test"))
+
+        #expect(request.supplementalContextSources.contains { $0.kind == .domainGlossary && $0.excerpt.contains("canonical: zax") })
+    }
 }
 
 private extension String {

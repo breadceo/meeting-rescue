@@ -360,6 +360,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var analysisCadenceSeconds: Int
     public var providerTimeoutSeconds: Int
     public var liveContextRetrievalMode: LiveContextRetrievalMode
+    public var localGlossaryEnabled: Bool
     public var customProviderCommand: String
 
     public init(
@@ -374,6 +375,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         analysisCadenceSeconds: Int = 45,
         providerTimeoutSeconds: Int = 60,
         liveContextRetrievalMode: LiveContextRetrievalMode = .memoryLiveIndex,
+        localGlossaryEnabled: Bool = true,
         customProviderCommand: String = ""
     ) {
         self.selectedProvider = selectedProvider
@@ -387,6 +389,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         self.analysisCadenceSeconds = min(max(analysisCadenceSeconds, 30), 300)
         self.providerTimeoutSeconds = AnalysisTimeoutPolicy.normalizedConfiguredTimeout(providerTimeoutSeconds)
         self.liveContextRetrievalMode = liveContextRetrievalMode
+        self.localGlossaryEnabled = localGlossaryEnabled
         self.customProviderCommand = customProviderCommand
     }
 
@@ -402,6 +405,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         case analysisCadenceSeconds
         case providerTimeoutSeconds
         case liveContextRetrievalMode
+        case localGlossaryEnabled
         case customProviderCommand
     }
 
@@ -419,6 +423,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
             analysisCadenceSeconds: (try? container.decode(Int.self, forKey: .analysisCadenceSeconds)) ?? 45,
             providerTimeoutSeconds: (try? container.decode(Int.self, forKey: .providerTimeoutSeconds)) ?? 60,
             liveContextRetrievalMode: (try? container.decode(LiveContextRetrievalMode.self, forKey: .liveContextRetrievalMode)) ?? .memoryLiveIndex,
+            localGlossaryEnabled: (try? container.decode(Bool.self, forKey: .localGlossaryEnabled)) ?? true,
             customProviderCommand: (try? container.decode(String.self, forKey: .customProviderCommand)) ?? ""
         )
     }

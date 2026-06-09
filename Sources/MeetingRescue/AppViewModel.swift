@@ -316,20 +316,24 @@ private struct MeetingHistoryBuilder: Sendable {
     let rawTranscriptSearchLineLimit: Int
     let includeRawTranscriptSearch: Bool
     let searchIndexExclusionURL: URL?
+    let localGlossaryState: LocalGlossaryState
+    let localGlossaryEnabled: Bool
 
     func build(folderURL: URL) -> MeetingHistoryBuildResult {
         let candidates = LatestTranscriptSelector.textFiles(in: folderURL)
+        let glossarySignature = localGlossaryEnabled ? "glossary:\(localGlossaryState.updatedAt.timeIntervalSince1970)" : "glossary:off"
         let fileSignature = candidates
             .sorted { $0.url.path < $1.url.path }
             .map { "\($0.url.path):\($0.modificationDate.timeIntervalSince1970)" }
             .joined(separator: "|")
         let excludedPath = searchIndexExclusionURL?.path
-        let searchIndexFileSignature = candidates
+        let rawSearchIndexFileSignature = candidates
             .filter { $0.url.path != excludedPath }
             .sorted { $0.url.path < $1.url.path }
             .map { "\($0.url.path):\($0.modificationDate.timeIntervalSince1970)" }
             .joined(separator: "|")
-        let signature = "\(includeRawTranscriptSearch ? "raw" : "structured")|\(fileSignature)"
+        let searchIndexFileSignature = "\(glossarySignature)|\(rawSearchIndexFileSignature)"
+        let signature = "\(includeRawTranscriptSearch ? "raw" : "structured")|\(glossarySignature)|\(fileSignature)"
         let items = candidates
             .sorted { lhs, rhs in
                 if lhs.modificationDate == rhs.modificationDate {
@@ -448,6 +452,12 @@ private struct MeetingHistoryBuilder: Sendable {
             }
         }
 
+        sections.append(contentsOf: localGlossarySearchSections(
+            from: sections,
+            state: localGlossaryState,
+            isEnabled: localGlossaryEnabled
+        ))
+
         return sections.filter { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     }
 
@@ -496,6 +506,30 @@ private struct MeetingHistoryBuilder: Sendable {
                     timestamp: TranscriptTimestampLocator.timestamp(in: trimmed)
                 )
             }
+    }
+}
+
+private func localGlossarySearchSections(
+    from sections: [MeetingHistorySearchSection],
+    state: LocalGlossaryState,
+    isEnabled: Bool
+) -> [MeetingHistorySearchSection] {
+    guard isEnabled else {
+        return []
+    }
+    let sourceText = sections.map(\.text).joined(separator: "\n")
+    let matches = LocalGlossaryMatcher.matches(in: sourceText, state: state)
+    guard !matches.isEmpty else {
+        return []
+    }
+    let termsByID = Dictionary(uniqueKeysWithValues: state.enabledTerms.map { ($0.id, $0) })
+    return matches.map { match in
+        let values = termsByID[match.termID]?.allMatchValues ?? ([match.canonical] + match.matchedAliases)
+        return MeetingHistorySearchSection(
+            field: .glossary,
+            text: values.joined(separator: " "),
+            weight: 66
+        )
     }
 }
 
@@ -626,6 +660,7 @@ final class AppViewModel: ObservableObject {
     @Published var metadata = MeetingMetadata()
     @Published var statusMessage = "transcript 폴더를 선택해 주세요."
     @Published var settings: AppSettings
+    @Published var localGlossaryState = LocalGlossaryState()
     @Published var analysisState = MeetingAnalysisState()
     @Published var analysisStatus: AnalysisRuntimeStatus = .idle
     @Published var calendarContextStatusMessage = "Google Calendar context 확인 전"
@@ -698,6 +733,7 @@ final class AppViewModel: ObservableObject {
         self.bookmarkStore = FolderBookmarkStore(stateStore: stateStore)
         self.searchDatabase = (try? stateStore.searchIndexDatabaseURL()).map(MeetingSearchDatabase.init(databaseURL:))
         self.settings = stateStore.loadSettings()
+        self.localGlossaryState = stateStore.loadLocalGlossaryState()
         self.detectedSomaRecordingsFolder = SomaRecordingsFolderDetector().detect()
         self.providerAvailability = LLMProviderAvailabilityDetector().detect()
         applyInitialProviderAvailability()
@@ -1176,6 +1212,7 @@ final class AppViewModel: ObservableObject {
             analysisCadenceSeconds: settings.analysisCadenceSeconds,
             providerTimeoutSeconds: settings.providerTimeoutSeconds,
             liveContextRetrievalMode: settings.liveContextRetrievalMode,
+            localGlossaryEnabled: settings.localGlossaryEnabled,
             customProviderCommand: settings.customProviderCommand
         )
         try? stateStore.saveSettings(settings)
@@ -1955,13 +1992,17 @@ final class AppViewModel: ObservableObject {
         let stateStore = stateStore
         let lineLimit = rawTranscriptSearchLineLimit
         let searchIndexExclusionURL = activeSearchIndexExclusionURL()
-        historyRefreshTask = Task { [weak self, selectedFolderURL, stateStore, lineLimit, force, shouldIncludeRawTranscriptSearch, searchIndexExclusionURL] in
+        let localGlossaryState = localGlossaryState
+        let localGlossaryEnabled = settings.localGlossaryEnabled
+        historyRefreshTask = Task { [weak self, selectedFolderURL, stateStore, lineLimit, force, shouldIncludeRawTranscriptSearch, searchIndexExclusionURL, localGlossaryState, localGlossaryEnabled] in
             let result = await Task.detached(priority: .utility) {
                 MeetingHistoryBuilder(
                     stateStore: stateStore,
                     rawTranscriptSearchLineLimit: lineLimit,
                     includeRawTranscriptSearch: shouldIncludeRawTranscriptSearch,
-                    searchIndexExclusionURL: searchIndexExclusionURL
+                    searchIndexExclusionURL: searchIndexExclusionURL,
+                    localGlossaryState: localGlossaryState,
+                    localGlossaryEnabled: localGlossaryEnabled
                 )
                 .build(folderURL: selectedFolderURL)
             }
@@ -2025,8 +2066,10 @@ final class AppViewModel: ObservableObject {
 
         let stateStore = stateStore
         let lineLimit = rawTranscriptSearchLineLimit
+        let localGlossaryState = localGlossaryState
+        let localGlossaryEnabled = settings.localGlossaryEnabled
         searchIndexProgress = MeetingSearchIndexProgress(state: .checking, completed: 0, total: meetingHistoryItems.count)
-        searchIndexBuildTask = Task(priority: .background) { [weak self, searchDatabase, stateStore, lineLimit, folderURL, fileSignature, excludedURL] in
+        searchIndexBuildTask = Task(priority: .background) { [weak self, searchDatabase, stateStore, lineLimit, folderURL, fileSignature, excludedURL, localGlossaryState, localGlossaryEnabled] in
             do {
                 let storedSignature = try await Task.detached(priority: .background) {
                     try searchDatabase.storedSignature()
@@ -2058,7 +2101,9 @@ final class AppViewModel: ObservableObject {
                         stateStore: stateStore,
                         rawTranscriptSearchLineLimit: lineLimit,
                         includeRawTranscriptSearch: true,
-                        searchIndexExclusionURL: excludedURL
+                        searchIndexExclusionURL: excludedURL,
+                        localGlossaryState: localGlossaryState,
+                        localGlossaryEnabled: localGlossaryEnabled
                     )
                     .build(folderURL: folderURL)
                 }
@@ -2290,6 +2335,12 @@ final class AppViewModel: ObservableObject {
         if !rawPreview.isEmpty {
             sections.append(contentsOf: rawTranscriptSearchSections(from: rawPreview))
         }
+
+        sections.append(contentsOf: localGlossarySearchSections(
+            from: sections,
+            state: localGlossaryState,
+            isEnabled: settings.localGlossaryEnabled
+        ))
 
         return sections.filter { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     }
@@ -2638,23 +2689,18 @@ final class AppViewModel: ObservableObject {
         reason.hasPrefix("automatic") || reason.hasPrefix("final")
     }
 
-    private func triggerAnalysis(reason: String) {
-        guard analysisTask == nil,
-              let activeTranscriptURL,
-              !rawTranscript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            return
+    private func makeAnalysisRequest(
+        reason: String,
+        transcriptWindow: AnalysisTranscriptWindow,
+        previousSnapshot: AnalysisSnapshot?
+    ) -> AnalysisRequest? {
+        guard let activeTranscriptURL else {
+            return nil
         }
-
-        let meetingID = meetingID(for: activeTranscriptURL)
-        let previousSnapshot = providerPreviousSnapshot() ?? patchBaselineSnapshot(for: reason)
-        let transcriptWindow = AnalysisTranscriptWindow.make(
-            rawTranscript: rawTranscript,
-            lastAnalyzedTranscriptCharacterCount: analysisState.analyzedTranscriptCharacterCount,
-            reason: reason,
-            maxAutomaticCatchUpCharacters: automaticCatchUpChunkCharacters
-        )
-        var request = AnalysisRequest(
-            meetingID: meetingID,
+        let supplementalSources = analysisState.calendarContext.supplementalSources
+            + glossarySupplementalSources(for: transcriptWindow.rawTranscript)
+        return AnalysisRequest(
+            meetingID: meetingID(for: activeTranscriptURL),
             metadata: metadata,
             rawTranscript: transcriptWindow.rawTranscript,
             previousSnapshot: previousSnapshot,
@@ -2666,8 +2712,38 @@ final class AppViewModel: ObservableObject {
             bookmarks: analysisState.bookmarks,
             reason: reason,
             lastAnalyzedTranscriptCharacterCount: transcriptWindow.lastAnalyzedTranscriptCharacterCount,
-            supplementalContextSources: analysisState.calendarContext.supplementalSources
+            supplementalContextSources: supplementalSources
         )
+    }
+
+    private func glossarySupplementalSources(for text: String) -> [SupplementalContextSource] {
+        guard settings.localGlossaryEnabled else {
+            return []
+        }
+        return LocalGlossaryMatcher.supplementalSources(for: text, state: localGlossaryState)
+    }
+
+    private func triggerAnalysis(reason: String) {
+        guard analysisTask == nil,
+              let activeTranscriptURL,
+              !rawTranscript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return
+        }
+
+        let previousSnapshot = providerPreviousSnapshot() ?? patchBaselineSnapshot(for: reason)
+        let transcriptWindow = AnalysisTranscriptWindow.make(
+            rawTranscript: rawTranscript,
+            lastAnalyzedTranscriptCharacterCount: analysisState.analyzedTranscriptCharacterCount,
+            reason: reason,
+            maxAutomaticCatchUpCharacters: automaticCatchUpChunkCharacters
+        )
+        guard var request = makeAnalysisRequest(
+            reason: reason,
+            transcriptWindow: transcriptWindow,
+            previousSnapshot: previousSnapshot
+        ) else {
+            return
+        }
         let contextPlan = AnalysisContextPlanner.makePlan(
             for: request,
             retrievalMode: liveContextRetrievalMode(for: reason),
@@ -2787,6 +2863,32 @@ final class AppViewModel: ObservableObject {
         }
         return AnalysisSnapshot(currentIssue: CurrentIssue(summary: ""))
     }
+
+    #if DEBUG
+    func loadTranscriptForTesting(url: URL, rawTranscript: String) {
+        activeTranscriptURL = url
+        metadata = TranscriptParser.parse(rawTranscript).metadata
+        self.rawTranscript = rawTranscript
+        rawTranscriptLineCount = rawTranscript.components(separatedBy: .newlines).count
+    }
+
+    func analysisRequestForTesting(reason: String) -> AnalysisRequest? {
+        guard activeTranscriptURL != nil else {
+            return nil
+        }
+        let window = AnalysisTranscriptWindow.make(
+            rawTranscript: rawTranscript,
+            lastAnalyzedTranscriptCharacterCount: analysisState.analyzedTranscriptCharacterCount,
+            reason: reason,
+            maxAutomaticCatchUpCharacters: automaticCatchUpChunkCharacters
+        )
+        return makeAnalysisRequest(
+            reason: reason,
+            transcriptWindow: window,
+            previousSnapshot: providerPreviousSnapshot() ?? patchBaselineSnapshot(for: reason)
+        )
+    }
+    #endif
 
     private func applyAnalysisResult(_ result: AnalysisRunResult, for sourceURL: URL, reason: String) {
         analysisTask = nil

@@ -557,4 +557,15 @@ struct AnalysisStateTests {
         #expect(state.latestSnapshot?.actionItemCandidates.first?.deadline == "금요일")
         #expect(state.latestSnapshot?.actionItemCandidates.first?.status == .candidate)
     }
+
+    @Test("AppSettings stores local glossary enabled with legacy default")
+    func appSettingsStoresLocalGlossaryEnabled() throws {
+        let legacy = try JSONDecoder().decode(AppSettings.self, from: Data(#"{"selectedProvider":"codexExec"}"#.utf8))
+        #expect(legacy.localGlossaryEnabled)
+
+        let settings = AppSettings(localGlossaryEnabled: false)
+        let data = try JSONEncoder().encode(settings)
+        let decoded = try JSONDecoder().decode(AppSettings.self, from: data)
+        #expect(!decoded.localGlossaryEnabled)
+    }
 }

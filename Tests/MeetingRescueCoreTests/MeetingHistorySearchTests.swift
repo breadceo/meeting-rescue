@@ -128,4 +128,16 @@ struct MeetingHistorySearchTests {
         #expect(first == second)
         #expect(MeetingHistorySearch.semanticSimilarity(lhs: first, rhs: second) > 0.99)
     }
+
+    @Test("glossary field lets canonical query match alias-only history")
+    func glossaryFieldMatchesCanonicalQuery() {
+        let sections = [
+            MeetingHistorySearchSection(field: .rawTranscript, text: "[03:12] Alex: jax workflow를 봤다", weight: 24, timestamp: "03:12"),
+            MeetingHistorySearchSection(field: .glossary, text: "zax jax jecks", weight: 66)
+        ]
+
+        let match = MeetingHistorySearch.match(sections: sections, query: "zax")
+
+        #expect(match?.field == .glossary)
+    }
 }
