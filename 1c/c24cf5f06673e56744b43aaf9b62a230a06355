@@ -1,0 +1,23 @@
+Sources/MeetingRescue/AppViewModel.swift
+  h_d82ccb34241a0d 319-320,324,330,335-336,455-460,512-535,663,736,1215,1995-1997,2003-2005,2069-2070,2072,2104-2106,2339-2344,2692-2725,2740,2742-2746,2867-2892
+Sources/MeetingRescueCore/AnalysisModels.swift
+  h_d82ccb34241a0d 363,378,392,408,426
+Sources/MeetingRescueCore/MeetingHistorySearch.swift
+  h_d82ccb34241a0d 17,46-47
+Tests/MeetingRescueCoreTests/AnalysisStateTests.swift
+  h_d82ccb34241a0d 560-570
+Tests/MeetingRescueCoreTests/MeetingHistorySearchTests.swift
+  h_d82ccb34241a0d 131-142
+Tests/MeetingRescueTests/AppViewModelTestRunContextTests.swift
+  h_d82ccb34241a0d 110-134
+---
+{
+  "schema_version": "zax-attestation/1.1.0",
+  "base_commit_sha": "1cc24cf5f06673e56744b43aaf9b62a230a06355",
+  "prompts": {},
+  "humans": {
+    "h_d82ccb34241a0d": {
+      "author": "ethan@zigbang.com"
+    }
+  }
+}
