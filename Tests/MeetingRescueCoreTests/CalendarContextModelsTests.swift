@@ -116,4 +116,15 @@ struct CalendarContextModelsTests {
         #expect(source.excerpt.count <= 120)
         #expect(source.priority == .userAttachedContext)
     }
+
+    @Test("domain glossary supplemental context sorts between attached text and calendar metadata")
+    func domainGlossarySortsBeforeCalendarMetadata() {
+        let values = [
+            SupplementalContextSource(id: "calendar", kind: .calendarMetadata, title: "Calendar", sourceName: "Calendar", excerpt: "event", priority: .calendarMetadata, confidence: 0.7),
+            SupplementalContextSource(id: "glossary", kind: .domainGlossary, title: "Glossary", sourceName: "Local Glossary", excerpt: "zax", priority: .domainGlossary, confidence: 0.9),
+            SupplementalContextSource(id: "attached", kind: .attachedText, title: "Spec", sourceName: "File", excerpt: "spec", priority: .userAttachedContext, confidence: 1.0)
+        ]
+
+        #expect(values.sortedForPrompt().map(\.id) == ["attached", "glossary", "calendar"])
+    }
 }

@@ -108,6 +108,23 @@ public final class ApplicationStateStore: @unchecked Sendable {
         return (try? JSONDecoder().decode(AppSettings.self, from: data)) ?? AppSettings()
     }
 
+    public func saveLocalGlossaryState(_ state: LocalGlossaryState) throws {
+        try ensureRootDirectory()
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        try encoder.encode(state).write(to: localGlossaryURL, options: [.atomic])
+    }
+
+    public func loadLocalGlossaryState() -> LocalGlossaryState {
+        guard let data = try? Data(contentsOf: localGlossaryURL) else {
+            return LocalGlossaryState()
+        }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return (try? decoder.decode(LocalGlossaryState.self, from: data)) ?? LocalGlossaryState()
+    }
+
     private func ensureRootDirectory() throws {
         try fileManager.createDirectory(at: rootURL, withIntermediateDirectories: true)
     }
@@ -125,6 +142,10 @@ public final class ApplicationStateStore: @unchecked Sendable {
 
     private var settingsURL: URL {
         rootURL.appendingPathComponent("settings.json")
+    }
+
+    private var localGlossaryURL: URL {
+        rootURL.appendingPathComponent("local-glossary.json")
     }
 
     private func analysisStateURL(for sourceURL: URL) -> URL {

@@ -83,6 +83,7 @@ public struct CalendarEventCandidate: Codable, Equatable, Identifiable, Sendable
 public enum SupplementalContextKind: String, Codable, Equatable, Sendable {
     case confirmedLocalArtifact
     case attachedText
+    case domainGlossary
     case calendarMetadata
     case linkedSourceCandidate
     case recurringMemory
@@ -91,6 +92,7 @@ public enum SupplementalContextKind: String, Codable, Equatable, Sendable {
 public enum SupplementalContextPriority: Int, Codable, Equatable, Comparable, Sendable {
     case confirmedLocalArtifact = 10
     case userAttachedContext = 20
+    case domainGlossary = 25
     case calendarMetadata = 30
     case linkedSourceCandidate = 40
 
