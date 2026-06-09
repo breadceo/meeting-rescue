@@ -1,0 +1,17 @@
+docs/local-glossary-validation.md
+  h_d82ccb34241a0d 1-39
+execution-log.md
+  h_d82ccb34241a0d 1-1872
+tasks.md
+  h_d82ccb34241a0d 1-879
+---
+{
+  "schema_version": "zax-attestation/1.1.0",
+  "base_commit_sha": "e1472452c6e04711dcb51f03b8962d418e9fc12a",
+  "prompts": {},
+  "humans": {
+    "h_d82ccb34241a0d": {
+      "author": "ethan@zigbang.com"
+    }
+  }
+}
