@@ -1,0 +1,17 @@
+Sources/MeetingRescue/CalendarQualityABRunner.swift
+  h_d82ccb34241a0d 1-561
+Sources/MeetingRescue/MeetingRescueApp.swift
+  h_d82ccb34241a0d 10
+Tests/MeetingRescueTests/CalendarQualityABRunnerTests.swift
+  h_d82ccb34241a0d 1-52
+---
+{
+  "schema_version": "zax-attestation/1.1.0",
+  "base_commit_sha": "61bf11b9424d7187c9714aa7f745ede31bf06968",
+  "prompts": {},
+  "humans": {
+    "h_d82ccb34241a0d": {
+      "author": "ethan@zigbang.com"
+    }
+  }
+}
