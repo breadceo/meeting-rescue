@@ -1,0 +1,13 @@
+scripts/build_app.sh
+  h_d82ccb34241a0d 72-73
+---
+{
+  "schema_version": "zax-attestation/1.1.0",
+  "base_commit_sha": "8a6d1157c25015f74dc9cd0ccd526d824e6ea2ca",
+  "prompts": {},
+  "humans": {
+    "h_d82ccb34241a0d": {
+      "author": "ethan@zigbang.com"
+    }
+  }
+}
