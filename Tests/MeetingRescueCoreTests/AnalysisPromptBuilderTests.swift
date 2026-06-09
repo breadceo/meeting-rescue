@@ -311,4 +311,55 @@ struct AnalysisPromptBuilderTests {
         #expect(prompt.contains("Google Calendar"))
         #expect(prompt.contains("transcript가 supplemental context와 충돌하면 transcript를 우선"))
     }
+
+    @Test("prompt forbids calendar metadata from replacing transcript-derived meeting metadata")
+    func promptForbidsCalendarMetadataFromReplacingTranscriptMetadata() throws {
+        let request = AnalysisRequest(
+            meetingID: "meeting-1",
+            metadata: MeetingMetadata(room: "Transcript Room", dateTime: "2026-06-03 10:00", participants: ["Alex"]),
+            rawTranscript: "[00:01] Alex: transcript 기준 회의입니다.",
+            reason: "manual",
+            supplementalContextSources: [
+                SupplementalContextSource(
+                    id: "calendar-1",
+                    kind: .calendarMetadata,
+                    title: "Calendar Room",
+                    sourceName: "Google Calendar",
+                    excerpt: "Calendar says different room and Blair attendee.",
+                    priority: .calendarMetadata,
+                    confidence: 0.90
+                )
+            ]
+        )
+
+        let prompt = try AnalysisPromptBuilder.buildPrompt(for: request)
+
+        #expect(prompt.contains("calendar metadata로 meetingMetadata를 덮어쓰지 마세요"))
+    }
+
+    @Test("unaccepted calendar linked source candidates are not injected into prompt")
+    func unacceptedCalendarLinkedSourceCandidatesAreNotInjected() throws {
+        let request = AnalysisRequest(
+            meetingID: "meeting-1",
+            metadata: MeetingMetadata(room: "Launch", dateTime: "2026-06-03 10:00", participants: ["Alex"]),
+            rawTranscript: "[00:01] Alex: transcript가 source of truth입니다.",
+            reason: "manual",
+            supplementalContextSources: [
+                SupplementalContextSource(
+                    id: "calendar-link-1",
+                    kind: .linkedSourceCandidate,
+                    title: "Calendar linked source 1",
+                    sourceName: "Google Docs",
+                    excerpt: "https://docs.google.com/document/d/sanitized-doc-id/edit",
+                    priority: .linkedSourceCandidate,
+                    confidence: 0.86,
+                    isAccepted: false
+                )
+            ]
+        )
+
+        let prompt = try AnalysisPromptBuilder.buildPrompt(for: request)
+
+        #expect(!prompt.contains("https://docs.google.com/document/d/sanitized-doc-id/edit"))
+    }
 }

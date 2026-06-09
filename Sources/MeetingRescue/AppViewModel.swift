@@ -305,6 +305,12 @@ private final class SearchIndexProgressBox: @unchecked Sendable {
     }
 }
 
+private struct GoogleCalendarFetchWindow {
+    var request: GoogleCalendarEventsListRequest
+    var meetingStart: Date
+    var meetingEnd: Date
+}
+
 private struct MeetingHistoryBuilder: Sendable {
     let stateStore: ApplicationStateStore
     let rawTranscriptSearchLineLimit: Int
@@ -622,8 +628,11 @@ final class AppViewModel: ObservableObject {
     @Published var settings: AppSettings
     @Published var analysisState = MeetingAnalysisState()
     @Published var analysisStatus: AnalysisRuntimeStatus = .idle
-    @Published var calendarContextStatusMessage = "Google Calendar MCP 확인 전"
+    @Published var calendarContextStatusMessage = "Google Calendar context 확인 전"
     @Published var isFetchingCalendarContext = false
+    @Published var googleCalendarStatusMessage = "Google Calendar API 확인 전"
+    @Published var isGoogleCalendarConnecting = false
+    @Published var isFetchingGoogleCalendarAPIContext = false
     @Published var pendingMarkdownReadinessWarnings: [ShareReadinessWarning] = []
     @Published var transcriptUpdatedAt: Date?
     @Published var transcriptRunMode: TranscriptRunMode = .liveWatch
@@ -671,6 +680,7 @@ final class AppViewModel: ObservableObject {
     private var searchDatabaseQueryGeneration = 0
     private var searchDatabaseMatchesByPath: [String: MeetingHistorySearchMatch] = [:]
     private var searchDatabaseMatchQuery = ""
+    private var googleCalendarService: GoogleCalendarService?
     private let historySearchDebounceDelayNanoseconds: UInt64 = 300_000_000
     private var transcriptHighlightClearTask: Task<Void, Never>?
     private var transcriptFocusToken = 0
@@ -693,6 +703,7 @@ final class AppViewModel: ObservableObject {
         applyInitialProviderAvailability()
         self.isShowingOnboarding = !settings.hasCompletedOnboarding
         restoreLastFolder()
+        refreshGoogleCalendarConnectionStatus()
     }
 
     private func applyInitialProviderAvailability() {
@@ -1289,6 +1300,91 @@ final class AppViewModel: ObservableObject {
         triggerAnalysis(reason: "manual")
     }
 
+    func refreshGoogleCalendarConnectionStatus() {
+        do {
+            let service = try makeGoogleCalendarService()
+            googleCalendarStatusMessage = service.hasStoredRefreshToken()
+                ? GoogleCalendarConnectionState.connected.displayText
+                : GoogleCalendarConnectionState.disconnected.displayText
+        } catch GoogleCalendarIntegrationError.missingConfig {
+            googleCalendarStatusMessage = GoogleCalendarConnectionState.notConfigured.displayText
+        } catch {
+            googleCalendarStatusMessage = GoogleCalendarConnectionState.failed(error.localizedDescription).displayText
+        }
+    }
+
+    func connectGoogleCalendar() {
+        guard !isGoogleCalendarConnecting else {
+            return
+        }
+        isGoogleCalendarConnecting = true
+        googleCalendarStatusMessage = "Google Calendar 인증 브라우저를 여는 중"
+
+        Task { [weak self] in
+            guard let self else {
+                return
+            }
+            do {
+                let service = try makeGoogleCalendarService()
+                try await service.connect()
+                googleCalendarStatusMessage = GoogleCalendarConnectionState.connected.displayText
+                calendarContextStatusMessage = "Google Calendar API 연결됨"
+            } catch {
+                googleCalendarStatusMessage = googleCalendarMessage(for: error)
+            }
+            isGoogleCalendarConnecting = false
+        }
+    }
+
+    func disconnectGoogleCalendar() {
+        do {
+            let service = try makeGoogleCalendarService()
+            try service.disconnect()
+            googleCalendarStatusMessage = GoogleCalendarConnectionState.disconnected.displayText
+        } catch {
+            googleCalendarStatusMessage = googleCalendarMessage(for: error)
+        }
+    }
+
+    func fetchGoogleCalendarAPIContext() {
+        guard !isFetchingGoogleCalendarAPIContext else {
+            return
+        }
+        guard activeTranscriptURL != nil else {
+            calendarContextStatusMessage = "Calendar context를 저장할 transcript가 없습니다."
+            return
+        }
+
+        let window = googleCalendarFetchWindow()
+        isFetchingGoogleCalendarAPIContext = true
+        googleCalendarStatusMessage = "Google Calendar API에서 현재 회의 context를 가져오는 중"
+
+        Task { [weak self] in
+            guard let self else {
+                return
+            }
+            do {
+                let service = try makeGoogleCalendarService()
+                let response = try await service.fetchEvents(request: window.request)
+                let mapped = GoogleCalendarContextMapper.map(
+                    response,
+                    metadata: metadata,
+                    meetingStart: window.meetingStart,
+                    meetingEnd: window.meetingEnd
+                )
+                applyGoogleCalendarAPIContext(mapped)
+                googleCalendarStatusMessage = GoogleCalendarConnectionState.connected.displayText
+                calendarContextStatusMessage = "Google Calendar API 후보 \(mapped.eventCandidates.count)개를 저장했습니다."
+                persistCandidateStateChange()
+            } catch {
+                let message = googleCalendarMessage(for: error)
+                googleCalendarStatusMessage = message
+                calendarContextStatusMessage = message
+            }
+            isFetchingGoogleCalendarAPIContext = false
+        }
+    }
+
     func fetchGoogleCalendarContext() {
         guard !isFetchingCalendarContext else {
             return
@@ -1696,8 +1792,8 @@ final class AppViewModel: ObservableObject {
             let cachedCalendarContext = stateStore.loadAnalysisState(for: fileURL).calendarContext.cachedForTestRunReplay()
             analysisState = MeetingAnalysisState(calendarContext: cachedCalendarContext)
             calendarContextStatusMessage = cachedCalendarContext.hasReusableContext
-                ? "저장된 Calendar context를 Test Run에 적용했습니다."
-                : "Google Calendar MCP 확인 전"
+                ? "저장된 Google Calendar context를 Test Run에 적용했습니다."
+                : "Google Calendar context 확인 전"
             analysisStatus = .idle
             transcriptUpdatedAt = nil
             updateTestRunProgress(currentLine: 0, totalLines: replayCursor?.totalLines ?? 0)
@@ -3017,6 +3113,82 @@ final class AppViewModel: ObservableObject {
                 isAccepted: false
             )
         })
+    }
+
+    private func makeGoogleCalendarService() throws -> GoogleCalendarService {
+        if let googleCalendarService {
+            return googleCalendarService
+        }
+        let config = try GoogleCalendarOAuthConfigLoader.load()
+        let service = GoogleCalendarService(
+            config: config,
+            tokenStore: GoogleCalendarKeychainTokenStore(account: config.clientID)
+        )
+        googleCalendarService = service
+        return service
+    }
+
+    private func applyGoogleCalendarAPIContext(_ context: CalendarContextState) {
+        let preservedSupplementalSources = analysisState.calendarContext.supplementalSources.filter { source in
+            source.kind != .calendarMetadata
+        }
+        var next = context
+        next.supplementalSources.append(contentsOf: preservedSupplementalSources)
+        analysisState.calendarContext = next
+    }
+
+    private func googleCalendarFetchWindow(now: Date = Date()) -> GoogleCalendarFetchWindow {
+        let meetingStart = parseMeetingDateTime(metadata.dateTime) ?? now
+        let meetingEnd = meetingStart.addingTimeInterval(3 * 60 * 60)
+        let timeMin = meetingStart.addingTimeInterval(-15 * 60)
+        let timeMax = meetingEnd.addingTimeInterval(30 * 60)
+        return GoogleCalendarFetchWindow(
+            request: GoogleCalendarEventsListRequest(
+                calendarID: "primary",
+                timeMin: rfc3339String(from: timeMin),
+                timeMax: rfc3339String(from: timeMax),
+                maxResults: 10
+            ),
+            meetingStart: meetingStart,
+            meetingEnd: meetingEnd
+        )
+    }
+
+    private func parseMeetingDateTime(_ value: String?) -> Date? {
+        guard let value,
+              !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return nil
+        }
+        let formats = [
+            "yyyy-MM-dd HH:mm:ss",
+            "yyyy-MM-dd HH:mm",
+            "yyyy.MM.dd HH:mm:ss",
+            "yyyy.MM.dd HH:mm"
+        ]
+        for format in formats {
+            let formatter = DateFormatter()
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            formatter.timeZone = .current
+            formatter.dateFormat = format
+            if let date = formatter.date(from: value) {
+                return date
+            }
+        }
+        return ISO8601DateFormatter().date(from: value)
+    }
+
+    private func rfc3339String(from date: Date) -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.timeZone = .current
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter.string(from: date)
+    }
+
+    private func googleCalendarMessage(for error: Error) -> String {
+        if let integrationError = error as? GoogleCalendarIntegrationError {
+            return integrationError.localizedDescription
+        }
+        return error.localizedDescription
     }
 
     private func calendarExcerpt(_ candidate: CalendarEventCandidate) -> String {

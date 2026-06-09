@@ -921,7 +921,7 @@ struct ContentView: View {
                         case .workflow:
                             workflow(viewModel.personalWorkflowSnapshot)
                         case .context:
-                            EmptyView()
+                            contextPanel()
                         }
                     }
                     .padding(16)
@@ -1043,10 +1043,57 @@ struct ContentView: View {
 
     private func contextPanel() -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            calendarMCPStatusCard()
+            googleCalendarAPIStatusCard()
             calendarEventCandidates(viewModel.analysisState.calendarContext.eventCandidates)
             supplementalContextSources(viewModel.analysisState.calendarContext.supplementalSources)
         }
+    }
+
+    private func googleCalendarAPIStatusCard() -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                sectionHeader("Google Calendar API", systemImage: "calendar.badge.checkmark")
+                Spacer(minLength: 0)
+                googleCalendarContextActions
+            }
+            Text(viewModel.googleCalendarStatusMessage)
+                .font(.caption)
+                .foregroundStyle(Color.smoothMuted)
+                .fixedSize(horizontal: false, vertical: true)
+            Text("현재 회의 시간대의 Calendar event를 가져와 meeting identity와 supplemental context로 저장합니다.")
+                .font(.caption)
+                .foregroundStyle(Color.smoothMuted)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .smoothCard(tint: Color.smoothAccent)
+    }
+
+    private var googleCalendarContextActions: some View {
+        HStack(spacing: 8) {
+            Button {
+                viewModel.connectGoogleCalendar()
+            } label: {
+                Label(viewModel.isGoogleCalendarConnecting ? "연결 중" : "연결", systemImage: "link")
+            }
+            .buttonStyle(.borderless)
+            .disabled(viewModel.isGoogleCalendarConnecting)
+
+            Button {
+                viewModel.fetchGoogleCalendarAPIContext()
+            } label: {
+                Label(viewModel.isFetchingGoogleCalendarAPIContext ? "가져오는 중" : "가져오기", systemImage: "arrow.clockwise")
+            }
+            .buttonStyle(.borderless)
+            .disabled(viewModel.isFetchingGoogleCalendarAPIContext || viewModel.activeTranscriptURL == nil)
+
+            Button {
+                viewModel.disconnectGoogleCalendar()
+            } label: {
+                Label("해제", systemImage: "xmark.circle")
+            }
+            .buttonStyle(.borderless)
+        }
+        .font(.caption.weight(.semibold))
     }
 
     private func calendarMCPStatusCard() -> some View {
@@ -1081,7 +1128,7 @@ struct ContentView: View {
         return VStack(alignment: .leading, spacing: 10) {
             sectionHeader("Calendar Event Candidates", systemImage: "calendar")
             if visibleCandidates.isEmpty {
-                placeholderLine("Google Calendar MCP에서 가져온 후보가 없습니다.")
+                placeholderLine("Google Calendar에서 가져온 후보가 없습니다.")
             }
             ForEach(visibleCandidates) { candidate in
                 VStack(alignment: .leading, spacing: 6) {
@@ -2975,6 +3022,13 @@ struct SettingsView: View {
     }
 
     private var analysisSettings: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            meetingIntelligenceSettingsCard
+            googleCalendarSettingsCard
+        }
+    }
+
+    private var meetingIntelligenceSettingsCard: some View {
         settingsCard("Meeting Intelligence", systemImage: "sparkles") {
             settingsRow("Automatic analysis", detail: "끄면 live/test run 자동 분석과 회의 종료 final analysis를 실행하지 않습니다.") {
                 Toggle("automatic meeting intelligence", isOn: automaticAnalysisBinding)
@@ -3016,6 +3070,41 @@ struct SettingsView: View {
                 .labelsHidden()
                 .frame(width: 220)
             }
+        }
+    }
+
+    private var googleCalendarSettingsCard: some View {
+        settingsCard("Google Calendar", systemImage: "calendar.badge.clock") {
+            actionRow("연결 상태", detail: viewModel.googleCalendarStatusMessage) {
+                googleCalendarSettingsActions
+            }
+        }
+    }
+
+    private var googleCalendarSettingsActions: some View {
+        HStack(spacing: 8) {
+            Button {
+                viewModel.connectGoogleCalendar()
+            } label: {
+                Label(viewModel.isGoogleCalendarConnecting ? "연결 중" : "연결", systemImage: "link")
+            }
+            .buttonStyle(SmoothActionButtonStyle())
+            .disabled(viewModel.isGoogleCalendarConnecting)
+
+            Button {
+                viewModel.fetchGoogleCalendarAPIContext()
+            } label: {
+                Label(viewModel.isFetchingGoogleCalendarAPIContext ? "가져오는 중" : "가져오기", systemImage: "arrow.clockwise")
+            }
+            .buttonStyle(SmoothActionButtonStyle())
+            .disabled(viewModel.isFetchingGoogleCalendarAPIContext || viewModel.activeTranscriptURL == nil)
+
+            Button {
+                viewModel.disconnectGoogleCalendar()
+            } label: {
+                Label("해제", systemImage: "xmark.circle")
+            }
+            .buttonStyle(SmoothActionButtonStyle())
         }
     }
 

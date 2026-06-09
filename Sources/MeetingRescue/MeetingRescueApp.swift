@@ -5,6 +5,11 @@ struct MeetingRescueApp: App {
     @StateObject private var viewModel = AppViewModel()
     @StateObject private var sparkleUpdater = SparkleUpdater()
 
+    init() {
+        _ = GoogleCalendarSmokeRunner.runFromCommandLineIfRequested()
+        _ = CalendarQualityABRunner.runFromCommandLineIfRequested()
+    }
+
     var body: some Scene {
         WindowGroup(AppVersion.displayTitle) {
             ContentView()

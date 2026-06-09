@@ -46,7 +46,7 @@ public enum AnalysisPromptBuilder {
         newTranscriptChunk가 있으면 primary source로 쓰고 recentTranscriptContext/relatedTranscriptChunks는 연결 맥락으로만 쓰세요.
         final/full-refresh에서는 회의 전체 wrap-up을 다시 구성하세요.
         과거 맥락을 새 결정처럼 반복하지 말고, 불확실하면 candidate/note로 남기세요.
-        Supplemental context는 transcript보다 낮은 우선순위의 보조 근거입니다. transcript가 supplemental context와 충돌하면 transcript를 우선하고, confirmed local artifact가 있으면 calendar metadata보다 우선하세요. Calendar linked source candidate는 자동으로 읽은 문서가 아니라 사용자가 확인해야 할 후보로만 취급하세요.
+        Supplemental context는 transcript보다 낮은 우선순위의 보조 근거입니다. transcript가 supplemental context와 충돌하면 transcript를 우선하고, confirmed local artifact가 있으면 calendar metadata보다 우선하세요. calendar metadata로 meetingMetadata를 덮어쓰지 마세요. Calendar linked source candidate는 자동으로 읽은 문서가 아니라 사용자가 확인해야 할 후보로만 취급하세요.
 
         meetingTypePreset이 automatic이면 transcript를 보고 meetingType을 decision/planning/incident/oneOnOne/brainstorm/status 중 하나로 추정하세요.
         meetingTypePreset이 automatic이 아니면 그 값을 meetingType으로 사용하세요.
@@ -83,7 +83,7 @@ public enum AnalysisPromptBuilder {
         meetingSummary를 채울 때는 evidence.timestamp/speaker/excerpt를 함께 채우세요.
         currentIssue는 현재 논점 또는 Live Focus입니다. 실제 변화가 있을 때만 채우고, 변화가 작으면 null로 두세요.
         단, previousAnalysisSnapshot.currentIssue.summary가 비어 있으면 이번 chunk의 핵심 논점으로 currentIssue를 반드시 채우세요.
-        Supplemental context는 transcript보다 낮은 우선순위의 보조 근거입니다. transcript가 supplemental context와 충돌하면 transcript를 우선하고, confirmed local artifact가 있으면 calendar metadata보다 우선하세요. Calendar linked source candidate는 자동으로 읽은 문서가 아니라 사용자가 확인해야 할 후보로만 취급하세요.
+        Supplemental context는 transcript보다 낮은 우선순위의 보조 근거입니다. transcript가 supplemental context와 충돌하면 transcript를 우선하고, confirmed local artifact가 있으면 calendar metadata보다 우선하세요. calendar metadata로 meetingMetadata를 덮어쓰지 마세요. Calendar linked source candidate는 자동으로 읽은 문서가 아니라 사용자가 확인해야 할 후보로만 취급하세요.
         topicTimelineUpserts/decisionCandidateUpserts/actionItemCandidateUpserts/risksOrNotesAppend는 보통 0-2개, 최대 3개로 제한하세요.
         기존 후보/노트/토픽을 반복하지 말고, confirmed/deleted 상태를 되돌리지 마세요.
         relatedTranscriptChunks는 생략된 현재 회의 맥락 연결용입니다. 관련성이 낮으면 무시하세요.
