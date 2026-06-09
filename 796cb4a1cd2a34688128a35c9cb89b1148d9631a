@@ -1,0 +1,19 @@
+Sources/MeetingRescueCore/GoogleCalendarContextMapper.swift
+  h_d82ccb34241a0d 12,18,30-31,35-36,38-50,52,56,81-86,187-251,260-290,322-405,442-479
+Tests/MeetingRescueCoreTests/GoogleCalendarContextMapperTests.swift
+  h_d82ccb34241a0d 88-241,343-374
+docs/calendar-quality-validation.md
+  h_d82ccb34241a0d 21-24,103-163,176-178
+docs/superpowers/plans/2026-06-09-calendar-room-title-normalization-auto-accept.md
+  h_d82ccb34241a0d 1-736
+---
+{
+  "schema_version": "zax-attestation/1.1.0",
+  "base_commit_sha": "796cb4a1cd2a34688128a35c9cb89b1148d9631a",
+  "prompts": {},
+  "humans": {
+    "h_d82ccb34241a0d": {
+      "author": "ethan@zigbang.com"
+    }
+  }
+}
