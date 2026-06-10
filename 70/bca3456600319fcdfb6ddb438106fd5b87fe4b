@@ -1,0 +1,33 @@
+Sources/MeetingRescue/AppViewModel.swift
+  h_d82ccb34241a0d 1413,1416-1417,1421,1425,1432,1435-1436,1441,1446,1451,1464,1471-1472,1495,1497,1534-1563
+Sources/MeetingRescue/ContentView.swift
+  h_d82ccb34241a0d 1137,1152-1155,1160-1183,4690-4797
+Sources/MeetingRescue/LocalGlossaryScoringRunner.swift
+  h_d82ccb34241a0d 58,62,73,100,108,195,198
+Sources/MeetingRescueCore/LocalGlossaryKoreanSuggestionEngine.swift
+  h_d82ccb34241a0d 46-61,84-98,117-119,122-130,140-159,161-164,170,291-359,418-421,429-437,475-482,486-489,696-698,714-719,993-998
+Sources/MeetingRescueCore/LocalGlossaryModels.swift
+  h_d82ccb34241a0d 36-40,259-260,272-273,286-287,300-301,316-317,457,459,465,467,472,474,478-496,521,531,537-538,541-548,550-554,556,562-574,576-616,618-641,651-661
+Sources/MeetingRescueCore/LocalGlossarySuggestionEngine.swift
+  h_d82ccb34241a0d 55-70,95-111,128,131-132,137-141,143-146
+Tests/MeetingRescueCoreTests/LocalGlossaryModelsTests.swift
+  h_d82ccb34241a0d 223-328
+Tests/MeetingRescueCoreTests/LocalGlossarySuggestionEngineTests.swift
+  h_d82ccb34241a0d 270-387
+Tests/MeetingRescueTests/AppViewModelTestRunContextTests.swift
+  h_d82ccb34241a0d 169-171,174-185
+Tests/MeetingRescueTests/ContentViewContextWiringTests.swift
+  h_d82ccb34241a0d 70-82
+Tests/MeetingRescueTests/LocalGlossaryScoringRunnerTests.swift
+  h_d82ccb34241a0d 27-29
+---
+{
+  "schema_version": "zax-attestation/1.1.0",
+  "base_commit_sha": "70bca3456600319fcdfb6ddb438106fd5b87fe4b",
+  "prompts": {},
+  "humans": {
+    "h_d82ccb34241a0d": {
+      "author": "ethan@zigbang.com"
+    }
+  }
+}
