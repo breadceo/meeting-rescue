@@ -2,6 +2,22 @@
 
 이 파일은 `tasks.md`의 운영 원칙에 따른 실행 이력을 보관한다. 새 로그는 이 파일의 맨 위에 추가한다.
 
+### 2026-06-10 Local Glossary Hardening
+
+- 구현:
+  - raw transcript folder scanner를 추가해 suggestion 생성이 visible history search state에 의존하지 않도록 했다.
+  - 한글 phrase suggestion lane을 추가하고 calibration threshold를 적용했다.
+  - Meeting Intelligence에 `용어` 탭을 추가해 후보 refresh, evidence 확인, canonical 편집, accept/dismiss를 처리한다.
+  - raw transcript 하단에 glossary CTA를 추가하고 Settings glossary는 관리용으로 축소했다.
+- 검증:
+  - `swift test --filter LocalGlossaryHistoryScannerTests`: 통과.
+  - `swift test --filter LocalGlossarySuggestionEngineTests`: 통과.
+  - `swift test --filter AppViewModelTestRunContextTests`: 통과.
+  - `swift test --filter ContentViewContextWiringTests`: 통과.
+  - `swift test`: 통과.
+  - `swift build`: 통과.
+  - `git diff --check`: 통과.
+
 ### 2026-06-09 Local Glossary Suggestions
 
 - 작업 내용:

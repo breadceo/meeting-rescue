@@ -576,7 +576,25 @@ Backlog는 `Not Started` 항목을 위에 두고, 완료된 항목은 아래 `Do
       - `swift test --filter ContentViewContextWiringTests`: 통과.
     - 남은 관찰:
       - 실제 transcript history에서 suggestion precision을 확인해야 한다.
-      - canonical term을 suggestion row에서 직접 수정하는 UI는 v1 이후 사용성 개선으로 남긴다.
+      - canonical term을 suggestion row에서 직접 수정하는 UI는 D2.6에서 Meeting Intelligence `용어` 탭으로 반영했다.
+  - D2.6 Local Glossary Hardening:
+    - 상태: `Done`
+    - 목표: local glossary suggestion을 raw transcript history 기반으로 안정화하고, 한글 phrase 후보와 Meeting Intelligence 내 검토 UX를 추가한다.
+    - 구현 요약:
+      - `LocalGlossaryHistoryScanner`가 선택 폴더의 raw transcript를 직접 스캔한다.
+      - 기존 Latin/mixed lane에 Korean phrase lane을 병합한다.
+      - 한글 후보는 calibrated threshold(score >= 0.85 또는 score >= 0.80 + context guard)를 사용한다.
+      - Meeting Intelligence에 `용어` 탭을 추가하고 canonical 편집 후 승인하게 한다.
+      - raw transcript 하단에 glossary CTA를 추가한다.
+      - Settings는 glossary 사용/삭제 관리로 축소한다.
+    - 검증:
+      - `swift test --filter LocalGlossaryHistoryScannerTests`: 통과.
+      - `swift test --filter LocalGlossarySuggestionEngineTests`: 통과.
+      - `swift test --filter AppViewModelTestRunContextTests`: 통과.
+      - `swift test --filter ContentViewContextWiringTests`: 통과.
+      - `swift test`: 통과.
+      - `swift build`: 통과.
+      - `git diff --check`: 통과.
   - D3 Team shared memory:
     - 12. Team Memory Folder:
       - 의존성: evidence-backed wrap-up과 share readiness가 필요하다. calendar identity가 있으면 metadata 품질이 좋아지지만 필수는 아니다.
