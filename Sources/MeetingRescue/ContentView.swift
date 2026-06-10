@@ -923,13 +923,7 @@ struct ContentView: View {
             if compact {
                 compactIntelligenceHeader(availableWidth: availableWidth)
             } else {
-                HStack(spacing: 12) {
-                    paneTitle("Meeting\nIntelligence", systemImage: "sparkles", compact: true, collapsePane: .intelligence)
-                    Spacer()
-                    intelligenceModeSegmentedControl()
-                        .frame(width: 360)
-                }
-                .padding(.trailing, 12)
+                regularIntelligenceHeader()
             }
 
             Divider().overlay(Color.smoothLine)
@@ -976,6 +970,33 @@ struct ContentView: View {
             }
         }
         .smoothPanel()
+    }
+
+    private func regularIntelligenceHeader() -> some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 12) {
+                paneTitle("Meeting\nIntelligence", systemImage: "sparkles", compact: true, collapsePane: .intelligence)
+                Spacer(minLength: 8)
+                intelligenceModeSegmentedControl()
+                    .frame(width: 360)
+            }
+            .padding(.trailing, 12)
+
+            VStack(alignment: .leading, spacing: 10) {
+                paneTitle("Meeting\nIntelligence", systemImage: "sparkles", compact: true, collapsePane: .intelligence)
+                    .padding(.trailing, 12)
+
+                ViewThatFits(in: .horizontal) {
+                    intelligenceModeSegmentedControl()
+                        .frame(width: 360)
+                    intelligenceModeMenu()
+                }
+                .controlSize(.small)
+                .padding(.horizontal, 16)
+                .padding(.trailing, 12)
+                .padding(.bottom, 10)
+            }
+        }
     }
 
     private var visibleIntelligenceMode: IntelligenceMode {
