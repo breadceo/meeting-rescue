@@ -158,6 +158,8 @@ struct AppViewModelTestRunContextTests {
 
         #expect(refresh.contains("selectedFolderURL"))
         #expect(refresh.contains("LocalGlossaryHistoryScanner.documents"))
+        #expect(refresh.contains("maxDocuments: 40"))
+        #expect(refresh.contains("rawTranscriptLineLimit: 160"))
         #expect(!refresh.contains("meetingHistoryItems.map"))
     }
 }

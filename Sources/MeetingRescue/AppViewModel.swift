@@ -1263,7 +1263,7 @@ final class AppViewModel: ObservableObject {
             let documents = await Task.detached(priority: .utility) {
                 LocalGlossaryHistoryScanner.documents(
                     in: selectedFolderURL,
-                    configuration: .init(maxDocuments: 120, maxBytesPerDocument: 96_000, rawTranscriptLineLimit: 360)
+                    configuration: .init(maxDocuments: 40, maxBytesPerDocument: 48_000, rawTranscriptLineLimit: 160)
                 )
             }.value
             let suggestions = await Task.detached(priority: .utility) {

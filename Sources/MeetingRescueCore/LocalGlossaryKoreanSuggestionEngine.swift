@@ -1,7 +1,9 @@
 import Foundation
 
 public enum LocalGlossaryKoreanSuggestionEngine {
-    private static let maxCandidatesPerBucket = 80
+    private static let maxCandidatesPerBucket = 40
+    private static let maxComparisonCandidates = 900
+    private static let minimumOccurrenceSupportForPairing = 2
 
     public static func suggestions(
         from documents: [LocalGlossarySourceDocument],
@@ -79,7 +81,19 @@ public enum LocalGlossaryKoreanSuggestionEngine {
     }
 
     private static func candidatePairs(from candidates: [KoreanPhraseCandidate]) -> [KoreanPhraseCandidatePair] {
-        let buckets = cappedBuckets(for: candidates)
+        let supportedCandidates = candidates.filter { candidate in
+            candidate.documentCount >= minimumOccurrenceSupportForPairing
+                || candidate.occurrenceCount >= minimumOccurrenceSupportForPairing
+        }
+        let comparisonCandidates = supportedCandidates.sorted {
+            if $0.priority == $1.priority {
+                return $0.compact.localizedStandardCompare($1.compact) == .orderedAscending
+            }
+            return $0.priority > $1.priority
+        }
+        .prefix(maxComparisonCandidates)
+        .map { $0 }
+        let buckets = cappedBuckets(for: comparisonCandidates)
         var pairs: [KoreanPhraseCandidatePair] = []
         var seen: Set<String> = []
 

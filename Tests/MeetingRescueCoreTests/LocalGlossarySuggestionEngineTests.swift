@@ -147,6 +147,57 @@ struct LocalGlossarySuggestionEngineTests {
         #expect(suggestions.isEmpty)
     }
 
+    @Test("Korean lane does not pair one-off noisy variants")
+    func koreanLaneDoesNotPairOneOffNoisyVariants() {
+        let documents = [
+            LocalGlossarySourceDocument(
+                id: "m1",
+                title: "Product Sync 1",
+                sections: [.init(field: .rawTranscript, text: "[00:10] Ethan: 중개사 응답률 채팅 지표를 봅니다.", weight: 24)]
+            ),
+            LocalGlossarySourceDocument(
+                id: "m2",
+                title: "Product Sync 2",
+                sections: [.init(field: .rawTranscript, text: "[00:10] Ethan: 중개사 응답률 채팅 전환을 봅니다.", weight: 24)]
+            ),
+            LocalGlossarySourceDocument(
+                id: "m3",
+                title: "Product Sync 3",
+                sections: [.init(field: .rawTranscript, text: "[00:10] Ethan: 중개사 응답률 채팅 품질을 봅니다.", weight: 24)]
+            ),
+            LocalGlossarySourceDocument(
+                id: "m4",
+                title: "Product Sync 4",
+                sections: [.init(field: .rawTranscript, text: "[00:10] Ethan: 중개사 응답률 채팅 전환 지표를 봅니다.", weight: 24)]
+            ),
+            LocalGlossarySourceDocument(
+                id: "m5",
+                title: "Noisy One-Off",
+                sections: [.init(field: .rawTranscript, text: "[00:10] Ethan: 중계사 응답률 채팅 지표를 봅니다.", weight: 24)]
+            )
+        ]
+
+        let suggestions = LocalGlossaryKoreanSuggestionEngine.suggestions(
+            from: documents,
+            existingState: LocalGlossaryState(),
+            maxSuggestions: 8
+        )
+
+        #expect(!suggestions.contains { $0.aliases.contains("중계사 응답률 채팅") })
+    }
+
+    @Test("Korean lane bounds the comparison candidate pool")
+    func koreanLaneBoundsComparisonCandidatePool() throws {
+        let sourceURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent("Sources/MeetingRescueCore/LocalGlossaryKoreanSuggestionEngine.swift")
+        let source = try String(contentsOf: sourceURL, encoding: .utf8)
+        let candidatePairs = try #require(source.slice(from: "private static func candidatePairs", to: "private static func acceptsPair"))
+
+        #expect(candidatePairs.contains("minimumOccurrenceSupportForPairing"))
+        #expect(candidatePairs.contains("maxComparisonCandidates"))
+        #expect(candidatePairs.contains(".prefix(maxComparisonCandidates)"))
+    }
+
     @Test("merged suggestion engine includes Korean phrase suggestions")
     func mergedEngineIncludesKoreanPhraseSuggestions() throws {
         let documents = [
@@ -180,5 +231,15 @@ struct LocalGlossarySuggestionEngineTests {
 
         let suggestion = try #require(suggestions.first { $0.aliases.contains("아이오에스 마케팅") })
         #expect(suggestion.aliases.contains("아이유에스 마케팅"))
+    }
+}
+
+private extension String {
+    func slice(from startMarker: String, to endMarker: String) -> String? {
+        guard let start = range(of: startMarker)?.lowerBound,
+              let end = range(of: endMarker, range: start..<endIndex)?.lowerBound else {
+            return nil
+        }
+        return String(self[start..<end])
     }
 }
