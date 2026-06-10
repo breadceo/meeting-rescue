@@ -1,0 +1,17 @@
+Sources/MeetingRescueCore/LocalGlossaryKoreanSuggestionEngine.swift
+  h_d82ccb34241a0d 1-599
+Sources/MeetingRescueCore/LocalGlossarySuggestionEngine.swift
+  h_d82ccb34241a0d 23-36,89-110
+Tests/MeetingRescueCoreTests/LocalGlossarySuggestionEngineTests.swift
+  h_d82ccb34241a0d 78-183
+---
+{
+  "schema_version": "zax-attestation/1.1.0",
+  "base_commit_sha": "ae0ce14db520b58e9dc32e363b19c3ae2addb681",
+  "prompts": {},
+  "humans": {
+    "h_d82ccb34241a0d": {
+      "author": "ethan@zigbang.com"
+    }
+  }
+}
