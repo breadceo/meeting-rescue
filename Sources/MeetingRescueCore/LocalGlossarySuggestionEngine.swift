@@ -21,6 +21,20 @@ public enum LocalGlossarySuggestionEngine {
         existingState: LocalGlossaryState,
         maxSuggestions: Int = 8
     ) -> [LocalGlossarySuggestion] {
+        let latin = latinSuggestions(from: documents, existingState: existingState, maxSuggestions: maxSuggestions)
+        let korean = LocalGlossaryKoreanSuggestionEngine.suggestions(
+            from: documents,
+            existingState: existingState,
+            maxSuggestions: maxSuggestions
+        )
+        return mergedSuggestions(latin + korean, maxSuggestions: maxSuggestions)
+    }
+
+    private static func latinSuggestions(
+        from documents: [LocalGlossarySourceDocument],
+        existingState: LocalGlossaryState,
+        maxSuggestions: Int
+    ) -> [LocalGlossarySuggestion] {
         let acceptedValues = Set(existingState.enabledTerms.flatMap(\.allMatchValues).map(MeetingHistorySearch.compactNormalize))
         let occurrences = collectOccurrences(from: documents, acceptedValues: acceptedValues)
         let clusters = clusterOccurrences(occurrences)
@@ -70,6 +84,28 @@ public enum LocalGlossarySuggestionEngine {
         }
         .prefix(maxSuggestions)
         .map { $0 }
+    }
+
+    private static func mergedSuggestions(
+        _ suggestions: [LocalGlossarySuggestion],
+        maxSuggestions: Int
+    ) -> [LocalGlossarySuggestion] {
+        var seenIDs = Set<String>()
+        return suggestions
+            .sorted {
+                if $0.confidence == $1.confidence {
+                    return $0.occurrenceCount > $1.occurrenceCount
+                }
+                return $0.confidence > $1.confidence
+            }
+            .compactMap { suggestion in
+                guard seenIDs.insert(suggestion.id).inserted else {
+                    return nil
+                }
+                return suggestion
+            }
+            .prefix(maxSuggestions)
+            .map { $0 }
     }
 
     private static func collectOccurrences(

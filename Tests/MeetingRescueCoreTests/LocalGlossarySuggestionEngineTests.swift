@@ -75,4 +75,110 @@ struct LocalGlossarySuggestionEngineTests {
 
         #expect(second.isEmpty)
     }
+
+    @Test("Korean lane groups recurring domain phrase variants")
+    func koreanLaneGroupsDomainPhraseVariants() throws {
+        let documents = [
+            LocalGlossarySourceDocument(
+                id: "m1",
+                title: "Product Sync 1",
+                sections: [.init(field: .rawTranscript, text: "[00:10] Ethan: 중개사 응답률 채팅 지표를 봅니다.", weight: 24)]
+            ),
+            LocalGlossarySourceDocument(
+                id: "m2",
+                title: "Product Sync 2",
+                sections: [.init(field: .rawTranscript, text: "[00:10] Ethan: 중개사 응답률 채팅 전환을 봅니다.", weight: 24)]
+            ),
+            LocalGlossarySourceDocument(
+                id: "m3",
+                title: "Product Sync 3",
+                sections: [.init(field: .rawTranscript, text: "[00:10] Ethan: 중계사 응답률 채팅 지표를 봅니다.", weight: 24)]
+            ),
+            LocalGlossarySourceDocument(
+                id: "m4",
+                title: "Product Sync 4",
+                sections: [.init(field: .rawTranscript, text: "[00:10] Ethan: 중계사 응답률 채팅 전환을 봅니다.", weight: 24)]
+            )
+        ]
+
+        let suggestions = LocalGlossaryKoreanSuggestionEngine.suggestions(
+            from: documents,
+            existingState: LocalGlossaryState(),
+            maxSuggestions: 8
+        )
+
+        let suggestion = try #require(suggestions.first { $0.aliases.contains("중개사 응답률 채팅") })
+        #expect(suggestion.aliases.contains("중계사 응답률 채팅"))
+        #expect(suggestion.meetingCount >= 4)
+        #expect(suggestion.confidence >= 0.80)
+    }
+
+    @Test("Korean lane filters generic grammar ending variants")
+    func koreanLaneFiltersGrammarEndingVariants() {
+        let documents = [
+            LocalGlossarySourceDocument(
+                id: "m1",
+                title: "Daily 1",
+                sections: [.init(field: .rawTranscript, text: "[00:10] Ethan: 정리해 주시면 좋을 같아.", weight: 24)]
+            ),
+            LocalGlossarySourceDocument(
+                id: "m2",
+                title: "Daily 2",
+                sections: [.init(field: .rawTranscript, text: "[00:10] Ethan: 정리해 주시면 좋을 같고.", weight: 24)]
+            ),
+            LocalGlossarySourceDocument(
+                id: "m3",
+                title: "Daily 3",
+                sections: [.init(field: .rawTranscript, text: "[00:10] Ethan: 정리해 주시면 좋을 같아.", weight: 24)]
+            ),
+            LocalGlossarySourceDocument(
+                id: "m4",
+                title: "Daily 4",
+                sections: [.init(field: .rawTranscript, text: "[00:10] Ethan: 정리해 주시면 좋을 같고.", weight: 24)]
+            )
+        ]
+
+        let suggestions = LocalGlossaryKoreanSuggestionEngine.suggestions(
+            from: documents,
+            existingState: LocalGlossaryState(),
+            maxSuggestions: 8
+        )
+
+        #expect(suggestions.isEmpty)
+    }
+
+    @Test("merged suggestion engine includes Korean phrase suggestions")
+    func mergedEngineIncludesKoreanPhraseSuggestions() throws {
+        let documents = [
+            LocalGlossarySourceDocument(
+                id: "m1",
+                title: "Marketing 1",
+                sections: [.init(field: .rawTranscript, text: "[00:10] Ethan: 아이오에스 마케팅 지표를 봅니다.", weight: 24)]
+            ),
+            LocalGlossarySourceDocument(
+                id: "m2",
+                title: "Marketing 2",
+                sections: [.init(field: .rawTranscript, text: "[00:10] Ethan: 아이오에스 마케팅 전환을 봅니다.", weight: 24)]
+            ),
+            LocalGlossarySourceDocument(
+                id: "m3",
+                title: "Marketing 3",
+                sections: [.init(field: .rawTranscript, text: "[00:10] Ethan: 아이유에스 마케팅 지표를 봅니다.", weight: 24)]
+            ),
+            LocalGlossarySourceDocument(
+                id: "m4",
+                title: "Marketing 4",
+                sections: [.init(field: .rawTranscript, text: "[00:10] Ethan: 아이유에스 마케팅 전환을 봅니다.", weight: 24)]
+            )
+        ]
+
+        let suggestions = LocalGlossarySuggestionEngine.suggestions(
+            from: documents,
+            existingState: LocalGlossaryState(),
+            maxSuggestions: 8
+        )
+
+        let suggestion = try #require(suggestions.first { $0.aliases.contains("아이오에스 마케팅") })
+        #expect(suggestion.aliases.contains("아이유에스 마케팅"))
+    }
 }
