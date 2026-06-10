@@ -7,6 +7,7 @@ private enum IntelligenceMode: String, CaseIterable, Identifiable {
     case timeline = "흐름"
     case candidates = "후보"
     case workflow = "워크플로우"
+    case glossary = "용어"
     case context = "컨텍스트"
 
     var id: String { rawValue }
@@ -21,6 +22,8 @@ private enum IntelligenceMode: String, CaseIterable, Identifiable {
             return "candidates"
         case .workflow:
             return "workflow"
+        case .glossary:
+            return "glossary"
         case .context:
             return "context"
         }
@@ -855,6 +858,7 @@ struct ContentView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 rawTranscriptLineList
+                rawTranscriptGlossaryFooter
                 Color.clear
                     .frame(height: 1)
                     .id("bottom")
@@ -870,6 +874,32 @@ struct ContentView: View {
                 proxy.scrollTo(request.lineID, anchor: .center)
             }
         }
+    }
+
+    private var rawTranscriptGlossaryFooter: some View {
+        HStack(spacing: 8) {
+            Label("용어 후보 \(viewModel.localGlossarySuggestionCount)개", systemImage: "text.book.closed")
+            if viewModel.activeLocalGlossaryMatchCount > 0 {
+                Text("힌트 \(viewModel.activeLocalGlossaryMatchCount)개 적용 중")
+                    .foregroundStyle(Color.smoothMuted)
+            }
+            Spacer(minLength: 0)
+            Button {
+                intelligenceMode = .glossary
+                withAnimation(.easeInOut(duration: 0.16)) {
+                    manuallyCollapsedPanes.remove(.intelligence)
+                    activeOverlayPane = .intelligence
+                }
+            } label: {
+                Label("검토", systemImage: "arrow.right.circle")
+            }
+            .buttonStyle(.borderless)
+        }
+        .font(.caption.weight(.semibold))
+        .foregroundStyle(Color.smoothInk)
+        .padding(.horizontal, 18)
+        .padding(.vertical, 10)
+        .background(Color.smoothSurface)
     }
 
     private var rawTranscriptLineList: some View {
@@ -904,7 +934,13 @@ struct ContentView: View {
 
             Divider().overlay(Color.smoothLine)
 
-            if let snapshot = viewModel.analysisState.latestSnapshot {
+            if selectedMode == .glossary {
+                ScrollView {
+                    localGlossaryPanel()
+                        .padding(16)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            } else if let snapshot = viewModel.analysisState.latestSnapshot {
                 ScrollView {
                     Group {
                         switch selectedMode {
@@ -920,6 +956,8 @@ struct ContentView: View {
                             }
                         case .workflow:
                             workflow(viewModel.personalWorkflowSnapshot)
+                        case .glossary:
+                            localGlossaryPanel()
                         case .context:
                             contextPanel()
                         }
@@ -1038,6 +1076,107 @@ struct ContentView: View {
             shareReadiness(snapshot.readinessWarnings)
             actionLedger(snapshot.actionLedgerItems)
             carryOverQuestions(snapshot.carryOverCandidates)
+        }
+    }
+
+    private func localGlossaryPanel() -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                sectionHeader("용어", systemImage: "text.book.closed")
+                Spacer(minLength: 0)
+                Button {
+                    viewModel.refreshLocalGlossarySuggestions()
+                } label: {
+                    Label(viewModel.isGeneratingLocalGlossarySuggestions ? "찾는 중" : "후보 새로 찾기", systemImage: "wand.and.stars")
+                }
+                .buttonStyle(.borderless)
+                .disabled(viewModel.isGeneratingLocalGlossarySuggestions || viewModel.selectedFolderURL == nil)
+            }
+
+            Text(viewModel.localGlossaryStatusMessage)
+                .font(.caption)
+                .foregroundStyle(Color.smoothMuted)
+
+            localGlossaryToggleRow
+
+            if viewModel.localGlossaryState.suggestions.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Label("표시할 용어 후보 없음", systemImage: "text.magnifyingglass")
+                        .font(.callout.weight(.semibold))
+                        .foregroundStyle(Color.smoothInk)
+                    Text("raw transcript history에서 반복되는 STT 변형을 찾으면 여기에 표시합니다.")
+                        .font(.caption)
+                        .foregroundStyle(Color.smoothMuted)
+                }
+                .smoothCard(tint: Color.smoothSky)
+            } else {
+                VStack(alignment: .leading, spacing: 10) {
+                    ForEach(viewModel.localGlossaryState.suggestions.prefix(12)) { suggestion in
+                        LocalGlossarySuggestionReviewRow(
+                            suggestion: suggestion,
+                            onAccept: { canonical in
+                                viewModel.acceptLocalGlossarySuggestion(id: suggestion.id, canonical: canonical)
+                            },
+                            onDismiss: {
+                                viewModel.dismissLocalGlossarySuggestion(id: suggestion.id)
+                            }
+                        )
+                    }
+                }
+            }
+
+            acceptedLocalGlossaryTermsPanel()
+        }
+    }
+
+    private var localGlossaryToggleRow: some View {
+        HStack {
+            Text("분석/search 힌트 사용")
+                .font(.callout.weight(.semibold))
+                .foregroundStyle(Color.smoothInk)
+            Spacer()
+            Toggle("local glossary", isOn: Binding(
+                get: { viewModel.settings.localGlossaryEnabled },
+                set: { viewModel.setLocalGlossaryEnabled($0) }
+            ))
+            .labelsHidden()
+        }
+        .smoothCard(tint: Color.smoothAccent)
+    }
+
+    private func acceptedLocalGlossaryTermsPanel() -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            sectionHeader("저장된 용어", systemImage: "checkmark.seal")
+            if viewModel.localGlossaryState.terms.isEmpty {
+                Text("아직 추가된 용어가 없습니다.")
+                    .font(.callout)
+                    .foregroundStyle(Color.smoothMuted)
+            } else {
+                ForEach(viewModel.localGlossaryState.terms) { term in
+                    localGlossaryAcceptedTermRow(term)
+                }
+            }
+        }
+        .smoothCard(tint: Color.smoothMint)
+    }
+
+    private func localGlossaryAcceptedTermRow(_ term: LocalGlossaryTerm) -> some View {
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(term.canonical)
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(Color.smoothInk)
+                Text(term.aliases.joined(separator: ", "))
+                    .font(.caption)
+                    .foregroundStyle(Color.smoothMuted)
+            }
+            Spacer()
+            Button(role: .destructive) {
+                viewModel.deleteLocalGlossaryTerm(id: term.id)
+            } label: {
+                Label("삭제", systemImage: "trash")
+            }
+            .buttonStyle(.borderless)
         }
     }
 
@@ -3123,30 +3262,9 @@ struct SettingsView: View {
                     .labelsHidden()
                 }
 
-                actionRow("용어 후보", detail: viewModel.localGlossaryStatusMessage) {
-                    Button {
-                        viewModel.refreshLocalGlossarySuggestions()
-                    } label: {
-                        Label(
-                            viewModel.isGeneratingLocalGlossarySuggestions ? "생성 중" : "용어 후보 생성",
-                            systemImage: "wand.and.stars"
-                        )
-                    }
-                    .buttonStyle(SmoothActionButtonStyle())
-                    .disabled(viewModel.isGeneratingLocalGlossarySuggestions || viewModel.meetingHistoryItems.isEmpty)
-                }
-            }
-
-            settingsCard("Suggestions", systemImage: "lightbulb") {
-                if viewModel.localGlossaryState.suggestions.isEmpty {
-                    Text("표시할 용어 후보가 없습니다.")
-                        .font(.callout)
-                        .foregroundStyle(Color.smoothMuted)
-                } else {
-                    ForEach(viewModel.localGlossaryState.suggestions.prefix(8)) { suggestion in
-                        localGlossarySuggestionRow(suggestion)
-                    }
-                }
+                Text("용어 후보 검토와 정답 용어 편집은 Meeting Intelligence의 용어 탭에서 진행합니다.")
+                    .font(.caption)
+                    .foregroundStyle(Color.smoothMuted)
             }
 
             settingsCard("Accepted Terms", systemImage: "checkmark.seal") {
@@ -3161,43 +3279,6 @@ struct SettingsView: View {
                 }
             }
         }
-    }
-
-    private func localGlossarySuggestionRow(_ suggestion: LocalGlossarySuggestion) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(suggestion.aliases.joined(separator: ", "))
-                        .font(.callout.weight(.semibold))
-                        .foregroundStyle(Color.smoothInk)
-                    Text("회의 \(suggestion.meetingCount)개 · 출현 \(suggestion.occurrenceCount)회")
-                        .font(.caption)
-                        .foregroundStyle(Color.smoothMuted)
-                }
-                Spacer()
-                Button {
-                    viewModel.acceptLocalGlossarySuggestion(id: suggestion.id, canonical: suggestion.suggestedCanonical)
-                } label: {
-                    Label("사전에 추가", systemImage: "checkmark")
-                }
-                .buttonStyle(SmoothActionButtonStyle())
-
-                Button {
-                    viewModel.dismissLocalGlossarySuggestion(id: suggestion.id)
-                } label: {
-                    Label("다시 보지 않기", systemImage: "eye.slash")
-                }
-                .buttonStyle(SmoothActionButtonStyle())
-            }
-
-            if let evidence = suggestion.evidence.first {
-                Text(evidence.excerpt)
-                    .font(.caption)
-                    .foregroundStyle(Color.smoothMuted)
-                    .lineLimit(2)
-            }
-        }
-        .padding(.vertical, 6)
     }
 
     private func localGlossaryTermRow(_ term: LocalGlossaryTerm) -> some View {
@@ -3503,7 +3584,7 @@ private enum ReleaseNoteBlock: Identifiable {
 private enum SettingsSection: String, CaseIterable, Identifiable {
     case llm = "LLM"
     case analysis = "Analysis"
-    case glossary = "Glossary"
+    case glossary = "용어"
     case app = "App"
     case danger = "Danger"
 
@@ -4438,6 +4519,72 @@ private struct MarkdownReadinessPreviewSheet: View {
         .padding(20)
         .frame(width: 460)
         .background(Color.smoothCanvas)
+    }
+}
+
+private struct LocalGlossarySuggestionReviewRow: View {
+    let suggestion: LocalGlossarySuggestion
+    let onAccept: (String) -> Void
+    let onDismiss: () -> Void
+    @State private var canonical: String
+
+    init(
+        suggestion: LocalGlossarySuggestion,
+        onAccept: @escaping (String) -> Void,
+        onDismiss: @escaping () -> Void
+    ) {
+        self.suggestion = suggestion
+        self.onAccept = onAccept
+        self.onDismiss = onDismiss
+        _canonical = State(initialValue: suggestion.suggestedCanonical)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 10) {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(suggestion.aliases.joined(separator: " / "))
+                        .font(.callout.weight(.semibold))
+                        .foregroundStyle(Color.smoothInk)
+                    Text("회의 \(suggestion.meetingCount)개 · 출현 \(suggestion.occurrenceCount)회 · 신뢰도 \(Int(suggestion.confidence * 100))%")
+                        .font(.caption)
+                        .foregroundStyle(Color.smoothMuted)
+                }
+                Spacer(minLength: 0)
+                Button {
+                    onDismiss()
+                } label: {
+                    Label("다시 보지 않기", systemImage: "eye.slash")
+                }
+                .buttonStyle(.borderless)
+            }
+
+            TextField("정답 용어", text: $canonical)
+                .textFieldStyle(.roundedBorder)
+
+            if !suggestion.evidence.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(Array(suggestion.evidence.prefix(3).enumerated()), id: \.offset) { _, evidence in
+                        Text("\(evidence.sourceTitle): \(evidence.excerpt)")
+                            .font(.caption)
+                            .foregroundStyle(Color.smoothMuted)
+                            .lineLimit(2)
+                    }
+                }
+            }
+
+            HStack {
+                Spacer()
+                Button {
+                    onAccept(canonical.trimmingCharacters(in: .whitespacesAndNewlines))
+                } label: {
+                    Label("사전에 추가", systemImage: "checkmark")
+                }
+                .buttonStyle(SmoothActionButtonStyle())
+                .disabled(canonical.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        }
+        .smoothCard(tint: Color.smoothAccent)
     }
 }
 

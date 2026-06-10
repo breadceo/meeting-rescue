@@ -47,11 +47,45 @@ struct ContentViewContextWiringTests {
             .appendingPathComponent("Sources/MeetingRescue/ContentView.swift")
         let source = try String(contentsOf: sourceURL, encoding: .utf8)
 
-        #expect(source.contains("case glossary = \"Glossary\""))
+        #expect(source.contains("case glossary = \"용어\""))
         #expect(source.contains("localGlossarySettings"))
-        #expect(source.contains("용어 후보 생성"))
-        #expect(source.contains("사전에 추가"))
-        #expect(source.contains("다시 보지 않기"))
+        #expect(source.contains("용어 후보 검토와 정답 용어 편집은 Meeting Intelligence의 용어 탭에서 진행합니다."))
+        #expect(source.contains("Accepted Terms"))
+    }
+
+    @Test("meeting intelligence exposes local glossary lane")
+    func meetingIntelligenceExposesLocalGlossaryLane() throws {
+        let sourceURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent("Sources/MeetingRescue/ContentView.swift")
+        let source = try String(contentsOf: sourceURL, encoding: .utf8)
+
+        #expect(source.contains("case glossary = \"용어\""))
+        #expect(source.contains("case .glossary:"))
+        #expect(source.contains("localGlossaryPanel()"))
+        #expect(source.contains("LocalGlossarySuggestionReviewRow"))
+    }
+
+    @Test("raw transcript shows compact glossary CTA")
+    func rawTranscriptShowsGlossaryCTA() throws {
+        let sourceURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent("Sources/MeetingRescue/ContentView.swift")
+        let source = try String(contentsOf: sourceURL, encoding: .utf8)
+        let rawScroll = try #require(source.slice(from: "private var rawTranscriptScroll", to: "private var rawTranscriptLineList"))
+
+        #expect(rawScroll.contains("rawTranscriptGlossaryFooter"))
+        #expect(source.contains("용어 후보"))
+        #expect(source.contains("intelligenceMode = .glossary"))
+    }
+
+    @Test("settings glossary section no longer hosts suggestion review")
+    func settingsGlossarySectionNoLongerHostsSuggestionReview() throws {
+        let sourceURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent("Sources/MeetingRescue/ContentView.swift")
+        let source = try String(contentsOf: sourceURL, encoding: .utf8)
+        let settings = try #require(source.slice(from: "private var localGlossarySettings", to: "private func localGlossaryTermRow"))
+
+        #expect(!settings.contains("localGlossarySuggestionRow"))
+        #expect(!settings.contains("용어 후보 생성"))
     }
 }
 
