@@ -1,5 +1,48 @@
 import Foundation
 
+public struct LocalGlossaryKoreanSuggestionDiagnostics: Codable, Equatable, Sendable {
+    public var occurrenceCount: Int
+    public var candidateCount: Int
+    public var supportedCandidateCount: Int
+    public var comparisonCandidateCount: Int
+    public var pairCount: Int
+    public var clusterCount: Int
+    public var collectMilliseconds: Int
+    public var summarizeMilliseconds: Int
+    public var pairMilliseconds: Int
+    public var clusterMilliseconds: Int
+    public var buildMilliseconds: Int
+    public var totalMilliseconds: Int
+
+    public init(
+        occurrenceCount: Int = 0,
+        candidateCount: Int = 0,
+        supportedCandidateCount: Int = 0,
+        comparisonCandidateCount: Int = 0,
+        pairCount: Int = 0,
+        clusterCount: Int = 0,
+        collectMilliseconds: Int = 0,
+        summarizeMilliseconds: Int = 0,
+        pairMilliseconds: Int = 0,
+        clusterMilliseconds: Int = 0,
+        buildMilliseconds: Int = 0,
+        totalMilliseconds: Int = 0
+    ) {
+        self.occurrenceCount = max(0, occurrenceCount)
+        self.candidateCount = max(0, candidateCount)
+        self.supportedCandidateCount = max(0, supportedCandidateCount)
+        self.comparisonCandidateCount = max(0, comparisonCandidateCount)
+        self.pairCount = max(0, pairCount)
+        self.clusterCount = max(0, clusterCount)
+        self.collectMilliseconds = max(0, collectMilliseconds)
+        self.summarizeMilliseconds = max(0, summarizeMilliseconds)
+        self.pairMilliseconds = max(0, pairMilliseconds)
+        self.clusterMilliseconds = max(0, clusterMilliseconds)
+        self.buildMilliseconds = max(0, buildMilliseconds)
+        self.totalMilliseconds = max(0, totalMilliseconds)
+    }
+}
+
 public enum LocalGlossaryKoreanSuggestionEngine {
     private static let maxCandidatesPerBucket = 40
     private static let maxComparisonCandidates = 900
@@ -10,12 +53,40 @@ public enum LocalGlossaryKoreanSuggestionEngine {
         existingState: LocalGlossaryState,
         maxSuggestions: Int = 8
     ) -> [LocalGlossarySuggestion] {
+        suggestionsWithDiagnostics(
+            from: documents,
+            existingState: existingState,
+            maxSuggestions: maxSuggestions
+        ).suggestions
+    }
+
+    public static func suggestionsWithDiagnostics(
+        from documents: [LocalGlossarySourceDocument],
+        existingState: LocalGlossaryState,
+        maxSuggestions: Int = 8
+    ) -> (suggestions: [LocalGlossarySuggestion], diagnostics: LocalGlossaryKoreanSuggestionDiagnostics) {
+        let totalStartedAt = Date()
         let acceptedValues = Set(existingState.enabledTerms.flatMap(\.allMatchValues).map(MeetingHistorySearch.compactNormalize))
+        let collectStartedAt = Date()
         let occurrences = collectOccurrences(from: documents, acceptedValues: acceptedValues)
+        let collectMilliseconds = elapsedMilliseconds(since: collectStartedAt)
+        let summarizeStartedAt = Date()
         let candidates = summarizeCandidates(occurrences)
+        let summarizeMilliseconds = elapsedMilliseconds(since: summarizeStartedAt)
+        let supportedCandidateCount = candidates.filter { candidate in
+            candidate.documentCount >= minimumOccurrenceSupportForPairing
+                || candidate.occurrenceCount >= minimumOccurrenceSupportForPairing
+        }
+        .count
+        let comparisonCandidateCount = min(supportedCandidateCount, maxComparisonCandidates)
+        let pairStartedAt = Date()
         let pairs = candidatePairs(from: candidates)
+        let pairMilliseconds = elapsedMilliseconds(since: pairStartedAt)
+        let clusterStartedAt = Date()
         let clusters = clusters(from: pairs)
-        return clusters.compactMap { cluster in
+        let clusterMilliseconds = elapsedMilliseconds(since: clusterStartedAt)
+        let buildStartedAt = Date()
+        let suggestions = clusters.compactMap { cluster in
             suggestion(from: cluster, pairs: pairs, dismissedIDs: existingState.dismissedSuggestionIDs)
         }
         .sorted {
@@ -26,6 +97,24 @@ public enum LocalGlossaryKoreanSuggestionEngine {
         }
         .prefix(maxSuggestions)
         .map { $0 }
+        let buildMilliseconds = elapsedMilliseconds(since: buildStartedAt)
+        return (
+            suggestions,
+            LocalGlossaryKoreanSuggestionDiagnostics(
+                occurrenceCount: occurrences.count,
+                candidateCount: candidates.count,
+                supportedCandidateCount: supportedCandidateCount,
+                comparisonCandidateCount: comparisonCandidateCount,
+                pairCount: pairs.count,
+                clusterCount: clusters.count,
+                collectMilliseconds: collectMilliseconds,
+                summarizeMilliseconds: summarizeMilliseconds,
+                pairMilliseconds: pairMilliseconds,
+                clusterMilliseconds: clusterMilliseconds,
+                buildMilliseconds: buildMilliseconds,
+                totalMilliseconds: elapsedMilliseconds(since: totalStartedAt)
+            )
+        )
     }
 
     private static func collectOccurrences(
@@ -121,7 +210,8 @@ public enum LocalGlossaryKoreanSuggestionEngine {
                                 lhs: lhs,
                                 rhs: rhs,
                                 score: score.value,
-                                contextOverlap: contextOverlap
+                                contextOverlap: contextOverlap,
+                                scoreBreakdown: score
                             )
                         )
                     }
@@ -208,12 +298,18 @@ public enum LocalGlossaryKoreanSuggestionEngine {
             return nil
         }
         let compactValues = Set(cluster.map(\.compact))
-        let confidence = pairs
-            .filter { compactValues.contains($0.lhs.compact) && compactValues.contains($0.rhs.compact) }
-            .map(\.score)
-            .max() ?? 0.80
+        let relevantPairs = pairs.filter {
+            compactValues.contains($0.lhs.compact) && compactValues.contains($0.rhs.compact)
+        }
         let occurrences = cluster.flatMap(\.occurrences)
         let meetingIDs = Set(occurrences.map(\.documentID))
+        let score = scoreForSuggestion(
+            aliases: aliases,
+            cluster: cluster,
+            pairs: relevantPairs,
+            occurrenceCount: occurrences.count,
+            meetingCount: meetingIDs.count
+        )
         let suggestedCanonical = cluster
             .sorted {
                 if $0.documentCount == $1.documentCount {
@@ -236,12 +332,139 @@ public enum LocalGlossaryKoreanSuggestionEngine {
         return LocalGlossarySuggestion(
             id: id,
             suggestedCanonical: suggestedCanonical,
-            aliases: aliases,
-            evidence: evidence,
-            occurrenceCount: occurrences.count,
-            meetingCount: meetingIDs.count,
-            confidence: confidence
+                aliases: aliases,
+                evidence: evidence,
+                occurrenceCount: occurrences.count,
+                meetingCount: meetingIDs.count,
+                confidence: score.finalScore,
+                score: score
         )
+    }
+
+    private static func scoreForSuggestion(
+        aliases: [String],
+        cluster: [KoreanPhraseCandidate],
+        pairs: [KoreanPhraseCandidatePair],
+        occurrenceCount: Int,
+        meetingCount: Int
+    ) -> LocalGlossarySuggestionScore {
+        let phoneticSimilarity = pairs
+            .map { 0.75 * $0.scoreBreakdown.jamo + 0.25 * $0.scoreBreakdown.initials }
+            .max() ?? 0
+        let graphemicSimilarity = pairs
+            .map { 0.65 * $0.scoreBreakdown.syllable + 0.35 * $0.scoreBreakdown.bigram }
+            .max() ?? 0
+        let contextOverlap = pairs.map(\.contextOverlap).max() ?? 0
+        let termhood = termhoodScore(aliases: aliases, cluster: cluster)
+        let recurrence = recurrenceScore(occurrenceCount: occurrenceCount, meetingCount: meetingCount)
+        let noisePenalty = noisePenaltyForKoreanAliases(aliases)
+        let finalScore = min(
+            0.95,
+            max(
+                0,
+                0.30 * phoneticSimilarity
+                    + 0.15 * graphemicSimilarity
+                    + 0.15 * contextOverlap
+                    + 0.20 * termhood
+                    + 0.20 * recurrence
+                    - 0.35 * noisePenalty
+            )
+        )
+        let impactLabel = LocalGlossaryCandidateImpactLabel.estimated(
+            aliases: aliases,
+            phoneticSimilarity: phoneticSimilarity,
+            graphemicSimilarity: graphemicSimilarity,
+            contextOverlap: contextOverlap,
+            termhood: termhood,
+            recurrence: recurrence,
+            noisePenalty: noisePenalty,
+            finalScore: finalScore
+        )
+        return LocalGlossarySuggestionScore(
+            phoneticSimilarity: phoneticSimilarity,
+            graphemicSimilarity: graphemicSimilarity,
+            contextOverlap: contextOverlap,
+            termhood: termhood,
+            recurrence: recurrence,
+            noisePenalty: noisePenalty,
+            finalScore: finalScore,
+            matchedCriteria: matchedCriteria(
+                phoneticSimilarity: phoneticSimilarity,
+                graphemicSimilarity: graphemicSimilarity,
+                contextOverlap: contextOverlap,
+                termhood: termhood,
+                recurrence: recurrence
+            ),
+            impactLabel: impactLabel
+        )
+    }
+
+    private static func termhoodScore(aliases: [String], cluster: [KoreanPhraseCandidate]) -> Double {
+        let occurrences = cluster.flatMap(\.occurrences)
+        let contextValues = occurrences.reduce(into: Set<String>()) { result, occurrence in
+            result.formUnion(occurrence.contextValues)
+        }
+        var score = 0.40
+        if aliases.contains(where: { $0.contains(" ") }) {
+            score += 0.14
+        }
+        if aliases.map({ MeetingHistorySearch.compactNormalize($0).count }).max() ?? 0 >= 5 {
+            score += 0.12
+        }
+        if !contextValues.intersection(koreanDomainContextTokens).isEmpty {
+            score += 0.24
+        }
+        if Set(occurrences.map(\.documentTitle)).count <= max(2, Set(occurrences.map(\.documentID)).count) {
+            score += 0.06
+        }
+        if aliases.contains(where: { isGenericPointerPhrase(MeetingHistorySearch.compactNormalize($0)) }) {
+            score -= 0.60
+        }
+        return min(1, max(0, score))
+    }
+
+    private static func recurrenceScore(occurrenceCount: Int, meetingCount: Int) -> Double {
+        min(1, min(Double(meetingCount) / 6, 1) * 0.70 + min(Double(occurrenceCount) / 12, 1) * 0.30)
+    }
+
+    private static func noisePenaltyForKoreanAliases(_ aliases: [String]) -> Double {
+        if aliases.contains(where: { isGenericPointerPhrase(MeetingHistorySearch.compactNormalize($0)) }) {
+            return 1
+        }
+        if aliases.count > 4 {
+            return 0.60
+        }
+        let compactAliases = aliases.map(MeetingHistorySearch.compactNormalize)
+        if compactAliases.allSatisfy({ koreanStopWords.contains($0) }) {
+            return 1
+        }
+        return 0
+    }
+
+    private static func matchedCriteria(
+        phoneticSimilarity: Double,
+        graphemicSimilarity: Double,
+        contextOverlap: Double,
+        termhood: Double,
+        recurrence: Double
+    ) -> [String] {
+        var criteria: [String] = []
+        if phoneticSimilarity >= 0.80 {
+            criteria.append("발음 유사")
+        }
+        if graphemicSimilarity >= 0.75 {
+            criteria.append("철자 유사")
+        }
+        if contextOverlap > 0 {
+            criteria.append("주변 맥락")
+        }
+        if termhood >= 0.65 {
+            criteria.append("용어성")
+        }
+        if recurrence >= 0.45 {
+            criteria.append("반복 등장")
+        }
+        return criteria
     }
 
     private static func cappedBuckets(
@@ -321,7 +544,22 @@ public enum LocalGlossaryKoreanSuggestionEngine {
         }) else {
             return false
         }
+        guard !isGenericPointerPhrase(compact) else {
+            return false
+        }
         return true
+    }
+
+    private static func isGenericPointerPhrase(_ compact: String) -> Bool {
+        let hasPointerPrefix = koreanGenericPointerPrefixes.contains { prefix in
+            compact.hasPrefix(prefix)
+        }
+        guard hasPointerPrefix else {
+            return false
+        }
+        return koreanGenericPointerSuffixes.contains { suffix in
+            compact.hasSuffix(suffix)
+        }
     }
 
     private static func cleanTranscriptLine(_ line: String) -> String {
@@ -475,6 +713,10 @@ public enum LocalGlossaryKoreanSuggestionEngine {
         }
         return (0..<(values.count - 1)).map { String(values[$0...($0 + 1)]) }
     }
+
+    private static func elapsedMilliseconds(since startedAt: Date) -> Int {
+        max(0, Int(Date().timeIntervalSince(startedAt) * 1_000))
+    }
 }
 
 private struct KoreanToken: Equatable {
@@ -521,6 +763,7 @@ private struct KoreanPhraseCandidatePair {
     var rhs: KoreanPhraseCandidate
     var score: Double
     var contextOverlap: Double
+    var scoreBreakdown: KoreanPhraseScore
 }
 
 private struct KoreanPhraseScore {
@@ -582,6 +825,20 @@ private let koreanGenericSuffixes: [String] = [
     "합니다", "했습니다", "있습니다", "나왔습니다", "나왔고", "필요하다", "필요하다고",
     "필요할", "필요한", "되는데", "되는지", "좋겠다", "좋겠다고", "좋을", "주시면",
     "주세요", "만들어", "만들어서", "하는지", "있어서", "있어", "봅니다"
+]
+
+private let koreanGenericPointerPrefixes: [String] = [
+    "이런", "요런", "그런", "고런", "저런", "어떤"
+]
+
+private let koreanGenericPointerSuffixes: [String] = [
+    "부분", "부분들", "것", "것들", "내용", "얘기", "이야기"
+]
+
+private let koreanDomainContextTokens: Set<String> = [
+    "개발", "검색", "계약", "결제", "기능", "데이터", "마케팅", "매물", "분석", "상품",
+    "신규", "안드로이드", "아이오에스", "오가닉", "유저", "이용금액", "전환", "주문",
+    "지표", "활성", "환불"
 ]
 
 private let koreanGenericExtensionSuffixes: [String] = [

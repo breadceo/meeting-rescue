@@ -85,6 +85,163 @@ public struct LocalGlossaryEvidence: Codable, Equatable, Sendable {
     }
 }
 
+public struct LocalGlossaryCandidateImpactLabel: Codable, Equatable, Sendable {
+    public var summarySearchImpact: Double
+    public var summarySearchReasons: [String]
+    public var qualityTier: String
+
+    public static let low = LocalGlossaryCandidateImpactLabel(
+        summarySearchImpact: 0,
+        summarySearchReasons: ["strict-filter"],
+        qualityTier: "low"
+    )
+
+    public init(
+        summarySearchImpact: Double = 0,
+        summarySearchReasons: [String] = ["strict-filter"],
+        qualityTier: String = "low"
+    ) {
+        self.summarySearchImpact = min(1, max(0, summarySearchImpact))
+        self.summarySearchReasons = summarySearchReasons
+            .map(\.trimmedGlossaryText)
+            .filter { !$0.isEmpty }
+        if self.summarySearchReasons.isEmpty {
+            self.summarySearchReasons = ["strict-filter"]
+        }
+        self.qualityTier = qualityTier.trimmedGlossaryText.nonEmptyGlossaryText ?? "low"
+    }
+
+    public static func estimated(
+        aliases: [String],
+        phoneticSimilarity: Double,
+        graphemicSimilarity: Double,
+        contextOverlap: Double,
+        termhood: Double,
+        recurrence: Double,
+        noisePenalty: Double,
+        finalScore: Double
+    ) -> LocalGlossaryCandidateImpactLabel {
+        let similarity = max(phoneticSimilarity, graphemicSimilarity)
+        var reasons: [String] = []
+        if aliases.count >= 2, similarity >= 0.70 {
+            reasons.append("canonical-would-normalize-summary")
+        }
+        if recurrence >= 0.45 {
+            reasons.append("improves-history-search")
+        }
+        if contextOverlap >= 0.12 {
+            reasons.append("shared-context-overlap")
+        }
+        if termhood >= 0.65 {
+            reasons.append("domain-termhood")
+        }
+        if finalScore >= 0.75 {
+            reasons.append("high-confidence")
+        }
+        let criteriaSupport = min(1, Double(reasons.count) / 5)
+        let impact = min(
+            1,
+            max(
+                0,
+                0.30 * finalScore
+                    + 0.25 * similarity
+                    + 0.20 * contextOverlap
+                    + 0.15 * recurrence
+                    + 0.10 * termhood
+                    + 0.10 * criteriaSupport
+                    - 0.40 * noisePenalty
+            )
+        )
+        let tier: String
+        if impact >= 0.80, reasons.count >= 3 {
+            tier = "high"
+        } else if impact >= 0.40, reasons.count >= 2 {
+            tier = "medium"
+        } else {
+            tier = "low"
+        }
+        return LocalGlossaryCandidateImpactLabel(
+            summarySearchImpact: impact,
+            summarySearchReasons: reasons.isEmpty ? ["strict-filter"] : reasons,
+            qualityTier: tier
+        )
+    }
+}
+
+public struct LocalGlossarySuggestionScore: Codable, Equatable, Sendable {
+    public var phoneticSimilarity: Double
+    public var graphemicSimilarity: Double
+    public var contextOverlap: Double
+    public var termhood: Double
+    public var recurrence: Double
+    public var noisePenalty: Double
+    public var finalScore: Double
+    public var matchedCriteria: [String]
+    public var impactLabel: LocalGlossaryCandidateImpactLabel
+
+    public static let empty = LocalGlossarySuggestionScore()
+
+    public init(
+        phoneticSimilarity: Double = 0,
+        graphemicSimilarity: Double = 0,
+        contextOverlap: Double = 0,
+        termhood: Double = 0,
+        recurrence: Double = 0,
+        noisePenalty: Double = 0,
+        finalScore: Double = 0,
+        matchedCriteria: [String] = [],
+        impactLabel: LocalGlossaryCandidateImpactLabel = .low
+    ) {
+        self.phoneticSimilarity = Self.clamped(phoneticSimilarity)
+        self.graphemicSimilarity = Self.clamped(graphemicSimilarity)
+        self.contextOverlap = Self.clamped(contextOverlap)
+        self.termhood = Self.clamped(termhood)
+        self.recurrence = Self.clamped(recurrence)
+        self.noisePenalty = Self.clamped(noisePenalty)
+        self.finalScore = Self.clamped(finalScore)
+        self.matchedCriteria = matchedCriteria
+            .map(\.trimmedGlossaryText)
+            .filter { !$0.isEmpty }
+        self.impactLabel = impactLabel
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case phoneticSimilarity
+        case graphemicSimilarity
+        case contextOverlap
+        case termhood
+        case recurrence
+        case noisePenalty
+        case finalScore
+        case matchedCriteria
+        case impactLabel
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            phoneticSimilarity: try container.decodeIfPresent(Double.self, forKey: .phoneticSimilarity) ?? 0,
+            graphemicSimilarity: try container.decodeIfPresent(Double.self, forKey: .graphemicSimilarity) ?? 0,
+            contextOverlap: try container.decodeIfPresent(Double.self, forKey: .contextOverlap) ?? 0,
+            termhood: try container.decodeIfPresent(Double.self, forKey: .termhood) ?? 0,
+            recurrence: try container.decodeIfPresent(Double.self, forKey: .recurrence) ?? 0,
+            noisePenalty: try container.decodeIfPresent(Double.self, forKey: .noisePenalty) ?? 0,
+            finalScore: try container.decodeIfPresent(Double.self, forKey: .finalScore) ?? 0,
+            matchedCriteria: try container.decodeIfPresent([String].self, forKey: .matchedCriteria) ?? [],
+            impactLabel: try container.decodeIfPresent(LocalGlossaryCandidateImpactLabel.self, forKey: .impactLabel) ?? .low
+        )
+    }
+
+    public var summaryText: String {
+        let criteria = matchedCriteria.isEmpty ? "strict filter" : matchedCriteria.joined(separator: " · ")
+        return "근거 \(criteria) · 최종 \(Int(finalScore * 100))%"
+    }
+
+    private static func clamped(_ value: Double) -> Double {
+        min(1, max(0, value))
+    }
+}
+
 public struct LocalGlossarySuggestion: Codable, Equatable, Identifiable, Sendable {
     public var id: String
     public var suggestedCanonical: String
@@ -93,6 +250,7 @@ public struct LocalGlossarySuggestion: Codable, Equatable, Identifiable, Sendabl
     public var occurrenceCount: Int
     public var meetingCount: Int
     public var confidence: Double
+    public var score: LocalGlossarySuggestionScore
     public var createdAt: Date
 
     public init(
@@ -103,6 +261,7 @@ public struct LocalGlossarySuggestion: Codable, Equatable, Identifiable, Sendabl
         occurrenceCount: Int,
         meetingCount: Int,
         confidence: Double,
+        score: LocalGlossarySuggestionScore = .empty,
         createdAt: Date = Date()
     ) {
         self.id = id
@@ -112,7 +271,143 @@ public struct LocalGlossarySuggestion: Codable, Equatable, Identifiable, Sendabl
         self.occurrenceCount = max(0, occurrenceCount)
         self.meetingCount = max(0, meetingCount)
         self.confidence = min(1, max(0, confidence))
+        self.score = score.finalScore == 0
+            ? LocalGlossarySuggestionScore(finalScore: min(1, max(0, confidence)))
+            : score
         self.createdAt = createdAt
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case suggestedCanonical
+        case aliases
+        case evidence
+        case occurrenceCount
+        case meetingCount
+        case confidence
+        case score
+        case createdAt
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        suggestedCanonical = try container.decode(String.self, forKey: .suggestedCanonical)
+        aliases = try container.decode([String].self, forKey: .aliases)
+        evidence = try container.decode([LocalGlossaryEvidence].self, forKey: .evidence)
+        occurrenceCount = try container.decode(Int.self, forKey: .occurrenceCount)
+        meetingCount = try container.decode(Int.self, forKey: .meetingCount)
+        confidence = try container.decode(Double.self, forKey: .confidence)
+        score = try container.decodeIfPresent(LocalGlossarySuggestionScore.self, forKey: .score)
+            ?? LocalGlossarySuggestionScore(finalScore: confidence)
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+    }
+}
+
+public struct LocalGlossaryRefreshDiagnostic: Codable, Equatable, Identifiable, Sendable {
+    public struct StageTiming: Codable, Equatable, Sendable {
+        public var name: String
+        public var elapsedMilliseconds: Int
+        public var detail: String
+
+        public init(name: String, elapsedMilliseconds: Int, detail: String = "") {
+            self.name = name.trimmedGlossaryText
+            self.elapsedMilliseconds = max(0, elapsedMilliseconds)
+            self.detail = detail.trimmedGlossaryText
+        }
+    }
+
+    public struct SuggestionSummary: Codable, Equatable, Sendable {
+        public var id: String
+        public var suggestedCanonical: String
+        public var aliases: [String]
+        public var occurrenceCount: Int
+        public var meetingCount: Int
+        public var confidence: Double
+        public var score: LocalGlossarySuggestionScore
+
+        public init(
+            id: String,
+            suggestedCanonical: String,
+            aliases: [String],
+            occurrenceCount: Int,
+            meetingCount: Int,
+            confidence: Double,
+            score: LocalGlossarySuggestionScore = .empty
+        ) {
+            self.id = id.trimmedGlossaryText
+            self.suggestedCanonical = suggestedCanonical.trimmedGlossaryText
+            self.aliases = aliases.normalizedGlossaryValues()
+            self.occurrenceCount = max(0, occurrenceCount)
+            self.meetingCount = max(0, meetingCount)
+            self.confidence = min(1, max(0, confidence))
+            self.score = score.finalScore == 0
+                ? LocalGlossarySuggestionScore(finalScore: self.confidence)
+                : score
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case id
+            case suggestedCanonical
+            case aliases
+            case occurrenceCount
+            case meetingCount
+            case confidence
+            case score
+        }
+
+        public init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            id = try container.decode(String.self, forKey: .id)
+            suggestedCanonical = try container.decode(String.self, forKey: .suggestedCanonical)
+            aliases = try container.decode([String].self, forKey: .aliases)
+            occurrenceCount = try container.decode(Int.self, forKey: .occurrenceCount)
+            meetingCount = try container.decode(Int.self, forKey: .meetingCount)
+            confidence = try container.decode(Double.self, forKey: .confidence)
+            score = try container.decodeIfPresent(LocalGlossarySuggestionScore.self, forKey: .score)
+                ?? LocalGlossarySuggestionScore(finalScore: confidence)
+        }
+    }
+
+    public var id: String
+    public var createdAt: Date
+    public var folderPath: String
+    public var documentCount: Int
+    public var suggestionCount: Int
+    public var scanMilliseconds: Int
+    public var suggestionMilliseconds: Int
+    public var saveMilliseconds: Int
+    public var totalMilliseconds: Int
+    public var stages: [StageTiming]
+    public var suggestions: [SuggestionSummary]
+    public var engineDiagnostics: LocalGlossarySuggestionEngineDiagnostics?
+
+    public init(
+        id: String = UUID().uuidString,
+        createdAt: Date = Date(),
+        folderPath: String,
+        documentCount: Int,
+        suggestionCount: Int,
+        scanMilliseconds: Int,
+        suggestionMilliseconds: Int,
+        saveMilliseconds: Int,
+        totalMilliseconds: Int,
+        stages: [StageTiming],
+        suggestions: [SuggestionSummary],
+        engineDiagnostics: LocalGlossarySuggestionEngineDiagnostics? = nil
+    ) {
+        self.id = id.trimmedGlossaryText
+        self.createdAt = createdAt
+        self.folderPath = folderPath
+        self.documentCount = max(0, documentCount)
+        self.suggestionCount = max(0, suggestionCount)
+        self.scanMilliseconds = max(0, scanMilliseconds)
+        self.suggestionMilliseconds = max(0, suggestionMilliseconds)
+        self.saveMilliseconds = max(0, saveMilliseconds)
+        self.totalMilliseconds = max(0, totalMilliseconds)
+        self.stages = stages
+        self.suggestions = Array(suggestions.prefix(12))
+        self.engineDiagnostics = engineDiagnostics
     }
 }
 
@@ -203,6 +498,20 @@ public struct LocalGlossaryState: Codable, Equatable, Sendable {
         if let index = suggestions.firstIndex(where: { $0.id == suggestion.id }) {
             suggestions[index] = suggestion
         } else {
+            suggestions.append(suggestion)
+        }
+        suggestions.sort {
+            if $0.confidence == $1.confidence {
+                return $0.occurrenceCount > $1.occurrenceCount
+            }
+            return $0.confidence > $1.confidence
+        }
+        updatedAt = Date()
+    }
+
+    public mutating func replaceSuggestions(_ nextSuggestions: [LocalGlossarySuggestion]) {
+        suggestions = []
+        for suggestion in nextSuggestions where !dismissedSuggestionIDs.contains(suggestion.id) {
             suggestions.append(suggestion)
         }
         suggestions.sort {

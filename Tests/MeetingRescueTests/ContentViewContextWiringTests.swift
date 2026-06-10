@@ -63,6 +63,8 @@ struct ContentViewContextWiringTests {
         #expect(source.contains("case .glossary:"))
         #expect(source.contains("localGlossaryPanel()"))
         #expect(source.contains("LocalGlossarySuggestionReviewRow"))
+        #expect(source.contains("localGlossaryProgressView"))
+        #expect(source.contains("viewModel.localGlossaryRefreshProgress"))
     }
 
     @Test("raw transcript shows compact glossary CTA")

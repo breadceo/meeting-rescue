@@ -125,8 +125,37 @@ public final class ApplicationStateStore: @unchecked Sendable {
         return (try? decoder.decode(LocalGlossaryState.self, from: data)) ?? LocalGlossaryState()
     }
 
+    public func localGlossaryRefreshDiagnosticsURL() throws -> URL {
+        try ensureLogsDirectory()
+        return localGlossaryRefreshDiagnosticsLogURL
+    }
+
+    public func appendLocalGlossaryRefreshDiagnostic(_ diagnostic: LocalGlossaryRefreshDiagnostic) throws {
+        try ensureLogsDirectory()
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        encoder.outputFormatting = [.sortedKeys]
+        var data = try encoder.encode(diagnostic)
+        data.append(0x0A)
+        if fileManager.fileExists(atPath: localGlossaryRefreshDiagnosticsLogURL.path) {
+            let handle = try FileHandle(forWritingTo: localGlossaryRefreshDiagnosticsLogURL)
+            defer {
+                try? handle.close()
+            }
+            try handle.seekToEnd()
+            try handle.write(contentsOf: data)
+        } else {
+            try data.write(to: localGlossaryRefreshDiagnosticsLogURL, options: [.atomic])
+        }
+    }
+
     private func ensureRootDirectory() throws {
         try fileManager.createDirectory(at: rootURL, withIntermediateDirectories: true)
+    }
+
+    private func ensureLogsDirectory() throws {
+        try ensureRootDirectory()
+        try fileManager.createDirectory(at: rootURL.appendingPathComponent("Logs", isDirectory: true), withIntermediateDirectories: true)
     }
 
     private func ensureSessionsDirectory() throws {
@@ -146,6 +175,12 @@ public final class ApplicationStateStore: @unchecked Sendable {
 
     private var localGlossaryURL: URL {
         rootURL.appendingPathComponent("local-glossary.json")
+    }
+
+    private var localGlossaryRefreshDiagnosticsLogURL: URL {
+        rootURL
+            .appendingPathComponent("Logs", isDirectory: true)
+            .appendingPathComponent("local-glossary-refresh.jsonl")
     }
 
     private func analysisStateURL(for sourceURL: URL) -> URL {

@@ -149,7 +149,7 @@ struct AppViewModelTestRunContextTests {
         #expect(request.supplementalContextSources.contains { $0.kind == .domainGlossary && $0.excerpt.contains("canonical: zax") })
     }
 
-    @Test("local glossary refresh scans selected raw transcript folder")
+    @Test("local glossary refresh scans the full selected raw transcript folder")
     func localGlossaryRefreshScansSelectedRawTranscriptFolder() throws {
         let sourceURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
             .appendingPathComponent("Sources/MeetingRescue/AppViewModel.swift")
@@ -158,8 +158,14 @@ struct AppViewModelTestRunContextTests {
 
         #expect(refresh.contains("selectedFolderURL"))
         #expect(refresh.contains("LocalGlossaryHistoryScanner.documents"))
-        #expect(refresh.contains("maxDocuments: 40"))
+        #expect(refresh.contains("maxDocuments: Int.max"))
         #expect(refresh.contains("rawTranscriptLineLimit: 160"))
+        #expect(refresh.contains("LocalGlossaryRefreshProgress"))
+        #expect(refresh.contains("LocalGlossaryProgressBox"))
+        #expect(refresh.contains("logLocalGlossaryRefreshStage"))
+        #expect(refresh.contains("appendLocalGlossaryRefreshDiagnostic"))
+        #expect(refresh.contains("LocalGlossaryRefreshDiagnostic"))
+        #expect(refresh.contains("progress: { progress in"))
         #expect(!refresh.contains("meetingHistoryItems.map"))
     }
 }

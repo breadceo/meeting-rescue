@@ -1,8 +1,11 @@
 import Foundation
 import MeetingRescueCore
 import AppKit
+import os
 import SwiftUI
 import UniformTypeIdentifiers
+
+private let localGlossaryLogger = Logger(subsystem: "MeetingRescue", category: "LocalGlossary")
 
 enum AnalysisRuntimeStatus: Equatable {
     case idle
@@ -286,6 +289,82 @@ struct MeetingSearchIndexProgress: Equatable {
     }
 }
 
+struct LocalGlossaryRefreshProgress: Equatable {
+    enum Stage: Equatable {
+        case idle
+        case scanning
+        case reading
+        case generating
+        case saving
+        case completed
+        case failed(String)
+    }
+
+    var stage: Stage
+    var completed: Int
+    var total: Int
+    var detail: String
+
+    static let idle = LocalGlossaryRefreshProgress(stage: .idle, completed: 0, total: 0, detail: "")
+
+    var isVisible: Bool {
+        switch stage {
+        case .scanning, .reading, .generating, .saving, .failed:
+            return true
+        case .idle, .completed:
+            return false
+        }
+    }
+
+    var fraction: Double {
+        guard total > 0 else {
+            return 0
+        }
+        return min(1, max(0, Double(completed) / Double(total)))
+    }
+
+    var displayText: String {
+        switch stage {
+        case .idle:
+            return "용어 후보 대기"
+        case .scanning:
+            return "transcript 파일 목록 확인 중"
+        case .reading:
+            if total > 0 {
+                return "회의 읽는 중 \(completed)/\(total)"
+            }
+            return "읽을 회의 확인 중"
+        case .generating:
+            return "용어 후보 계산 중"
+        case .saving:
+            return "용어 후보 저장 중"
+        case .completed:
+            return "용어 후보 찾기 완료"
+        case .failed(let message):
+            return "용어 후보 찾기 실패: \(message)"
+        }
+    }
+
+    static func scanner(_ progress: LocalGlossaryHistoryScannerProgress) -> LocalGlossaryRefreshProgress {
+        switch progress.phase {
+        case .listing:
+            return LocalGlossaryRefreshProgress(
+                stage: .scanning,
+                completed: 0,
+                total: 0,
+                detail: "파일 목록 확인 중"
+            )
+        case .reading:
+            return LocalGlossaryRefreshProgress(
+                stage: .reading,
+                completed: progress.completed,
+                total: progress.total,
+                detail: progress.currentFile ?? ""
+            )
+        }
+    }
+}
+
 private final class SearchIndexProgressBox: @unchecked Sendable {
     private let lock = NSLock()
     private var completed = 0
@@ -302,6 +381,23 @@ private final class SearchIndexProgressBox: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         return (completed, total)
+    }
+}
+
+private final class LocalGlossaryProgressBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var progress = LocalGlossaryHistoryScannerProgress(phase: .listing, completed: 0, total: 0)
+
+    func update(_ progress: LocalGlossaryHistoryScannerProgress) {
+        lock.lock()
+        self.progress = progress
+        lock.unlock()
+    }
+
+    func snapshot() -> LocalGlossaryHistoryScannerProgress {
+        lock.lock()
+        defer { lock.unlock() }
+        return progress
     }
 }
 
@@ -662,6 +758,7 @@ final class AppViewModel: ObservableObject {
     @Published var settings: AppSettings
     @Published var localGlossaryState = LocalGlossaryState()
     @Published var localGlossaryStatusMessage = "로컬 용어 사전 준비"
+    @Published private(set) var localGlossaryRefreshProgress = LocalGlossaryRefreshProgress.idle
     @Published var isGeneratingLocalGlossarySuggestions = false
     @Published var analysisState = MeetingAnalysisState()
     @Published var analysisStatus: AnalysisRuntimeStatus = .idle
@@ -1255,40 +1352,165 @@ final class AppViewModel: ObservableObject {
             localGlossaryStatusMessage = "transcript 폴더를 먼저 선택하세요."
             return
         }
+        let refreshStartedAt = Date()
         isGeneratingLocalGlossarySuggestions = true
-        localGlossaryStatusMessage = "raw transcript history에서 용어 후보를 찾는 중"
+        localGlossaryRefreshProgress = LocalGlossaryRefreshProgress(
+            stage: .scanning,
+            completed: 0,
+            total: 0,
+            detail: "파일 목록 확인 중"
+        )
+        localGlossaryStatusMessage = localGlossaryRefreshProgress.displayText
         let currentState = localGlossaryState
+        let progressBox = LocalGlossaryProgressBox()
+        logLocalGlossaryRefreshStage("start", startedAt: refreshStartedAt, detail: "folder=\(selectedFolderURL.path)")
 
-        Task { @MainActor [weak self, selectedFolderURL, currentState] in
+        Task { @MainActor [weak self, selectedFolderURL, currentState, progressBox, refreshStartedAt] in
+            guard let self else {
+                return
+            }
+            let scanStartedAt = Date()
+            let progressTask = Task { @MainActor [weak self, progressBox, selectedFolderURL] in
+                while !Task.isCancelled {
+                    guard let self, self.selectedFolderURL == selectedFolderURL else {
+                        return
+                    }
+                    let progress = LocalGlossaryRefreshProgress.scanner(progressBox.snapshot())
+                    self.localGlossaryRefreshProgress = progress
+                    self.localGlossaryStatusMessage = progress.displayText
+                    try? await Task.sleep(nanoseconds: 120_000_000)
+                }
+            }
             let documents = await Task.detached(priority: .utility) {
                 LocalGlossaryHistoryScanner.documents(
                     in: selectedFolderURL,
-                    configuration: .init(maxDocuments: 40, maxBytesPerDocument: 48_000, rawTranscriptLineLimit: 160)
+                    configuration: .init(maxDocuments: Int.max, maxBytesPerDocument: 48_000, rawTranscriptLineLimit: 160),
+                    progress: { progress in
+                        progressBox.update(progress)
+                    }
                 )
             }.value
-            let suggestions = await Task.detached(priority: .utility) {
-                LocalGlossarySuggestionEngine.suggestions(
+            progressTask.cancel()
+            let scanMilliseconds = self.logLocalGlossaryRefreshStage(
+                "scan",
+                startedAt: scanStartedAt,
+                detail: "documents=\(documents.count)"
+            )
+            guard self.selectedFolderURL == selectedFolderURL else {
+                self.localGlossaryRefreshProgress = .idle
+                self.isGeneratingLocalGlossarySuggestions = false
+                return
+            }
+            self.localGlossaryRefreshProgress = LocalGlossaryRefreshProgress(
+                stage: .generating,
+                completed: documents.count,
+                total: documents.count,
+                detail: "후보 계산 중"
+            )
+            self.localGlossaryStatusMessage = self.localGlossaryRefreshProgress.displayText
+            let suggestionStartedAt = Date()
+            let suggestionResult = await Task.detached(priority: .utility) {
+                LocalGlossarySuggestionEngine.suggestionsWithDiagnostics(
                     from: documents,
                     existingState: currentState,
                     maxSuggestions: 12
                 )
             }.value
-            guard let self else {
-                return
-            }
+            let suggestions = suggestionResult.suggestions
+            let suggestionMilliseconds = self.logLocalGlossaryRefreshStage(
+                "suggest",
+                startedAt: suggestionStartedAt,
+                detail: "documents=\(documents.count) suggestions=\(suggestions.count) latin_ms=\(suggestionResult.diagnostics.latinMilliseconds) korean_ms=\(suggestionResult.diagnostics.koreanMilliseconds) korean_candidates=\(suggestionResult.diagnostics.korean.candidateCount) korean_pairs=\(suggestionResult.diagnostics.korean.pairCount)"
+            )
             guard self.selectedFolderURL == selectedFolderURL else {
+                self.localGlossaryRefreshProgress = .idle
                 self.isGeneratingLocalGlossarySuggestions = false
                 return
             }
-            for suggestion in suggestions {
-                self.localGlossaryState.upsertSuggestion(suggestion)
-            }
+            self.localGlossaryRefreshProgress = LocalGlossaryRefreshProgress(
+                stage: .saving,
+                completed: suggestions.count,
+                total: max(suggestions.count, 1),
+                detail: "저장 중"
+            )
+            self.localGlossaryStatusMessage = self.localGlossaryRefreshProgress.displayText
+            let saveStartedAt = Date()
+            self.localGlossaryState.replaceSuggestions(suggestions)
             try? self.stateStore.saveLocalGlossaryState(self.localGlossaryState)
+            let saveMilliseconds = self.logLocalGlossaryRefreshStage(
+                "save",
+                startedAt: saveStartedAt,
+                detail: "suggestions=\(suggestions.count)"
+            )
+            let totalMilliseconds = self.logLocalGlossaryRefreshStage(
+                "complete",
+                startedAt: refreshStartedAt,
+                detail: "documents=\(documents.count) suggestions=\(suggestions.count) scan_ms=\(scanMilliseconds) suggest_ms=\(suggestionMilliseconds) save_ms=\(saveMilliseconds)"
+            )
+            let diagnostic = LocalGlossaryRefreshDiagnostic(
+                createdAt: Date(),
+                folderPath: selectedFolderURL.path,
+                documentCount: documents.count,
+                suggestionCount: suggestions.count,
+                scanMilliseconds: scanMilliseconds,
+                suggestionMilliseconds: suggestionMilliseconds,
+                saveMilliseconds: saveMilliseconds,
+                totalMilliseconds: totalMilliseconds,
+                stages: [
+                    .init(name: "scan", elapsedMilliseconds: scanMilliseconds, detail: "documents=\(documents.count)"),
+                    .init(name: "suggest", elapsedMilliseconds: suggestionMilliseconds, detail: "suggestions=\(suggestions.count)"),
+                    .init(name: "suggest-latin", elapsedMilliseconds: suggestionResult.diagnostics.latinMilliseconds, detail: "suggestions=\(suggestionResult.diagnostics.latinSuggestionCount)"),
+                    .init(name: "suggest-korean", elapsedMilliseconds: suggestionResult.diagnostics.koreanMilliseconds, detail: "suggestions=\(suggestionResult.diagnostics.koreanSuggestionCount) candidates=\(suggestionResult.diagnostics.korean.candidateCount) pairs=\(suggestionResult.diagnostics.korean.pairCount)"),
+                    .init(name: "suggest-korean-collect", elapsedMilliseconds: suggestionResult.diagnostics.korean.collectMilliseconds, detail: "occurrences=\(suggestionResult.diagnostics.korean.occurrenceCount)"),
+                    .init(name: "suggest-korean-summarize", elapsedMilliseconds: suggestionResult.diagnostics.korean.summarizeMilliseconds, detail: "candidates=\(suggestionResult.diagnostics.korean.candidateCount)"),
+                    .init(name: "suggest-korean-pair", elapsedMilliseconds: suggestionResult.diagnostics.korean.pairMilliseconds, detail: "supported=\(suggestionResult.diagnostics.korean.supportedCandidateCount) comparison=\(suggestionResult.diagnostics.korean.comparisonCandidateCount) pairs=\(suggestionResult.diagnostics.korean.pairCount)"),
+                    .init(name: "suggest-korean-cluster", elapsedMilliseconds: suggestionResult.diagnostics.korean.clusterMilliseconds, detail: "clusters=\(suggestionResult.diagnostics.korean.clusterCount)"),
+                    .init(name: "save", elapsedMilliseconds: saveMilliseconds, detail: "suggestions=\(suggestions.count)"),
+                    .init(name: "complete", elapsedMilliseconds: totalMilliseconds, detail: "documents=\(documents.count) suggestions=\(suggestions.count)")
+                ],
+                suggestions: suggestions.map { suggestion in
+                    LocalGlossaryRefreshDiagnostic.SuggestionSummary(
+                        id: suggestion.id,
+                        suggestedCanonical: suggestion.suggestedCanonical,
+                        aliases: suggestion.aliases,
+                        occurrenceCount: suggestion.occurrenceCount,
+                        meetingCount: suggestion.meetingCount,
+                        confidence: suggestion.confidence,
+                        score: suggestion.score
+                    )
+                },
+                engineDiagnostics: suggestionResult.diagnostics
+            )
+            do {
+                try self.stateStore.appendLocalGlossaryRefreshDiagnostic(diagnostic)
+                if let logURL = try? self.stateStore.localGlossaryRefreshDiagnosticsURL() {
+                    self.logLocalGlossaryRefreshStage("diagnostic-log", startedAt: refreshStartedAt, detail: logURL.path)
+                }
+            } catch {
+                self.logLocalGlossaryRefreshStage("diagnostic-log-failed", startedAt: refreshStartedAt, detail: error.localizedDescription)
+            }
             self.localGlossaryStatusMessage = suggestions.isEmpty
-                ? "회의 \(documents.count)개에서 새 용어 후보 없음"
-                : "회의 \(documents.count)개에서 용어 후보 \(suggestions.count)개"
+                ? "회의 \(documents.count)개에서 새 용어 후보 없음 · \(totalMilliseconds)ms"
+                : "회의 \(documents.count)개에서 용어 후보 \(suggestions.count)개 · \(totalMilliseconds)ms"
+            self.localGlossaryRefreshProgress = LocalGlossaryRefreshProgress(
+                stage: .completed,
+                completed: documents.count,
+                total: documents.count,
+                detail: "\(totalMilliseconds)ms"
+            )
             self.isGeneratingLocalGlossarySuggestions = false
         }
+    }
+
+    @discardableResult
+    private func logLocalGlossaryRefreshStage(_ stage: String, startedAt: Date, detail: String = "") -> Int {
+        let elapsedMilliseconds = max(0, Int(Date().timeIntervalSince(startedAt) * 1_000))
+        if detail.isEmpty {
+            localGlossaryLogger.info("local-glossary-refresh stage=\(stage, privacy: .public) elapsed_ms=\(elapsedMilliseconds, privacy: .public)")
+        } else {
+            localGlossaryLogger.info("local-glossary-refresh stage=\(stage, privacy: .public) elapsed_ms=\(elapsedMilliseconds, privacy: .public) detail=\(detail, privacy: .public)")
+        }
+        return elapsedMilliseconds
     }
 
     func acceptLocalGlossarySuggestion(

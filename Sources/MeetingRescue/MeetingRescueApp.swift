@@ -6,6 +6,7 @@ struct MeetingRescueApp: App {
     @StateObject private var sparkleUpdater = SparkleUpdater()
 
     init() {
+        _ = LocalGlossaryScoringRunner.runFromCommandLineIfRequested()
         _ = GoogleCalendarSmokeRunner.runFromCommandLineIfRequested()
         _ = CalendarQualityABRunner.runFromCommandLineIfRequested()
     }

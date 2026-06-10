@@ -1,0 +1,98 @@
+[
+  {
+    "name": "korean_user_android_summary_search_high",
+    "includeLatin": false,
+    "expectCandidate": true,
+    "expectedCanonical": "유저 안드로이드",
+    "expectedTier": "high",
+    "minimumImpact": 0.80,
+    "expectedReasons": [
+      "canonical-would-normalize-summary",
+      "improves-history-search",
+      "shared-context-overlap",
+      "domain-termhood"
+    ],
+    "documents": [
+      {
+        "id": "meeting-1",
+        "title": "Growth Metrics 1",
+        "sections": ["[01:17] Ethan: 마케팅 유자가 안드로이드 지표를 봅니다."]
+      },
+      {
+        "id": "meeting-2",
+        "title": "Growth Metrics 2",
+        "sections": ["[01:20] Ethan: 마케팅 유저가 안드로이드 전환을 봅니다."]
+      },
+      {
+        "id": "meeting-3",
+        "title": "Growth Metrics 3",
+        "sections": ["[01:30] Ethan: 오가닉 유자가 안드로이드 지표를 봅니다."]
+      },
+      {
+        "id": "meeting-4",
+        "title": "Growth Metrics 4",
+        "sections": ["[01:40] Ethan: 오가닉 유저가 안드로이드 전환을 봅니다."]
+      }
+    ]
+  },
+  {
+    "name": "latin_faq_smoke_medium",
+    "includeLatin": true,
+    "expectCandidate": true,
+    "expectedCanonical": "faq",
+    "expectedTier": "medium",
+    "minimumImpact": 0.40,
+    "expectedReasons": [
+      "canonical-would-normalize-summary",
+      "domain-termhood"
+    ],
+    "documents": [
+      {
+        "id": "support-1",
+        "title": "Support 1",
+        "sections": ["[00:10] Ethan: faq import flow를 봅니다."]
+      },
+      {
+        "id": "support-2",
+        "title": "Support 2",
+        "sections": ["[00:10] Ethan: faqq import flow를 봅니다."]
+      },
+      {
+        "id": "support-3",
+        "title": "Support 3",
+        "sections": ["[00:10] Ethan: faqu import flow를 봅니다."]
+      }
+    ]
+  },
+  {
+    "name": "korean_generic_pointer_reject",
+    "includeLatin": false,
+    "expectCandidate": false,
+    "expectedCanonical": "요런 부분들",
+    "expectedTier": "low",
+    "minimumImpact": 0,
+    "expectedReasons": ["strict-filter"],
+    "documents": [
+      {
+        "id": "architecture-1",
+        "title": "Architecture Sync 1",
+        "sections": ["[00:10] Peter: 요런 부분들을 계속 수정하고 있습니다."]
+      },
+      {
+        "id": "architecture-2",
+        "title": "Architecture Sync 2",
+        "sections": ["[00:10] Peter: 이런 부분들을 계속 수정하고 있습니다."]
+      },
+      {
+        "id": "architecture-3",
+        "title": "Architecture Sync 3",
+        "sections": ["[00:10] Peter: 요런 부분들을 꼼꼼하게 확인해야 합니다."]
+      },
+      {
+        "id": "architecture-4",
+        "title": "Architecture Sync 4",
+        "sections": ["[00:10] Peter: 이런 부분들을 꼼꼼하게 확인해야 합니다."]
+      }
+    ]
+  }
+]

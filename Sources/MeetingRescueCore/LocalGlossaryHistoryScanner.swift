@@ -16,13 +16,39 @@ public struct LocalGlossaryHistoryScannerConfiguration: Equatable, Sendable {
     }
 }
 
+public struct LocalGlossaryHistoryScannerProgress: Equatable, Sendable {
+    public enum Phase: Equatable, Sendable {
+        case listing
+        case reading
+    }
+
+    public var phase: Phase
+    public var completed: Int
+    public var total: Int
+    public var currentFile: String?
+
+    public init(
+        phase: Phase,
+        completed: Int,
+        total: Int,
+        currentFile: String? = nil
+    ) {
+        self.phase = phase
+        self.completed = max(0, completed)
+        self.total = max(0, total)
+        self.currentFile = currentFile
+    }
+}
+
 public enum LocalGlossaryHistoryScanner {
     public static func documents(
         in folderURL: URL,
         configuration: LocalGlossaryHistoryScannerConfiguration = .init(),
-        fileManager: FileManager = .default
+        fileManager: FileManager = .default,
+        progress: ((LocalGlossaryHistoryScannerProgress) -> Void)? = nil
     ) -> [LocalGlossarySourceDocument] {
-        LatestTranscriptSelector.textFiles(in: folderURL, fileManager: fileManager)
+        progress?(.init(phase: .listing, completed: 0, total: 0))
+        let candidates = LatestTranscriptSelector.textFiles(in: folderURL, fileManager: fileManager)
             .sorted { lhs, rhs in
                 if lhs.modificationDate == rhs.modificationDate {
                     return lhs.url.lastPathComponent.localizedStandardCompare(rhs.url.lastPathComponent) == .orderedDescending
@@ -30,8 +56,18 @@ public enum LocalGlossaryHistoryScanner {
                 return lhs.modificationDate > rhs.modificationDate
             }
             .prefix(configuration.maxDocuments)
-            .compactMap { candidate in
-                document(from: candidate, configuration: configuration)
+            .map { $0 }
+        let total = candidates.count
+        progress?(.init(phase: .reading, completed: 0, total: total))
+        return candidates.enumerated().compactMap { index, candidate in
+            let document = document(from: candidate, configuration: configuration)
+            progress?(.init(
+                phase: .reading,
+                completed: index + 1,
+                total: total,
+                currentFile: candidate.url.lastPathComponent
+            ))
+            return document
             }
     }
 

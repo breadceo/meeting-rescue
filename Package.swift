@@ -35,7 +35,10 @@ let package = Package(
         .testTarget(
             name: "MeetingRescueCoreTests",
             dependencies: ["MeetingRescueCore"],
-            path: "Tests/MeetingRescueCoreTests"
+            path: "Tests/MeetingRescueCoreTests",
+            resources: [
+                .copy("Fixtures")
+            ]
         ),
         .testTarget(
             name: "MeetingRescueTests",

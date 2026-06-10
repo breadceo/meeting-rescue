@@ -1118,6 +1118,8 @@ struct ContentView: View {
                 .font(.caption)
                 .foregroundStyle(Color.smoothMuted)
 
+            localGlossaryProgressView
+
             localGlossaryToggleRow
 
             if viewModel.localGlossaryState.suggestions.isEmpty {
@@ -1147,6 +1149,44 @@ struct ContentView: View {
             }
 
             acceptedLocalGlossaryTermsPanel()
+        }
+    }
+
+    @ViewBuilder
+    private var localGlossaryProgressView: some View {
+        if viewModel.localGlossaryRefreshProgress.isVisible {
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(spacing: 6) {
+                    Image(systemName: "text.magnifyingglass")
+                        .foregroundStyle(Color.smoothAccent)
+                    Text(viewModel.localGlossaryRefreshProgress.displayText)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(Color.smoothMuted)
+                        .lineLimit(1)
+                    Spacer(minLength: 0)
+                    if !viewModel.localGlossaryRefreshProgress.detail.isEmpty {
+                        Text(viewModel.localGlossaryRefreshProgress.detail)
+                            .font(.caption2)
+                            .foregroundStyle(Color.smoothMuted)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                }
+                if viewModel.localGlossaryRefreshProgress.total > 0 {
+                    ProgressView(value: viewModel.localGlossaryRefreshProgress.fraction)
+                        .progressViewStyle(.linear)
+                } else {
+                    ProgressView()
+                        .controlSize(.small)
+                }
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 7)
+            .background(Color.smoothSurface, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(Color.smoothLine, lineWidth: 1)
+            )
         }
     }
 
@@ -4575,6 +4615,9 @@ private struct LocalGlossarySuggestionReviewRow: View {
                         .foregroundStyle(Color.smoothInk)
                     Text("회의 \(suggestion.meetingCount)개 · 출현 \(suggestion.occurrenceCount)회 · 신뢰도 \(Int(suggestion.confidence * 100))%")
                         .font(.caption)
+                        .foregroundStyle(Color.smoothMuted)
+                    Text(suggestion.score.summaryText)
+                        .font(.caption2)
                         .foregroundStyle(Color.smoothMuted)
                 }
                 Spacer(minLength: 0)

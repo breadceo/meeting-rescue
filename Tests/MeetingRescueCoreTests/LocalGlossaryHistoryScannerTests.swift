@@ -63,4 +63,33 @@ struct LocalGlossaryHistoryScannerTests {
             document.sections.filter { $0.field == .rawTranscript }.count == 1
         })
     }
+
+    @Test("scanner emits listing and reading progress")
+    func scannerEmitsProgress() throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("meeting-rescue-glossary-scanner-progress-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        for index in 0..<2 {
+            let url = root.appendingPathComponent("meeting-\(index).txt")
+            try "[00:01] Ethan: 중개사 응답률 채팅 \(index)".write(to: url, atomically: true, encoding: .utf8)
+        }
+
+        var progressEvents: [LocalGlossaryHistoryScannerProgress] = []
+        let documents = LocalGlossaryHistoryScanner.documents(
+            in: root,
+            configuration: .init(maxDocuments: 2, maxBytesPerDocument: 16_384, rawTranscriptLineLimit: 10),
+            progress: { progressEvents.append($0) }
+        )
+
+        #expect(documents.count == 2)
+        #expect(progressEvents.first?.phase == .listing)
+        let hasReadingStart = progressEvents.contains {
+            $0.phase == .reading && $0.completed == 0 && $0.total == 2
+        }
+        let hasReadingComplete = progressEvents.contains {
+            $0.phase == .reading && $0.completed == 2 && $0.total == 2
+        }
+        #expect(hasReadingStart)
+        #expect(hasReadingComplete)
+    }
 }

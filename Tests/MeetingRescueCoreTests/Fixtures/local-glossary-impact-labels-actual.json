@@ -1,0 +1,159 @@
+[
+  {
+    "name": "actual_korean_user_android_high",
+    "source": ".build/local-glossary-score-report.json",
+    "includeLatin": false,
+    "expectCandidate": true,
+    "expectedCanonical": "유저 안드로이드",
+    "expectedTier": "high",
+    "minimumImpact": 0.80,
+    "expectedReasons": [
+      "canonical-would-normalize-summary",
+      "improves-history-search",
+      "shared-context-overlap",
+      "domain-termhood"
+    ],
+    "documents": [
+      {
+        "id": "actual-zigbang-r17-user-android",
+        "title": "Zigbang(2F)_R17",
+        "sections": [
+          "[01:40] Ethan Kim: 마케팅 유자가 안드로이드, 22.9%.",
+          "[01:23] Ethan Kim: 오가닉 유자가 안드로이드 20.2%, ios 19.9%.",
+          "[01:17] Ethan Kim: 어 신규 활성 유자의 DO 를 보면 오가닉 유저가 안드로이드 20.6%, ios 20.5% 마케팅 유자가 안드로이드 24.8%, ios 22.9% 나왔고."
+        ]
+      },
+      {
+        "id": "actual-zigbang-l17-user-android",
+        "title": "Zigbang(2F)_L17",
+        "sections": [
+          "[01:27] Ethan Kim: 엔알유의 디원을 보면 오가닉 유저가 안드로이드 20.7%, 아이오에스 18.9%, 마케팅 유자가 안드로이드 23.8%, 아이오에스 23.9% 나왔고.",
+          "[01:24] Ethan Kim: 마케팅 유자가 안드로이드에 27.2%, 아이오에스 23.4% 나왔고."
+        ]
+      },
+      {
+        "id": "actual-20260518-l17-user-android",
+        "title": "20260518_094533_Zigbang(2F)_L17",
+        "sections": [
+          "[01:20] Ethan Kim: 엔알유의 디원을 보면 오가닉 유자가 안그로이드 17.5%, 아이오에스 19.3%, 마케팅 유자가 안드로이드 25.9%."
+        ]
+      },
+      {
+        "id": "actual-20260327-r2-user-android",
+        "title": "20260327_094530_Zigbang(2F)_R2",
+        "sections": [
+          "[01:13] Ethan Kim: 엔알유의 디원을 보면 오가닉 유저가 안드로이드 20.3%.",
+          "[01:19] Ethan Kim: 아이유에스 21.8% 마케팅 유저가 안드로이드 23.4%."
+        ]
+      },
+      {
+        "id": "actual-20260522-l17-user-android",
+        "title": "20260522_094801_Zigbang(2F)_L17",
+        "sections": [
+          "[01:34] Ethan Kim: 엔알유의 디원 같은 경우 오가닉 유자가 안드로이드 20.5%, ios 18.3%, 마케팅 유자가 안드로이드 25.2%, ios 22.1% 나왔고 활성 유자 수는?"
+        ]
+      },
+      {
+        "id": "actual-20260204-r18-user-android",
+        "title": "20260204_094536_Zigbang(2F)_R18",
+        "sections": [
+          "[00:52] Ethan Kim: 엔알유의 디원 같은 경우 오가닉 유저가 안드로이드 23.7%, 아이오에스 24.3%.",
+          "[00:58] Ethan Kim: 마케팅 유저가 안드로이드 24.8%, ios 24.2%."
+        ]
+      }
+    ]
+  },
+  {
+    "name": "actual_korean_new_activation_high",
+    "source": ".build/local-glossary-score-report.json",
+    "includeLatin": false,
+    "expectCandidate": true,
+    "expectedCanonical": "신규 활성",
+    "expectedTier": "high",
+    "minimumImpact": 0.80,
+    "expectedReasons": [
+      "canonical-would-normalize-summary",
+      "improves-history-search",
+      "shared-context-overlap",
+      "domain-termhood"
+    ],
+    "documents": [
+      {
+        "id": "actual-zigbang-r17-new-activation",
+        "title": "Zigbang(2F)_R17",
+        "sections": [
+          "[01:01] Ethan Kim: 신규 활성 유자가 8800 정도 나왔습니다.",
+          "[01:17] Ethan Kim: 어 신규 활성 유자의 DO 를 보면 오가닉 유저가 안드로이드 20.6%, ios 20.5% 마케팅 유자가 안드로이드 24.8%, ios 22.9% 나왔고."
+        ]
+      },
+      {
+        "id": "actual-zigbang-l17-new-activation",
+        "title": "Zigbang(2F)_L17",
+        "sections": [
+          "[00:26] Ethan Kim: 신규활성 유전은 전 주 금요일 대비 7.1% 증가하고 사 주전 대비 16.8% 증가했습니다.",
+          "[00:37] Ethan Kim: 워너비 신규 활성 유자는 전 주 동료일 대비 14% 증가하고 사 주전 대비 15.8% 증가했습니다.",
+          "[00:33] Ethan Kim: 지표 요약에서 어 워너빌 신규활성 유저는 전 주 동료의 대비 13% 증가하고 사 주 전 대비 7.8% 증가했으며."
+        ]
+      },
+      {
+        "id": "actual-20260303-r2-new-activation",
+        "title": "20260303_094520_Zigbang(2F)_R2",
+        "sections": [
+          "[00:32] Ethan Kim: 신규활성제는 전 주 동효율 대비 어 9.3% 감소하고 사 주 전 대비로는 7.9% 감소했습니다."
+        ]
+      },
+      {
+        "id": "actual-20260602-r17-new-activation",
+        "title": "20260602_094554_Zigbang(2F)_R17",
+        "sections": [
+          "[01:10] Ethan Kim: 9만 정도 나왔고, 신규활성제가 9500 정도 나왔습니다.",
+          "[01:14] Ethan Kim: 신규활성유자에."
+        ]
+      },
+      {
+        "id": "actual-20260420-r17-new-activation",
+        "title": "20260420_094652_Zigbang(2F)_R17",
+        "sections": [
+          "[00:24] Ethan Kim: 지표 요약에서는 신규 활성 유전 전 주 토요일 대비 9.5% 증가하고 사 주간 대비 7.7% 감소했습니다."
+        ]
+      },
+      {
+        "id": "actual-20260528-l17-new-activation",
+        "title": "20260528_094725_Zigbang(2F)_L17",
+        "sections": [
+          "[00:37] Ethan Kim: 워너비 신규 활성 유자는 전 주 동료일 대비 14% 증가하고 사 주전 대비 15.8% 증가했습니다."
+        ]
+      }
+    ]
+  },
+  {
+    "name": "actual_latin_faq_smoke_medium",
+    "source": ".build/local-glossary-score-latin-report.json",
+    "includeLatin": true,
+    "expectCandidate": true,
+    "expectedCanonical": "faq",
+    "expectedTier": "medium",
+    "minimumImpact": 0.40,
+    "expectedReasons": [
+      "canonical-would-normalize-summary",
+      "domain-termhood"
+    ],
+    "documents": [
+      {
+        "id": "actual-zigbang-r3-faq",
+        "title": "Zigbang(2F)_R3",
+        "sections": [
+          "[00:23] Claire Kang: 이게 릴리랑 제때가 작업해 주셔야 되는 부분인데 그 원래는 엠넷 직접 구현을 하려고 했다가 사업부 그 FAQ 양을 보고는?",
+          "[00:11] Claire Kang: 그 임대인 임차인 faqq 구현 방식이 변경됐고요."
+        ]
+      },
+      {
+        "id": "actual-zigbang-faq",
+        "title": "Zigbang(2F)",
+        "sections": [
+          "[01:56] Claire Kang: 그래서 소개 페이지에는 이제 웰컴 메시지가 간단하게 들어가고 온 보 등에 필요한 필수 faqu 5개 정도가."
+        ]
+      }
+    ]
+  }
+]
