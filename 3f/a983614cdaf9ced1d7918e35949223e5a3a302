@@ -1,0 +1,13 @@
+docs/superpowers/plans/2026-06-10-local-glossary-hardening.md
+  h_d82ccb34241a0d 1-1181
+---
+{
+  "schema_version": "zax-attestation/1.1.0",
+  "base_commit_sha": "3fa983614cdaf9ced1d7918e35949223e5a3a302",
+  "prompts": {},
+  "humans": {
+    "h_d82ccb34241a0d": {
+      "author": "ethan@zigbang.com"
+    }
+  }
+}
