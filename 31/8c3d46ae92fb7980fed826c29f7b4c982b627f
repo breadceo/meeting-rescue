@@ -1,0 +1,51 @@
+Package.swift
+  h_d82ccb34241a0d 38-41
+Sources/MeetingRescue/AppViewModel.swift
+  h_d82ccb34241a0d 4,8-9,292-367,387-403,761,1355,1357-1363,1365-1366,1368-1383,1387-1390,1393-1413,1419-1424,1426,1430-1438,1440-1491,1493-1500,1505-1515
+Sources/MeetingRescue/ContentView.swift
+  h_d82ccb34241a0d 1121-1122,1155-1192,4619-4621
+Sources/MeetingRescue/LocalGlossaryScoringRunner.swift
+  h_d82ccb34241a0d 1-279
+Sources/MeetingRescue/MeetingRescueApp.swift
+  h_d82ccb34241a0d 9
+Sources/MeetingRescueCore/ApplicationStateStore.swift
+  h_d82ccb34241a0d 128-151,156-160,180-185
+Sources/MeetingRescueCore/LocalGlossaryHistoryScanner.swift
+  h_d82ccb34241a0d 19-42,47-48,50-51,59-70
+Sources/MeetingRescueCore/LocalGlossaryKoreanSuggestionEngine.swift
+  h_d82ccb34241a0d 3-45,56-68,70,72-73,75-82,84-85,87-89,100-117,213-214,301-303,306-312,335-373,375-398,402-469,547-549,553-564,716-719,766,830-843
+Sources/MeetingRescueCore/LocalGlossaryModels.swift
+  h_d82ccb34241a0d 88-244,253,264,274-399,401-410,512-525
+Sources/MeetingRescueCore/LocalGlossarySuggestionEngine.swift
+  h_d82ccb34241a0d 15-54,57,59,66,70-118,126,130,132,135,140,145-152,159-168,186-187,198,232-235,260-294,297-356,391-482,487-537,574-577,588-591,599-608
+Tests/MeetingRescueCoreTests/Fixtures/local-glossary-impact-labels-actual.json
+  h_d82ccb34241a0d 1-159
+Tests/MeetingRescueCoreTests/Fixtures/local-glossary-impact-labels.json
+  h_d82ccb34241a0d 1-98
+Tests/MeetingRescueCoreTests/LocalGlossaryHistoryScannerTests.swift
+  h_d82ccb34241a0d 66-94
+Tests/MeetingRescueCoreTests/LocalGlossaryModelsTests.swift
+  h_d82ccb34241a0d 89-222
+Tests/MeetingRescueCoreTests/LocalGlossarySuggestionEngineTests.swift
+  h_d82ccb34241a0d 6-7,31-319,346-363,445-480,568-584
+Tests/MeetingRescueTests/AppViewModelTestRunContextTests.swift
+  h_d82ccb34241a0d 152,161,163-168
+Tests/MeetingRescueTests/ContentViewContextWiringTests.swift
+  h_d82ccb34241a0d 66-67
+Tests/MeetingRescueTests/LocalGlossaryScoringRunnerTests.swift
+  h_d82ccb34241a0d 1-43
+docs/superpowers/plans/2026-06-10-local-glossary-latin-labelset.md
+  h_d82ccb34241a0d 1-109
+docs/superpowers/plans/2026-06-10-local-glossary-review-queue.md
+  h_d82ccb34241a0d 1-943
+---
+{
+  "schema_version": "zax-attestation/1.1.0",
+  "base_commit_sha": "318c3d46ae92fb7980fed826c29f7b4c982b627f",
+  "prompts": {},
+  "humans": {
+    "h_d82ccb34241a0d": {
+      "author": "ethan@zigbang.com"
+    }
+  }
+}
