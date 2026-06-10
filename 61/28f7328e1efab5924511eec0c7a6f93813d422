@@ -1,0 +1,13 @@
+docs/local-glossary-korean-calibration.md
+  h_d82ccb34241a0d 1-97
+---
+{
+  "schema_version": "zax-attestation/1.1.0",
+  "base_commit_sha": "6128f7328e1efab5924511eec0c7a6f93813d422",
+  "prompts": {},
+  "humans": {
+    "h_d82ccb34241a0d": {
+      "author": "ethan@zigbang.com"
+    }
+  }
+}
