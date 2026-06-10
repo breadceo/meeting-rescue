@@ -77,6 +77,21 @@ struct ContentViewContextWiringTests {
         #expect(source.contains("intelligenceMode = .glossary"))
     }
 
+    @Test("wide intelligence header uses two-line title without compact rail title")
+    func wideIntelligenceHeaderUsesTwoLineTitleWithoutCompactRailTitle() throws {
+        let sourceURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent("Sources/MeetingRescue/ContentView.swift")
+        let source = try String(contentsOf: sourceURL, encoding: .utf8)
+        let intelligenceContent = try #require(source.slice(from: "private func intelligenceContent", to: "private var visibleIntelligenceMode"))
+        let paneTitle = try #require(source.slice(from: "private func paneTitle", to: "private var overlayPaneToggleBar"))
+
+        #expect(intelligenceContent.contains(#"paneTitle("Meeting\nIntelligence""#))
+        #expect(paneTitle.contains("Label {"))
+        #expect(paneTitle.contains(".lineLimit(2)"))
+        #expect(paneTitle.contains(".fixedSize(horizontal: true, vertical: true)"))
+        #expect(!source.contains("compactTitle"))
+    }
+
     @Test("settings glossary section no longer hosts suggestion review")
     func settingsGlossarySectionNoLongerHostsSuggestionReview() throws {
         let sourceURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)

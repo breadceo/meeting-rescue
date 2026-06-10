@@ -924,7 +924,7 @@ struct ContentView: View {
                 compactIntelligenceHeader(availableWidth: availableWidth)
             } else {
                 HStack(spacing: 12) {
-                    paneTitle("Meeting Intelligence", systemImage: "sparkles", compact: true, collapsePane: .intelligence)
+                    paneTitle("Meeting\nIntelligence", systemImage: "sparkles", compact: true, collapsePane: .intelligence)
                     Spacer()
                     intelligenceModeSegmentedControl()
                         .frame(width: 360)
@@ -2674,7 +2674,13 @@ struct ContentView: View {
         collapsePane: AdaptivePane? = nil
     ) -> some View {
         HStack {
-            Label(text, systemImage: systemImage)
+            Label {
+                Text(text)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: true, vertical: true)
+            } icon: {
+                Image(systemName: systemImage)
+            }
                 .font(.headline)
                 .foregroundStyle(Color.smoothInk)
             Spacer()
