@@ -975,7 +975,7 @@ struct ContentView: View {
     private func regularIntelligenceHeader() -> some View {
         ViewThatFits(in: .horizontal) {
             HStack(spacing: 12) {
-                paneTitle("Meeting\nIntelligence", systemImage: "sparkles", compact: true, collapsePane: .intelligence)
+                paneTitle("Meeting Intelligence", systemImage: "sparkles", compact: true, collapsePane: .intelligence)
                 Spacer(minLength: 8)
                 intelligenceModeSegmentedControl()
                     .frame(width: 360)
@@ -983,7 +983,7 @@ struct ContentView: View {
             .padding(.trailing, 12)
 
             VStack(alignment: .leading, spacing: 10) {
-                paneTitle("Meeting\nIntelligence", systemImage: "sparkles", compact: true, collapsePane: .intelligence)
+                paneTitle("Meeting Intelligence", systemImage: "sparkles", compact: true, collapsePane: .intelligence)
                     .padding(.trailing, 12)
 
                 ViewThatFits(in: .horizontal) {

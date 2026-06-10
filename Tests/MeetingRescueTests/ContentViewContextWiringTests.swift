@@ -77,8 +77,8 @@ struct ContentViewContextWiringTests {
         #expect(source.contains("intelligenceMode = .glossary"))
     }
 
-    @Test("wide intelligence header uses two-line title without compact rail title")
-    func wideIntelligenceHeaderUsesTwoLineTitleWithoutCompactRailTitle() throws {
+    @Test("wide intelligence header stacks tabs without wrapping title")
+    func wideIntelligenceHeaderStacksTabsWithoutWrappingTitle() throws {
         let sourceURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
             .appendingPathComponent("Sources/MeetingRescue/ContentView.swift")
         let source = try String(contentsOf: sourceURL, encoding: .utf8)
@@ -88,12 +88,10 @@ struct ContentViewContextWiringTests {
 
         #expect(intelligenceContent.contains("regularIntelligenceHeader()"))
         #expect(regularHeader.contains("ViewThatFits(in: .horizontal)"))
-        #expect(
-            intelligenceContent.contains("paneTitle(\"Meeting\\nIntelligence\"")
-                || regularHeader.contains("paneTitle(\"Meeting\\nIntelligence\"")
-        )
+        #expect(regularHeader.contains("paneTitle(\"Meeting Intelligence\""))
         #expect(regularHeader.contains("VStack(alignment: .leading, spacing: 10)"))
         #expect(regularHeader.contains("intelligenceModeMenu()"))
+        #expect(!source.contains("Meeting\\nIntelligence"))
         #expect(paneTitle.contains("Label {"))
         #expect(paneTitle.contains(".lineLimit(2)"))
         #expect(paneTitle.contains(".fixedSize(horizontal: true, vertical: true)"))
