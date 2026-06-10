@@ -67,6 +67,19 @@ struct ContentViewContextWiringTests {
         #expect(source.contains("viewModel.localGlossaryRefreshProgress"))
     }
 
+    @Test("glossary tab exposes a review queue for low-confidence candidates")
+    func glossaryTabExposesReviewQueue() throws {
+        let sourceURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent("Sources/MeetingRescue/ContentView.swift")
+        let source = try String(contentsOf: sourceURL, encoding: .utf8)
+
+        #expect(source.contains("검토 필요 후보"))
+        #expect(source.contains("LocalGlossaryReviewCandidateRow"))
+        #expect(source.contains("기존 용어에 추가"))
+        #expect(source.contains("새 용어로 추가"))
+        #expect(source.contains("서로 다른 단어"))
+    }
+
     @Test("raw transcript shows compact glossary CTA")
     func rawTranscriptShowsGlossaryCTA() throws {
         let sourceURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)

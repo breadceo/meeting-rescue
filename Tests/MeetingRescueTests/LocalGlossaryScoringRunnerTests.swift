@@ -24,6 +24,9 @@ struct LocalGlossaryScoringRunnerTests {
         #expect(runnerSource.contains("impactLabel"))
         #expect(runnerSource.contains("rejectionSummary"))
         #expect(runnerSource.contains("timing"))
+        #expect(runnerSource.contains("reviewCandidateCount"))
+        #expect(runnerSource.contains("reviewCandidates"))
+        #expect(runnerSource.contains("maxReviewCandidates"))
     }
 
     @Test("Latin scoring smoke is reported separately from the default app quality gate")

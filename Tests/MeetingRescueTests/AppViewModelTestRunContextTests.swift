@@ -166,7 +166,22 @@ struct AppViewModelTestRunContextTests {
         #expect(refresh.contains("appendLocalGlossaryRefreshDiagnostic"))
         #expect(refresh.contains("LocalGlossaryRefreshDiagnostic"))
         #expect(refresh.contains("progress: { progress in"))
+        #expect(refresh.contains("suggestionsAndReviewCandidatesWithDiagnostics"))
+        #expect(refresh.contains("replaceSuggestions(strict: suggestions, review: reviewCandidates)"))
+        #expect(refresh.contains("reviewCandidates=\\(reviewCandidates.count)"))
         #expect(!refresh.contains("meetingHistoryItems.map"))
+    }
+
+    @Test("AppViewModel exposes review candidate actions")
+    func appViewModelExposesReviewCandidateActions() throws {
+        let sourceURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent("Sources/MeetingRescue/AppViewModel.swift")
+        let source = try String(contentsOf: sourceURL, encoding: .utf8)
+
+        #expect(source.contains("func acceptLocalGlossaryReviewCandidateAsNewTerm"))
+        #expect(source.contains("func addLocalGlossaryReviewCandidate"))
+        #expect(source.contains("func markLocalGlossaryReviewCandidateAsNotSame"))
+        #expect(source.contains("func dismissLocalGlossaryReviewCandidate"))
     }
 }
 

@@ -267,6 +267,124 @@ struct LocalGlossarySuggestionEngineTests {
         try assertImpactLabelFixture("local-glossary-impact-labels-actual")
     }
 
+    @Test("suggestion engine exposes exploratory review candidates separately from strict suggestions")
+    func suggestionEngineExposesReviewCandidates() throws {
+        let documents = [
+            LocalGlossarySourceDocument(
+                id: "m1",
+                title: "Growth 1",
+                sections: [.init(field: .rawTranscript, text: "[00:10] Ethan: 신규 활성 유저 지표를 봅니다.", weight: 24)]
+            ),
+            LocalGlossarySourceDocument(
+                id: "m2",
+                title: "Growth 2",
+                sections: [.init(field: .rawTranscript, text: "[00:10] Ethan: 신규활성 유전 지표를 봅니다.", weight: 24)]
+            ),
+            LocalGlossarySourceDocument(
+                id: "m3",
+                title: "Growth 3",
+                sections: [.init(field: .rawTranscript, text: "[00:10] Ethan: 신규활성제 전환을 봅니다.", weight: 24)]
+            ),
+            LocalGlossarySourceDocument(
+                id: "m4",
+                title: "Growth 4",
+                sections: [.init(field: .rawTranscript, text: "[00:10] Ethan: 신규 활성 유저 전환을 봅니다.", weight: 24)]
+            )
+        ]
+
+        let result = LocalGlossarySuggestionEngine.suggestionsAndReviewCandidatesWithDiagnostics(
+            from: documents,
+            existingState: LocalGlossaryState(),
+            maxSuggestions: 8,
+            maxReviewCandidates: 20
+        )
+
+        #expect(result.suggestions.allSatisfy { $0.lane == .strict })
+        #expect(result.reviewCandidates.contains { candidate in
+            candidate.lane == .review
+                && candidate.aliases.contains("신규활성제")
+                && candidate.aliases.contains("신규 활성 유저")
+        })
+    }
+
+    @Test("rejected review candidates are excluded from future review results")
+    func rejectedReviewCandidatesAreExcluded() throws {
+        let documents = [
+            LocalGlossarySourceDocument(
+                id: "m1",
+                title: "Metrics 1",
+                sections: [.init(field: .rawTranscript, text: "[00:10] Ethan: 대비 포인트를 봅니다.", weight: 24)]
+            ),
+            LocalGlossarySourceDocument(
+                id: "m2",
+                title: "Metrics 2",
+                sections: [.init(field: .rawTranscript, text: "[00:10] Ethan: 대비로 포인트를 봅니다.", weight: 24)]
+            ),
+            LocalGlossarySourceDocument(
+                id: "m3",
+                title: "Metrics 3",
+                sections: [.init(field: .rawTranscript, text: "[00:10] Ethan: 대비 포인트를 다시 봅니다.", weight: 24)]
+            )
+        ]
+        let first = LocalGlossarySuggestionEngine.suggestionsAndReviewCandidatesWithDiagnostics(
+            from: documents,
+            existingState: LocalGlossaryState(),
+            maxSuggestions: 8,
+            maxReviewCandidates: 20
+        )
+        let rejectedID = try #require(first.reviewCandidates.first?.id)
+        let state = LocalGlossaryState(rejectedSuggestionIDs: [rejectedID])
+
+        let second = LocalGlossarySuggestionEngine.suggestionsAndReviewCandidatesWithDiagnostics(
+            from: documents,
+            existingState: state,
+            maxSuggestions: 8,
+            maxReviewCandidates: 20
+        )
+
+        #expect(!second.reviewCandidates.contains { $0.id == rejectedID })
+    }
+
+    @Test("Korean review lane filters generic conversational variants")
+    func koreanReviewLaneFiltersGenericConversationalVariants() {
+        let documents = [
+            LocalGlossarySourceDocument(
+                id: "m1",
+                title: "Daily 1",
+                sections: [.init(field: .rawTranscript, text: "[00:10] Ethan: 데이터 확인을 하고 있는 상태입니다.", weight: 24)]
+            ),
+            LocalGlossarySourceDocument(
+                id: "m2",
+                title: "Daily 2",
+                sections: [.init(field: .rawTranscript, text: "[00:10] Ethan: 데이터 확인을 하고 있는데 공유합니다.", weight: 24)]
+            ),
+            LocalGlossarySourceDocument(
+                id: "m3",
+                title: "Daily 3",
+                sections: [.init(field: .rawTranscript, text: "[00:10] Ethan: 데이터 정리를 하고 있는 상황입니다.", weight: 24)]
+            ),
+            LocalGlossarySourceDocument(
+                id: "m4",
+                title: "Daily 4",
+                sections: [.init(field: .rawTranscript, text: "[00:10] Ethan: 데이터 정리를 하고 있는데 공유합니다.", weight: 24)]
+            )
+        ]
+
+        let result = LocalGlossarySuggestionEngine.suggestionsAndReviewCandidatesWithDiagnostics(
+            from: documents,
+            existingState: LocalGlossaryState(),
+            maxSuggestions: 8,
+            maxReviewCandidates: 20
+        )
+
+        #expect(!result.reviewCandidates.contains { candidate in
+            candidate.aliases.contains("하고 있는")
+                || candidate.aliases.contains("하고 있는데")
+                || candidate.aliases.contains("요렇게")
+                || candidate.aliases.contains("이렇게")
+        })
+    }
+
     private func assertImpactLabelFixture(_ resourceName: String) throws {
         let cases = try impactLabelFixtureCases(resourceName)
         for testCase in cases {

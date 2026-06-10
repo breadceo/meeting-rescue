@@ -33,6 +33,11 @@ public enum LocalGlossaryTermSource: String, Codable, Sendable {
     case suggested
 }
 
+public enum LocalGlossaryCandidateLane: String, Codable, Sendable {
+    case strict
+    case review
+}
+
 public struct LocalGlossaryTerm: Codable, Equatable, Identifiable, Sendable {
     public var id: String
     public var canonical: String
@@ -251,6 +256,8 @@ public struct LocalGlossarySuggestion: Codable, Equatable, Identifiable, Sendabl
     public var meetingCount: Int
     public var confidence: Double
     public var score: LocalGlossarySuggestionScore
+    public var lane: LocalGlossaryCandidateLane
+    public var reviewReason: String
     public var createdAt: Date
 
     public init(
@@ -262,6 +269,8 @@ public struct LocalGlossarySuggestion: Codable, Equatable, Identifiable, Sendabl
         meetingCount: Int,
         confidence: Double,
         score: LocalGlossarySuggestionScore = .empty,
+        lane: LocalGlossaryCandidateLane = .strict,
+        reviewReason: String = "",
         createdAt: Date = Date()
     ) {
         self.id = id
@@ -274,6 +283,8 @@ public struct LocalGlossarySuggestion: Codable, Equatable, Identifiable, Sendabl
         self.score = score.finalScore == 0
             ? LocalGlossarySuggestionScore(finalScore: min(1, max(0, confidence)))
             : score
+        self.lane = lane
+        self.reviewReason = reviewReason.trimmedGlossaryText
         self.createdAt = createdAt
     }
 
@@ -286,6 +297,8 @@ public struct LocalGlossarySuggestion: Codable, Equatable, Identifiable, Sendabl
         case meetingCount
         case confidence
         case score
+        case lane
+        case reviewReason
         case createdAt
     }
 
@@ -300,6 +313,8 @@ public struct LocalGlossarySuggestion: Codable, Equatable, Identifiable, Sendabl
         confidence = try container.decode(Double.self, forKey: .confidence)
         score = try container.decodeIfPresent(LocalGlossarySuggestionScore.self, forKey: .score)
             ?? LocalGlossarySuggestionScore(finalScore: confidence)
+        lane = try container.decodeIfPresent(LocalGlossaryCandidateLane.self, forKey: .lane) ?? .strict
+        reviewReason = try container.decodeIfPresent(String.self, forKey: .reviewReason) ?? ""
         createdAt = try container.decode(Date.self, forKey: .createdAt)
     }
 }
@@ -439,19 +454,44 @@ public struct LocalGlossaryMatch: Codable, Equatable, Sendable {
 public struct LocalGlossaryState: Codable, Equatable, Sendable {
     public var terms: [LocalGlossaryTerm]
     public var suggestions: [LocalGlossarySuggestion]
+    public var reviewCandidates: [LocalGlossarySuggestion]
     public var dismissedSuggestionIDs: Set<String>
+    public var rejectedSuggestionIDs: Set<String>
     public var updatedAt: Date
 
     public init(
         terms: [LocalGlossaryTerm] = [],
         suggestions: [LocalGlossarySuggestion] = [],
+        reviewCandidates: [LocalGlossarySuggestion] = [],
         dismissedSuggestionIDs: Set<String> = [],
+        rejectedSuggestionIDs: Set<String> = [],
         updatedAt: Date = Date()
     ) {
         self.terms = terms
         self.suggestions = suggestions
+        self.reviewCandidates = reviewCandidates
         self.dismissedSuggestionIDs = dismissedSuggestionIDs
+        self.rejectedSuggestionIDs = rejectedSuggestionIDs
         self.updatedAt = updatedAt
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case terms
+        case suggestions
+        case reviewCandidates
+        case dismissedSuggestionIDs
+        case rejectedSuggestionIDs
+        case updatedAt
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        terms = try container.decodeIfPresent([LocalGlossaryTerm].self, forKey: .terms) ?? []
+        suggestions = try container.decodeIfPresent([LocalGlossarySuggestion].self, forKey: .suggestions) ?? []
+        reviewCandidates = try container.decodeIfPresent([LocalGlossarySuggestion].self, forKey: .reviewCandidates) ?? []
+        dismissedSuggestionIDs = try container.decodeIfPresent(Set<String>.self, forKey: .dismissedSuggestionIDs) ?? []
+        rejectedSuggestionIDs = try container.decodeIfPresent(Set<String>.self, forKey: .rejectedSuggestionIDs) ?? []
+        updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt) ?? Date()
     }
 
     public var enabledTerms: [LocalGlossaryTerm] {
@@ -478,6 +518,7 @@ public struct LocalGlossaryState: Codable, Equatable, Sendable {
         )
         suggestions.removeAll { $0.id == id }
         dismissedSuggestionIDs.remove(id)
+        rejectedSuggestionIDs.remove(id)
         terms.removeAll { existing in
             MeetingHistorySearch.compactNormalize(existing.canonical) == MeetingHistorySearch.compactNormalize(term.canonical)
         }
@@ -487,45 +528,134 @@ public struct LocalGlossaryState: Codable, Equatable, Sendable {
 
     public mutating func dismissSuggestion(id: String) {
         suggestions.removeAll { $0.id == id }
+        reviewCandidates.removeAll { $0.id == id }
         dismissedSuggestionIDs.insert(id)
         updatedAt = Date()
     }
 
     public mutating func upsertSuggestion(_ suggestion: LocalGlossarySuggestion) {
-        guard !dismissedSuggestionIDs.contains(suggestion.id) else {
+        guard !dismissedSuggestionIDs.contains(suggestion.id),
+              !rejectedSuggestionIDs.contains(suggestion.id) else {
             return
         }
-        if let index = suggestions.firstIndex(where: { $0.id == suggestion.id }) {
-            suggestions[index] = suggestion
-        } else {
-            suggestions.append(suggestion)
-        }
-        suggestions.sort {
-            if $0.confidence == $1.confidence {
-                return $0.occurrenceCount > $1.occurrenceCount
+        var suggestion = suggestion
+        if suggestion.lane == .review {
+            if let index = reviewCandidates.firstIndex(where: { $0.id == suggestion.id }) {
+                reviewCandidates[index] = suggestion
+            } else {
+                reviewCandidates.append(suggestion)
             }
-            return $0.confidence > $1.confidence
+            reviewCandidates = reviewCandidates.sortedByGlossaryConfidence
+        } else {
+            suggestion.lane = .strict
+            if let index = suggestions.firstIndex(where: { $0.id == suggestion.id }) {
+                suggestions[index] = suggestion
+            } else {
+                suggestions.append(suggestion)
+            }
+            suggestions = suggestions.sortedByGlossaryConfidence
         }
         updatedAt = Date()
     }
 
     public mutating func replaceSuggestions(_ nextSuggestions: [LocalGlossarySuggestion]) {
-        suggestions = []
-        for suggestion in nextSuggestions where !dismissedSuggestionIDs.contains(suggestion.id) {
-            suggestions.append(suggestion)
-        }
-        suggestions.sort {
-            if $0.confidence == $1.confidence {
-                return $0.occurrenceCount > $1.occurrenceCount
+        replaceSuggestions(strict: nextSuggestions, review: reviewCandidates)
+    }
+
+    public mutating func replaceSuggestions(
+        strict strictSuggestions: [LocalGlossarySuggestion],
+        review reviewSuggestions: [LocalGlossarySuggestion]
+    ) {
+        suggestions = strictSuggestions
+            .filter { !dismissedSuggestionIDs.contains($0.id) && !rejectedSuggestionIDs.contains($0.id) }
+            .map { suggestion in
+                var value = suggestion
+                value.lane = .strict
+                return value
             }
-            return $0.confidence > $1.confidence
+            .sortedByGlossaryConfidence
+        reviewCandidates = reviewSuggestions
+            .filter { !dismissedSuggestionIDs.contains($0.id) && !rejectedSuggestionIDs.contains($0.id) }
+            .map { suggestion in
+                var value = suggestion
+                value.lane = .review
+                return value
+            }
+            .sortedByGlossaryConfidence
+        updatedAt = Date()
+    }
+
+    public mutating func addReviewCandidate(
+        id: String,
+        asAliasesToTermID termID: String
+    ) {
+        guard let candidate = reviewCandidates.first(where: { $0.id == id }),
+              let termIndex = terms.firstIndex(where: { $0.id == termID }) else {
+            return
         }
+        let aliases = (terms[termIndex].aliases + candidate.aliases)
+            .normalizedGlossaryValues(excluding: [terms[termIndex].canonical])
+        terms[termIndex].aliases = aliases
+        terms[termIndex].updatedAt = Date()
+        reviewCandidates.removeAll { $0.id == id }
+        dismissedSuggestionIDs.remove(id)
+        rejectedSuggestionIDs.remove(id)
+        updatedAt = Date()
+    }
+
+    public mutating func acceptReviewCandidateAsNewTerm(
+        id: String,
+        canonical: String,
+        category: LocalGlossaryCategory
+    ) {
+        guard let candidate = reviewCandidates.first(where: { $0.id == id }) else {
+            return
+        }
+        let now = Date()
+        terms.removeAll { existing in
+            MeetingHistorySearch.compactNormalize(existing.canonical) == MeetingHistorySearch.compactNormalize(canonical)
+        }
+        terms.append(LocalGlossaryTerm(
+            canonical: canonical,
+            aliases: candidate.aliases,
+            category: category,
+            note: "review queue에서 추가됨",
+            source: .suggested,
+            createdAt: now,
+            updatedAt: now
+        ))
+        reviewCandidates.removeAll { $0.id == id }
+        dismissedSuggestionIDs.remove(id)
+        rejectedSuggestionIDs.remove(id)
+        updatedAt = now
+    }
+
+    public mutating func dismissReviewCandidate(id: String) {
+        reviewCandidates.removeAll { $0.id == id }
+        dismissedSuggestionIDs.insert(id)
+        updatedAt = Date()
+    }
+
+    public mutating func markReviewCandidateAsNotSame(id: String) {
+        reviewCandidates.removeAll { $0.id == id }
+        rejectedSuggestionIDs.insert(id)
         updatedAt = Date()
     }
 
     public mutating func deleteTerm(id: String) {
         terms.removeAll { $0.id == id }
         updatedAt = Date()
+    }
+}
+
+private extension Array where Element == LocalGlossarySuggestion {
+    var sortedByGlossaryConfidence: [LocalGlossarySuggestion] {
+        sorted {
+            if $0.confidence == $1.confidence {
+                return $0.occurrenceCount > $1.occurrenceCount
+            }
+            return $0.confidence > $1.confidence
+        }
     }
 }
 

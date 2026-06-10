@@ -1134,6 +1134,7 @@ struct ContentView: View {
                 .smoothCard(tint: Color.smoothSky)
             } else {
                 VStack(alignment: .leading, spacing: 10) {
+                    sectionHeader("용어 후보", systemImage: "text.badge.plus")
                     ForEach(viewModel.localGlossaryState.suggestions.prefix(12)) { suggestion in
                         LocalGlossarySuggestionReviewRow(
                             suggestion: suggestion,
@@ -1148,7 +1149,35 @@ struct ContentView: View {
                 }
             }
 
+            if !viewModel.localGlossaryState.reviewCandidates.isEmpty {
+                localGlossaryReviewQueue()
+            }
+
             acceptedLocalGlossaryTermsPanel()
+        }
+    }
+
+    private func localGlossaryReviewQueue() -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            sectionHeader("검토 필요 후보", systemImage: "rectangle.stack.badge.person.crop")
+            ForEach(viewModel.localGlossaryState.reviewCandidates.prefix(50)) { candidate in
+                LocalGlossaryReviewCandidateRow(
+                    candidate: candidate,
+                    terms: viewModel.localGlossaryState.terms,
+                    onAddToExisting: { termID in
+                        viewModel.addLocalGlossaryReviewCandidate(id: candidate.id, toTermID: termID)
+                    },
+                    onAcceptNew: { canonical in
+                        viewModel.acceptLocalGlossaryReviewCandidateAsNewTerm(id: candidate.id, canonical: canonical)
+                    },
+                    onNotSame: {
+                        viewModel.markLocalGlossaryReviewCandidateAsNotSame(id: candidate.id)
+                    },
+                    onDismiss: {
+                        viewModel.dismissLocalGlossaryReviewCandidate(id: candidate.id)
+                    }
+                )
+            }
         }
     }
 
@@ -4655,6 +4684,114 @@ private struct LocalGlossarySuggestionReviewRow: View {
             }
         }
         .smoothCard(tint: Color.smoothAccent)
+    }
+}
+
+private struct LocalGlossaryReviewCandidateRow: View {
+    let candidate: LocalGlossarySuggestion
+    let terms: [LocalGlossaryTerm]
+    let onAddToExisting: (String) -> Void
+    let onAcceptNew: (String) -> Void
+    let onNotSame: () -> Void
+    let onDismiss: () -> Void
+
+    @State private var canonical: String
+    @State private var selectedTermID: String
+
+    init(
+        candidate: LocalGlossarySuggestion,
+        terms: [LocalGlossaryTerm],
+        onAddToExisting: @escaping (String) -> Void,
+        onAcceptNew: @escaping (String) -> Void,
+        onNotSame: @escaping () -> Void,
+        onDismiss: @escaping () -> Void
+    ) {
+        self.candidate = candidate
+        self.terms = terms
+        self.onAddToExisting = onAddToExisting
+        self.onAcceptNew = onAcceptNew
+        self.onNotSame = onNotSame
+        self.onDismiss = onDismiss
+        _canonical = State(initialValue: candidate.suggestedCanonical)
+        _selectedTermID = State(initialValue: terms.first?.id ?? "")
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            HStack {
+                Label("같은 용어일 수 있음", systemImage: "person.2.crop.square.stack")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.smoothAccent)
+                Spacer()
+                Text("\(Int(candidate.confidence * 100))%")
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(Color.smoothMuted)
+            }
+
+            Text(candidate.aliases.joined(separator: " / "))
+                .font(.callout.weight(.semibold))
+                .foregroundStyle(Color.smoothInk)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Text(candidate.reviewReason.isEmpty ? candidate.score.summaryText : candidate.reviewReason)
+                .font(.caption)
+                .foregroundStyle(Color.smoothMuted)
+
+            if let excerpt = candidate.evidence.first?.excerpt {
+                Text(excerpt)
+                    .font(.caption2)
+                    .foregroundStyle(Color.smoothMuted)
+                    .lineLimit(2)
+            }
+
+            HStack(spacing: 8) {
+                TextField("새 정답 용어", text: $canonical)
+                    .textFieldStyle(.roundedBorder)
+                Button {
+                    onAcceptNew(canonical.trimmingCharacters(in: .whitespacesAndNewlines))
+                } label: {
+                    Label("새 용어로 추가", systemImage: "plus.circle")
+                }
+                .buttonStyle(.borderless)
+                .disabled(canonical.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+
+            if !terms.isEmpty {
+                HStack(spacing: 8) {
+                    Picker("기존 용어", selection: $selectedTermID) {
+                        ForEach(terms) { term in
+                            Text(term.canonical).tag(term.id)
+                        }
+                    }
+                    .labelsHidden()
+                    Button {
+                        onAddToExisting(selectedTermID)
+                    } label: {
+                        Label("기존 용어에 추가", systemImage: "link.badge.plus")
+                    }
+                    .buttonStyle(.borderless)
+                    .disabled(selectedTermID.isEmpty)
+                }
+            }
+
+            HStack(spacing: 8) {
+                Button(role: .destructive) {
+                    onNotSame()
+                } label: {
+                    Label("서로 다른 단어", systemImage: "xmark.circle")
+                }
+                .buttonStyle(.borderless)
+                Button {
+                    onDismiss()
+                } label: {
+                    Label("숨김", systemImage: "eye.slash")
+                }
+                .buttonStyle(.borderless)
+                Spacer()
+            }
+            .font(.caption.weight(.semibold))
+        }
+        .smoothCard(tint: Color.smoothSky)
     }
 }
 

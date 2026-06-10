@@ -220,4 +220,110 @@ struct LocalGlossaryModelsTests {
         #expect(legacy.impactLabel.summarySearchImpact == 0)
         #expect(legacy.impactLabel.summarySearchReasons == ["strict-filter"])
     }
+
+    @Test("local glossary state stores strict suggestions separately from review candidates")
+    func localGlossaryStateStoresReviewCandidatesSeparately() {
+        var state = LocalGlossaryState()
+        let strict = LocalGlossarySuggestion(
+            id: "suggestion:strict",
+            suggestedCanonical: "유저 안드로이드",
+            aliases: ["유자 안드로이드", "유저 안드로이드"],
+            evidence: [],
+            occurrenceCount: 8,
+            meetingCount: 4,
+            confidence: 0.88,
+            lane: .strict
+        )
+        let review = LocalGlossarySuggestion(
+            id: "suggestion:review",
+            suggestedCanonical: "신규 활성 유저",
+            aliases: ["신규활성제", "신규 활성 유저"],
+            evidence: [],
+            occurrenceCount: 5,
+            meetingCount: 3,
+            confidence: 0.58,
+            lane: .review,
+            reviewReason: "반복 등장하지만 strict threshold 미만"
+        )
+
+        state.replaceSuggestions(strict: [strict], review: [review])
+
+        #expect(state.suggestions.map(\.id) == ["suggestion:strict"])
+        #expect(state.reviewCandidates.map(\.id) == ["suggestion:review"])
+        #expect(state.reviewCandidates.first?.lane == .review)
+    }
+
+    @Test("review candidate can be added as alias to an existing term")
+    func reviewCandidateCanBeAddedAsAliasToExistingTerm() throws {
+        var state = LocalGlossaryState(
+            terms: [
+                LocalGlossaryTerm(
+                    id: "term-new-active-user",
+                    canonical: "신규 활성 유저",
+                    aliases: ["신규활성 유저"],
+                    category: .domainTerm
+                )
+            ],
+            reviewCandidates: [
+                LocalGlossarySuggestion(
+                    id: "suggestion:review:new-active",
+                    suggestedCanonical: "신규 활성 유저",
+                    aliases: ["신규활성제", "신규 활성 유전"],
+                    evidence: [],
+                    occurrenceCount: 5,
+                    meetingCount: 3,
+                    confidence: 0.58,
+                    lane: .review
+                )
+            ]
+        )
+
+        state.addReviewCandidate(id: "suggestion:review:new-active", asAliasesToTermID: "term-new-active-user")
+
+        let term = try #require(state.terms.first)
+        #expect(term.aliases.contains("신규활성제"))
+        #expect(term.aliases.contains("신규 활성 유전"))
+        #expect(state.reviewCandidates.isEmpty)
+    }
+
+    @Test("review candidate rejected as not same is not returned on replacement")
+    func reviewCandidateRejectedAsNotSameIsFilteredFromReplacement() {
+        var state = LocalGlossaryState()
+        let candidate = LocalGlossarySuggestion(
+            id: "suggestion:review:not-same",
+            suggestedCanonical: "대비 포인트",
+            aliases: ["대비 포인트", "대비로 포인트"],
+            evidence: [],
+            occurrenceCount: 10,
+            meetingCount: 6,
+            confidence: 0.57,
+            lane: .review
+        )
+
+        state.markReviewCandidateAsNotSame(id: candidate.id)
+        state.replaceSuggestions(strict: [], review: [candidate])
+
+        #expect(state.reviewCandidates.isEmpty)
+        #expect(state.rejectedSuggestionIDs.contains(candidate.id))
+    }
+
+    @Test("local glossary state decodes legacy JSON without review queue fields")
+    func localGlossaryStateDecodesLegacyReviewQueueDefaults() throws {
+        let legacyJSON = """
+        {
+          "terms": [],
+          "suggestions": [],
+          "dismissedSuggestionIDs": [],
+          "updatedAt": "2026-06-10T00:00:00Z"
+        }
+        """
+        let data = try #require(legacyJSON.data(using: .utf8))
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+
+        let state = try decoder.decode(LocalGlossaryState.self, from: data)
+
+        #expect(state.reviewCandidates.isEmpty)
+        #expect(state.rejectedSuggestionIDs.isEmpty)
+    }
 }

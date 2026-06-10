@@ -1410,42 +1410,45 @@ final class AppViewModel: ObservableObject {
             self.localGlossaryStatusMessage = self.localGlossaryRefreshProgress.displayText
             let suggestionStartedAt = Date()
             let suggestionResult = await Task.detached(priority: .utility) {
-                LocalGlossarySuggestionEngine.suggestionsWithDiagnostics(
+                LocalGlossarySuggestionEngine.suggestionsAndReviewCandidatesWithDiagnostics(
                     from: documents,
                     existingState: currentState,
-                    maxSuggestions: 12
+                    maxSuggestions: 12,
+                    maxReviewCandidates: 50
                 )
             }.value
             let suggestions = suggestionResult.suggestions
+            let reviewCandidates = suggestionResult.reviewCandidates
             let suggestionMilliseconds = self.logLocalGlossaryRefreshStage(
                 "suggest",
                 startedAt: suggestionStartedAt,
-                detail: "documents=\(documents.count) suggestions=\(suggestions.count) latin_ms=\(suggestionResult.diagnostics.latinMilliseconds) korean_ms=\(suggestionResult.diagnostics.koreanMilliseconds) korean_candidates=\(suggestionResult.diagnostics.korean.candidateCount) korean_pairs=\(suggestionResult.diagnostics.korean.pairCount)"
+                detail: "documents=\(documents.count) suggestions=\(suggestions.count) reviewCandidates=\(reviewCandidates.count) latin_ms=\(suggestionResult.diagnostics.latinMilliseconds) korean_ms=\(suggestionResult.diagnostics.koreanMilliseconds) korean_candidates=\(suggestionResult.diagnostics.korean.candidateCount) korean_pairs=\(suggestionResult.diagnostics.korean.pairCount)"
             )
             guard self.selectedFolderURL == selectedFolderURL else {
                 self.localGlossaryRefreshProgress = .idle
                 self.isGeneratingLocalGlossarySuggestions = false
                 return
             }
+            let generatedCandidateCount = suggestions.count + reviewCandidates.count
             self.localGlossaryRefreshProgress = LocalGlossaryRefreshProgress(
                 stage: .saving,
-                completed: suggestions.count,
-                total: max(suggestions.count, 1),
+                completed: generatedCandidateCount,
+                total: max(generatedCandidateCount, 1),
                 detail: "저장 중"
             )
             self.localGlossaryStatusMessage = self.localGlossaryRefreshProgress.displayText
             let saveStartedAt = Date()
-            self.localGlossaryState.replaceSuggestions(suggestions)
+            self.localGlossaryState.replaceSuggestions(strict: suggestions, review: reviewCandidates)
             try? self.stateStore.saveLocalGlossaryState(self.localGlossaryState)
             let saveMilliseconds = self.logLocalGlossaryRefreshStage(
                 "save",
                 startedAt: saveStartedAt,
-                detail: "suggestions=\(suggestions.count)"
+                detail: "suggestions=\(suggestions.count) reviewCandidates=\(reviewCandidates.count)"
             )
             let totalMilliseconds = self.logLocalGlossaryRefreshStage(
                 "complete",
                 startedAt: refreshStartedAt,
-                detail: "documents=\(documents.count) suggestions=\(suggestions.count) scan_ms=\(scanMilliseconds) suggest_ms=\(suggestionMilliseconds) save_ms=\(saveMilliseconds)"
+                detail: "documents=\(documents.count) suggestions=\(suggestions.count) reviewCandidates=\(reviewCandidates.count) scan_ms=\(scanMilliseconds) suggest_ms=\(suggestionMilliseconds) save_ms=\(saveMilliseconds)"
             )
             let diagnostic = LocalGlossaryRefreshDiagnostic(
                 createdAt: Date(),
@@ -1458,15 +1461,15 @@ final class AppViewModel: ObservableObject {
                 totalMilliseconds: totalMilliseconds,
                 stages: [
                     .init(name: "scan", elapsedMilliseconds: scanMilliseconds, detail: "documents=\(documents.count)"),
-                    .init(name: "suggest", elapsedMilliseconds: suggestionMilliseconds, detail: "suggestions=\(suggestions.count)"),
+                    .init(name: "suggest", elapsedMilliseconds: suggestionMilliseconds, detail: "suggestions=\(suggestions.count) reviewCandidates=\(reviewCandidates.count)"),
                     .init(name: "suggest-latin", elapsedMilliseconds: suggestionResult.diagnostics.latinMilliseconds, detail: "suggestions=\(suggestionResult.diagnostics.latinSuggestionCount)"),
                     .init(name: "suggest-korean", elapsedMilliseconds: suggestionResult.diagnostics.koreanMilliseconds, detail: "suggestions=\(suggestionResult.diagnostics.koreanSuggestionCount) candidates=\(suggestionResult.diagnostics.korean.candidateCount) pairs=\(suggestionResult.diagnostics.korean.pairCount)"),
                     .init(name: "suggest-korean-collect", elapsedMilliseconds: suggestionResult.diagnostics.korean.collectMilliseconds, detail: "occurrences=\(suggestionResult.diagnostics.korean.occurrenceCount)"),
                     .init(name: "suggest-korean-summarize", elapsedMilliseconds: suggestionResult.diagnostics.korean.summarizeMilliseconds, detail: "candidates=\(suggestionResult.diagnostics.korean.candidateCount)"),
                     .init(name: "suggest-korean-pair", elapsedMilliseconds: suggestionResult.diagnostics.korean.pairMilliseconds, detail: "supported=\(suggestionResult.diagnostics.korean.supportedCandidateCount) comparison=\(suggestionResult.diagnostics.korean.comparisonCandidateCount) pairs=\(suggestionResult.diagnostics.korean.pairCount)"),
                     .init(name: "suggest-korean-cluster", elapsedMilliseconds: suggestionResult.diagnostics.korean.clusterMilliseconds, detail: "clusters=\(suggestionResult.diagnostics.korean.clusterCount)"),
-                    .init(name: "save", elapsedMilliseconds: saveMilliseconds, detail: "suggestions=\(suggestions.count)"),
-                    .init(name: "complete", elapsedMilliseconds: totalMilliseconds, detail: "documents=\(documents.count) suggestions=\(suggestions.count)")
+                    .init(name: "save", elapsedMilliseconds: saveMilliseconds, detail: "suggestions=\(suggestions.count) reviewCandidates=\(reviewCandidates.count)"),
+                    .init(name: "complete", elapsedMilliseconds: totalMilliseconds, detail: "documents=\(documents.count) suggestions=\(suggestions.count) reviewCandidates=\(reviewCandidates.count)")
                 ],
                 suggestions: suggestions.map { suggestion in
                     LocalGlossaryRefreshDiagnostic.SuggestionSummary(
@@ -1489,9 +1492,9 @@ final class AppViewModel: ObservableObject {
             } catch {
                 self.logLocalGlossaryRefreshStage("diagnostic-log-failed", startedAt: refreshStartedAt, detail: error.localizedDescription)
             }
-            self.localGlossaryStatusMessage = suggestions.isEmpty
+            self.localGlossaryStatusMessage = suggestions.isEmpty && reviewCandidates.isEmpty
                 ? "회의 \(documents.count)개에서 새 용어 후보 없음 · \(totalMilliseconds)ms"
-                : "회의 \(documents.count)개에서 용어 후보 \(suggestions.count)개 · \(totalMilliseconds)ms"
+                : "회의 \(documents.count)개에서 용어 후보 \(suggestions.count)개 · 검토 \(reviewCandidates.count)개 · \(totalMilliseconds)ms"
             self.localGlossaryRefreshProgress = LocalGlossaryRefreshProgress(
                 stage: .completed,
                 completed: documents.count,
@@ -1528,6 +1531,36 @@ final class AppViewModel: ObservableObject {
         localGlossaryState.dismissSuggestion(id: id)
         try? stateStore.saveLocalGlossaryState(localGlossaryState)
         localGlossaryStatusMessage = "용어 후보를 숨겼습니다."
+    }
+
+    func acceptLocalGlossaryReviewCandidateAsNewTerm(
+        id: String,
+        canonical: String,
+        category: LocalGlossaryCategory = .domainTerm
+    ) {
+        localGlossaryState.acceptReviewCandidateAsNewTerm(id: id, canonical: canonical, category: category)
+        try? stateStore.saveLocalGlossaryState(localGlossaryState)
+        localGlossaryStatusMessage = "검토 후보를 새 용어로 추가했습니다."
+        refreshMeetingHistory(force: true)
+    }
+
+    func addLocalGlossaryReviewCandidate(id: String, toTermID termID: String) {
+        localGlossaryState.addReviewCandidate(id: id, asAliasesToTermID: termID)
+        try? stateStore.saveLocalGlossaryState(localGlossaryState)
+        localGlossaryStatusMessage = "기존 용어 alias로 추가했습니다."
+        refreshMeetingHistory(force: true)
+    }
+
+    func markLocalGlossaryReviewCandidateAsNotSame(id: String) {
+        localGlossaryState.markReviewCandidateAsNotSame(id: id)
+        try? stateStore.saveLocalGlossaryState(localGlossaryState)
+        localGlossaryStatusMessage = "서로 다른 단어로 표시했습니다."
+    }
+
+    func dismissLocalGlossaryReviewCandidate(id: String) {
+        localGlossaryState.dismissReviewCandidate(id: id)
+        try? stateStore.saveLocalGlossaryState(localGlossaryState)
+        localGlossaryStatusMessage = "검토 후보를 숨겼습니다."
     }
 
     func deleteLocalGlossaryTerm(id: String) {

@@ -55,10 +55,11 @@ enum LocalGlossaryScoringRunner {
         let stateStore = ApplicationStateStore()
         let state = stateStore.loadLocalGlossaryState()
         let suggestStartedAt = Date()
-        let result = LocalGlossarySuggestionEngine.suggestionsWithDiagnostics(
+        let result = LocalGlossarySuggestionEngine.suggestionsAndReviewCandidatesWithDiagnostics(
             from: documents,
             existingState: state,
             maxSuggestions: 12,
+            maxReviewCandidates: 50,
             includeLatin: options.includeLatin
         )
         let suggestionMilliseconds = elapsedMilliseconds(since: suggestStartedAt)
@@ -69,6 +70,7 @@ enum LocalGlossaryScoringRunner {
             rejectionSummary["strict-filter-no-candidates", default: 0] += 1
         }
         let candidates = result.suggestions.map(LocalGlossaryCandidateScoreReport.init(suggestion:))
+        let reviewCandidates = result.reviewCandidates.map(LocalGlossaryCandidateScoreReport.init(suggestion:))
         let noiseCount = candidates.filter(\.isObviousNoise).count
         let qualityGate = LocalGlossaryQualityGateReport(
             scope: options.includeLatin ? "latin-smoke" : "default-app",
@@ -95,6 +97,7 @@ enum LocalGlossaryScoringRunner {
             includeLatin: options.includeLatin,
             documentCount: documents.count,
             candidateCount: candidates.count,
+            reviewCandidateCount: reviewCandidates.count,
             timing: LocalGlossaryScoringTimingReport(
                 scanMilliseconds: scanMilliseconds,
                 suggestionMilliseconds: suggestionMilliseconds,
@@ -102,6 +105,7 @@ enum LocalGlossaryScoringRunner {
                 engineDiagnostics: result.diagnostics
             ),
             candidates: candidates,
+            reviewCandidates: reviewCandidates,
             rejectionSummary: rejectionSummary,
             qualityGate: qualityGate
         )
@@ -188,8 +192,10 @@ private struct LocalGlossaryScoringReport: Codable {
     var includeLatin: Bool
     var documentCount: Int
     var candidateCount: Int
+    var reviewCandidateCount: Int
     var timing: LocalGlossaryScoringTimingReport
     var candidates: [LocalGlossaryCandidateScoreReport]
+    var reviewCandidates: [LocalGlossaryCandidateScoreReport]
     var rejectionSummary: [String: Int]
     var qualityGate: LocalGlossaryQualityGateReport
 }

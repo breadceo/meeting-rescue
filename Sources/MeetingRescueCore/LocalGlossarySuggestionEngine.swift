@@ -52,6 +52,22 @@ public struct LocalGlossarySuggestionEngineDiagnostics: Codable, Equatable, Send
     }
 }
 
+public struct LocalGlossarySuggestionEngineResult: Sendable {
+    public var suggestions: [LocalGlossarySuggestion]
+    public var reviewCandidates: [LocalGlossarySuggestion]
+    public var diagnostics: LocalGlossarySuggestionEngineDiagnostics
+
+    public init(
+        suggestions: [LocalGlossarySuggestion],
+        reviewCandidates: [LocalGlossarySuggestion],
+        diagnostics: LocalGlossarySuggestionEngineDiagnostics
+    ) {
+        self.suggestions = suggestions
+        self.reviewCandidates = reviewCandidates
+        self.diagnostics = diagnostics
+    }
+}
+
 public enum LocalGlossarySuggestionEngine {
     private static let tokenPattern = #"\b[A-Za-z][A-Za-z0-9_-]{2,23}\b"#
     private static let emailPattern = #"\b[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}\b"#
@@ -76,6 +92,23 @@ public enum LocalGlossarySuggestionEngine {
         maxSuggestions: Int = 8,
         includeLatin: Bool = false
     ) -> (suggestions: [LocalGlossarySuggestion], diagnostics: LocalGlossarySuggestionEngineDiagnostics) {
+        let result = suggestionsAndReviewCandidatesWithDiagnostics(
+            from: documents,
+            existingState: existingState,
+            maxSuggestions: maxSuggestions,
+            maxReviewCandidates: 0,
+            includeLatin: includeLatin
+        )
+        return (result.suggestions, result.diagnostics)
+    }
+
+    public static func suggestionsAndReviewCandidatesWithDiagnostics(
+        from documents: [LocalGlossarySourceDocument],
+        existingState: LocalGlossaryState,
+        maxSuggestions: Int = 8,
+        maxReviewCandidates: Int = 50,
+        includeLatin: Bool = false
+    ) -> LocalGlossarySuggestionEngineResult {
         let totalStartedAt = Date()
         let latin: [LocalGlossarySuggestion]
         let latinMilliseconds: Int
@@ -92,18 +125,25 @@ public enum LocalGlossarySuggestionEngine {
             latinMilliseconds = 0
         }
         let koreanStartedAt = Date()
-        let koreanResult = LocalGlossaryKoreanSuggestionEngine.suggestionsWithDiagnostics(
+        let koreanResult = LocalGlossaryKoreanSuggestionEngine.suggestionsAndReviewCandidatesWithDiagnostics(
             from: documents,
             existingState: existingState,
-            maxSuggestions: maxSuggestions
+            maxSuggestions: maxSuggestions,
+            maxReviewCandidates: maxReviewCandidates
         )
         let koreanMilliseconds = elapsedMilliseconds(since: koreanStartedAt)
         let mergeStartedAt = Date()
         let merged = mergedSuggestions(latin + koreanResult.suggestions, maxSuggestions: maxSuggestions)
+        let strictIDs = Set(merged.map(\.id))
+        let reviewCandidates = koreanResult.reviewCandidates
+            .filter { !strictIDs.contains($0.id) }
+            .prefix(maxReviewCandidates)
+            .map { $0 }
         let mergeMilliseconds = elapsedMilliseconds(since: mergeStartedAt)
-        return (
-            merged,
-            LocalGlossarySuggestionEngineDiagnostics(
+        return LocalGlossarySuggestionEngineResult(
+            suggestions: merged,
+            reviewCandidates: reviewCandidates,
+            diagnostics: LocalGlossarySuggestionEngineDiagnostics(
                 documentCount: documents.count,
                 sectionCount: documents.reduce(0) { $0 + $1.sections.count },
                 latinSuggestionCount: latin.count,

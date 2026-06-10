@@ -43,6 +43,22 @@ public struct LocalGlossaryKoreanSuggestionDiagnostics: Codable, Equatable, Send
     }
 }
 
+public struct LocalGlossaryKoreanSuggestionResult: Sendable {
+    public var suggestions: [LocalGlossarySuggestion]
+    public var reviewCandidates: [LocalGlossarySuggestion]
+    public var diagnostics: LocalGlossaryKoreanSuggestionDiagnostics
+
+    public init(
+        suggestions: [LocalGlossarySuggestion],
+        reviewCandidates: [LocalGlossarySuggestion],
+        diagnostics: LocalGlossaryKoreanSuggestionDiagnostics
+    ) {
+        self.suggestions = suggestions
+        self.reviewCandidates = reviewCandidates
+        self.diagnostics = diagnostics
+    }
+}
+
 public enum LocalGlossaryKoreanSuggestionEngine {
     private static let maxCandidatesPerBucket = 40
     private static let maxComparisonCandidates = 900
@@ -65,6 +81,21 @@ public enum LocalGlossaryKoreanSuggestionEngine {
         existingState: LocalGlossaryState,
         maxSuggestions: Int = 8
     ) -> (suggestions: [LocalGlossarySuggestion], diagnostics: LocalGlossaryKoreanSuggestionDiagnostics) {
+        let result = suggestionsAndReviewCandidatesWithDiagnostics(
+            from: documents,
+            existingState: existingState,
+            maxSuggestions: maxSuggestions,
+            maxReviewCandidates: 0
+        )
+        return (result.suggestions, result.diagnostics)
+    }
+
+    public static func suggestionsAndReviewCandidatesWithDiagnostics(
+        from documents: [LocalGlossarySourceDocument],
+        existingState: LocalGlossaryState,
+        maxSuggestions: Int = 8,
+        maxReviewCandidates: Int = 50
+    ) -> LocalGlossaryKoreanSuggestionResult {
         let totalStartedAt = Date()
         let acceptedValues = Set(existingState.enabledTerms.flatMap(\.allMatchValues).map(MeetingHistorySearch.compactNormalize))
         let collectStartedAt = Date()
@@ -83,11 +114,20 @@ public enum LocalGlossaryKoreanSuggestionEngine {
         let pairs = candidatePairs(from: candidates)
         let pairMilliseconds = elapsedMilliseconds(since: pairStartedAt)
         let clusterStartedAt = Date()
-        let clusters = clusters(from: pairs)
+        let strictClusters = clusters(from: pairs)
+        let reviewPairs = maxReviewCandidates > 0 ? reviewCandidatePairs(from: candidates) : []
+        let reviewClusters = maxReviewCandidates > 0 ? clusters(from: reviewPairs) : []
         let clusterMilliseconds = elapsedMilliseconds(since: clusterStartedAt)
         let buildStartedAt = Date()
-        let suggestions = clusters.compactMap { cluster in
-            suggestion(from: cluster, pairs: pairs, dismissedIDs: existingState.dismissedSuggestionIDs)
+        let suggestions = strictClusters.compactMap { cluster in
+            suggestion(
+                from: cluster,
+                pairs: pairs,
+                dismissedIDs: existingState.dismissedSuggestionIDs,
+                rejectedIDs: existingState.rejectedSuggestionIDs,
+                acceptedValues: acceptedValues,
+                lane: .strict
+            )
         }
         .sorted {
             if $0.confidence == $1.confidence {
@@ -97,16 +137,37 @@ public enum LocalGlossaryKoreanSuggestionEngine {
         }
         .prefix(maxSuggestions)
         .map { $0 }
+        let strictAliasKeys = Set(suggestions.map { aliasKey(for: $0.aliases) })
+        let reviewCandidates = reviewClusters.compactMap { cluster in
+            suggestion(
+                from: cluster,
+                pairs: reviewPairs,
+                dismissedIDs: existingState.dismissedSuggestionIDs,
+                rejectedIDs: existingState.rejectedSuggestionIDs,
+                acceptedValues: acceptedValues,
+                lane: .review
+            )
+        }
+        .filter { !strictAliasKeys.contains(aliasKey(for: $0.aliases)) }
+        .sorted {
+            if $0.confidence == $1.confidence {
+                return $0.occurrenceCount > $1.occurrenceCount
+            }
+            return $0.confidence > $1.confidence
+        }
+        .prefix(maxReviewCandidates)
+        .map { $0 }
         let buildMilliseconds = elapsedMilliseconds(since: buildStartedAt)
-        return (
-            suggestions,
-            LocalGlossaryKoreanSuggestionDiagnostics(
+        return LocalGlossaryKoreanSuggestionResult(
+            suggestions: suggestions,
+            reviewCandidates: reviewCandidates,
+            diagnostics: LocalGlossaryKoreanSuggestionDiagnostics(
                 occurrenceCount: occurrences.count,
                 candidateCount: candidates.count,
                 supportedCandidateCount: supportedCandidateCount,
                 comparisonCandidateCount: comparisonCandidateCount,
                 pairCount: pairs.count,
-                clusterCount: clusters.count,
+                clusterCount: strictClusters.count,
                 collectMilliseconds: collectMilliseconds,
                 summarizeMilliseconds: summarizeMilliseconds,
                 pairMilliseconds: pairMilliseconds,
@@ -227,6 +288,75 @@ public enum LocalGlossaryKoreanSuggestionEngine {
         }
     }
 
+    private static func reviewCandidatePairs(from candidates: [KoreanPhraseCandidate]) -> [KoreanPhraseCandidatePair] {
+        let comparisonCandidates = candidates.sorted {
+            if $0.priority == $1.priority {
+                return $0.compact.localizedStandardCompare($1.compact) == .orderedAscending
+            }
+            return $0.priority > $1.priority
+        }
+        .prefix(maxComparisonCandidates)
+        .map { $0 }
+        let buckets = cappedBuckets(for: comparisonCandidates)
+        var pairs: [KoreanPhraseCandidatePair] = []
+        var seen: Set<String> = []
+
+        for (bucketKey, group) in buckets {
+            let candidatePool = comparisonPool(for: bucketKey, buckets: buckets)
+            for lhs in group {
+                for rhs in candidatePool where lhs.compact != rhs.compact {
+                    let pairID = [lhs.compact, rhs.compact].sorted().joined(separator: "|")
+                    guard !seen.contains(pairID) else {
+                        continue
+                    }
+                    seen.insert(pairID)
+                    guard abs(lhs.compact.count - rhs.compact.count) <= 2,
+                          !isLikelyGenericExtension(lhs.compact, rhs.compact) else {
+                        continue
+                    }
+                    let score = koreanScore(lhs.compact, rhs.compact)
+                    guard score.value >= 0.72 else {
+                        continue
+                    }
+                    let contextOverlap = overlap(lhs.contextValues, rhs.contextValues)
+                    if acceptsReviewPair(lhs: lhs, rhs: rhs, score: score.value, contextOverlap: contextOverlap) {
+                        pairs.append(
+                            KoreanPhraseCandidatePair(
+                                lhs: lhs,
+                                rhs: rhs,
+                                score: score.value,
+                                contextOverlap: contextOverlap,
+                                scoreBreakdown: score
+                            )
+                        )
+                    }
+                }
+            }
+        }
+
+        return pairs.sorted {
+            if $0.score == $1.score {
+                return $0.contextOverlap > $1.contextOverlap
+            }
+            return $0.score > $1.score
+        }
+    }
+
+    private static func acceptsReviewPair(
+        lhs: KoreanPhraseCandidate,
+        rhs: KoreanPhraseCandidate,
+        score: Double,
+        contextOverlap: Double
+    ) -> Bool {
+        let combinedDocumentSupport = lhs.documentCount + rhs.documentCount
+        let recurringSupport = lhs.documentCount >= 2 || rhs.documentCount >= 2
+            || lhs.occurrenceCount >= 3 || rhs.occurrenceCount >= 3
+        return score >= 0.72
+            && contextOverlap >= 0.05
+            && combinedDocumentSupport >= 3
+            && recurringSupport
+    }
+
     private static func acceptsPair(
         lhs: KoreanPhraseCandidate,
         rhs: KoreanPhraseCandidate,
@@ -285,7 +415,10 @@ public enum LocalGlossaryKoreanSuggestionEngine {
     private static func suggestion(
         from cluster: [KoreanPhraseCandidate],
         pairs: [KoreanPhraseCandidatePair],
-        dismissedIDs: Set<String>
+        dismissedIDs: Set<String>,
+        rejectedIDs: Set<String>,
+        acceptedValues: Set<String>,
+        lane: LocalGlossaryCandidateLane
     ) -> LocalGlossarySuggestion? {
         let aliases = cluster
             .map(\.display)
@@ -293,8 +426,15 @@ public enum LocalGlossaryKoreanSuggestionEngine {
         guard aliases.count >= 2 else {
             return nil
         }
-        let id = "suggestion:ko:\(cluster.map(\.compact).sorted().joined(separator: "|"))"
-        guard !dismissedIDs.contains(id) else {
+        guard aliases
+            .map(MeetingHistorySearch.compactNormalize)
+            .allSatisfy({ !acceptedValues.contains($0) }) else {
+            return nil
+        }
+        let prefix = lane == .review ? "suggestion:review:ko" : "suggestion:ko"
+        let id = "\(prefix):\(cluster.map(\.compact).sorted().joined(separator: "|"))"
+        guard !dismissedIDs.contains(id),
+              !rejectedIDs.contains(id) else {
             return nil
         }
         let compactValues = Set(cluster.map(\.compact))
@@ -332,13 +472,19 @@ public enum LocalGlossaryKoreanSuggestionEngine {
         return LocalGlossarySuggestion(
             id: id,
             suggestedCanonical: suggestedCanonical,
-                aliases: aliases,
-                evidence: evidence,
-                occurrenceCount: occurrences.count,
-                meetingCount: meetingIDs.count,
-                confidence: score.finalScore,
-                score: score
+            aliases: aliases,
+            evidence: evidence,
+            occurrenceCount: occurrences.count,
+            meetingCount: meetingIDs.count,
+            confidence: lane == .review ? min(score.finalScore, 0.74) : score.finalScore,
+            score: score,
+            lane: lane,
+            reviewReason: lane == .review ? "반복/맥락 근거는 있으나 strict threshold 미만" : ""
         )
+    }
+
+    private static func aliasKey(for aliases: [String]) -> String {
+        aliases.map(MeetingHistorySearch.compactNormalize).sorted().joined(separator: "|")
     }
 
     private static func scoreForSuggestion(
@@ -547,6 +693,9 @@ public enum LocalGlossaryKoreanSuggestionEngine {
         guard !isGenericPointerPhrase(compact) else {
             return false
         }
+        guard !isGenericConversationalCandidate(compact) else {
+            return false
+        }
         return true
     }
 
@@ -559,6 +708,12 @@ public enum LocalGlossaryKoreanSuggestionEngine {
         }
         return koreanGenericPointerSuffixes.contains { suffix in
             compact.hasSuffix(suffix)
+        }
+    }
+
+    private static func isGenericConversationalCandidate(_ compact: String) -> Bool {
+        koreanGenericConversationalPrefixes.contains { prefix in
+            compact.hasPrefix(prefix)
         }
     }
 
@@ -833,6 +988,12 @@ private let koreanGenericPointerPrefixes: [String] = [
 
 private let koreanGenericPointerSuffixes: [String] = [
     "부분", "부분들", "것", "것들", "내용", "얘기", "이야기"
+]
+
+private let koreanGenericConversationalPrefixes: [String] = [
+    "하고", "되어", "예를들어", "진행하", "진행해", "업데이트하", "업데이트해",
+    "작업하", "요렇게", "이렇게", "그렇게", "고렇게", "나오", "가능하",
+    "들어가", "있었", "상황이", "상태입", "필요없", "필요하", "전달해", "모르겠"
 ]
 
 private let koreanDomainContextTokens: Set<String> = [
