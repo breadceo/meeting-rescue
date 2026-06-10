@@ -148,6 +148,18 @@ struct AppViewModelTestRunContextTests {
 
         #expect(request.supplementalContextSources.contains { $0.kind == .domainGlossary && $0.excerpt.contains("canonical: zax") })
     }
+
+    @Test("local glossary refresh scans selected raw transcript folder")
+    func localGlossaryRefreshScansSelectedRawTranscriptFolder() throws {
+        let sourceURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent("Sources/MeetingRescue/AppViewModel.swift")
+        let source = try String(contentsOf: sourceURL, encoding: .utf8)
+        let refresh = try #require(source.slice(from: "func refreshLocalGlossarySuggestions()", to: "func acceptLocalGlossarySuggestion"))
+
+        #expect(refresh.contains("selectedFolderURL"))
+        #expect(refresh.contains("LocalGlossaryHistoryScanner.documents"))
+        #expect(!refresh.contains("meetingHistoryItems.map"))
+    }
 }
 
 private extension String {

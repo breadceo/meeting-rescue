@@ -854,6 +854,17 @@ final class AppViewModel: ObservableObject {
         selectedFolderURL != nil && (activeTranscriptURL != nil || analysisState.latestSnapshot != nil)
     }
 
+    var activeLocalGlossaryMatchCount: Int {
+        guard settings.localGlossaryEnabled else {
+            return 0
+        }
+        return LocalGlossaryMatcher.matches(in: rawTranscript, state: localGlossaryState).count
+    }
+
+    var localGlossarySuggestionCount: Int {
+        localGlossaryState.suggestions.count
+    }
+
     var historyFacetSelection: MeetingHistoryFacetSelection {
         MeetingHistoryFacetSelection(
             date: historyDateFilter,
@@ -1240,24 +1251,43 @@ final class AppViewModel: ObservableObject {
         guard !isGeneratingLocalGlossarySuggestions else {
             return
         }
-        isGeneratingLocalGlossarySuggestions = true
-        localGlossaryStatusMessage = "회의 history에서 용어 후보를 찾는 중"
-
-        let documents = meetingHistoryItems.map { item in
-            LocalGlossarySourceDocument(id: item.id, title: item.title, sections: item.searchSections)
+        guard let selectedFolderURL else {
+            localGlossaryStatusMessage = "transcript 폴더를 먼저 선택하세요."
+            return
         }
+        isGeneratingLocalGlossarySuggestions = true
+        localGlossaryStatusMessage = "raw transcript history에서 용어 후보를 찾는 중"
         let currentState = localGlossaryState
 
-        Task { @MainActor in
-            let suggestions = await Task.detached(priority: .utility) {
-                LocalGlossarySuggestionEngine.suggestions(from: documents, existingState: currentState)
+        Task { @MainActor [weak self, selectedFolderURL, currentState] in
+            let documents = await Task.detached(priority: .utility) {
+                LocalGlossaryHistoryScanner.documents(
+                    in: selectedFolderURL,
+                    configuration: .init(maxDocuments: 120, maxBytesPerDocument: 96_000, rawTranscriptLineLimit: 360)
+                )
             }.value
-            for suggestion in suggestions {
-                localGlossaryState.upsertSuggestion(suggestion)
+            let suggestions = await Task.detached(priority: .utility) {
+                LocalGlossarySuggestionEngine.suggestions(
+                    from: documents,
+                    existingState: currentState,
+                    maxSuggestions: 12
+                )
+            }.value
+            guard let self else {
+                return
             }
-            try? stateStore.saveLocalGlossaryState(localGlossaryState)
-            localGlossaryStatusMessage = suggestions.isEmpty ? "새 용어 후보 없음" : "용어 후보 \(suggestions.count)개"
-            isGeneratingLocalGlossarySuggestions = false
+            guard self.selectedFolderURL == selectedFolderURL else {
+                self.isGeneratingLocalGlossarySuggestions = false
+                return
+            }
+            for suggestion in suggestions {
+                self.localGlossaryState.upsertSuggestion(suggestion)
+            }
+            try? self.stateStore.saveLocalGlossaryState(self.localGlossaryState)
+            self.localGlossaryStatusMessage = suggestions.isEmpty
+                ? "회의 \(documents.count)개에서 새 용어 후보 없음"
+                : "회의 \(documents.count)개에서 용어 후보 \(suggestions.count)개"
+            self.isGeneratingLocalGlossarySuggestions = false
         }
     }
 
