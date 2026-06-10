@@ -718,6 +718,7 @@ final class AppViewModel: ObservableObject {
     private var searchDatabaseMatchesByPath: [String: MeetingHistorySearchMatch] = [:]
     private var searchDatabaseMatchQuery = ""
     private var googleCalendarService: GoogleCalendarService?
+    private var autoFetchedGoogleCalendarMeetingIDs: Set<String> = []
     private let historySearchDebounceDelayNanoseconds: UInt64 = 300_000_000
     private var transcriptHighlightClearTask: Task<Void, Never>?
     private var transcriptFocusToken = 0
@@ -2557,6 +2558,7 @@ final class AppViewModel: ObservableObject {
         }
 
         readFullContent(from: url, allowFinalTrigger: false)
+        autoFetchGoogleCalendarAPIContextForLiveWatchIfNeeded()
         statusMessage = "\(statusPrefix): \(url.lastPathComponent)"
     }
 
@@ -2657,6 +2659,25 @@ final class AppViewModel: ObservableObject {
                 analysisStatus = .completed
             }
         }
+    }
+
+    private func autoFetchGoogleCalendarAPIContextForLiveWatchIfNeeded() {
+        guard transcriptRunMode == .liveWatch,
+              let activeTranscriptURL,
+              !isFetchingGoogleCalendarAPIContext else {
+            return
+        }
+        let id = meetingID(for: activeTranscriptURL)
+        guard !autoFetchedGoogleCalendarMeetingIDs.contains(id) else {
+            return
+        }
+        guard let service = try? makeGoogleCalendarService(),
+              service.hasStoredRefreshToken() else {
+            return
+        }
+
+        autoFetchedGoogleCalendarMeetingIDs.insert(id)
+        fetchGoogleCalendarAPIContext()
     }
 
     private func triggerAutomaticAnalysisIfNeeded() {

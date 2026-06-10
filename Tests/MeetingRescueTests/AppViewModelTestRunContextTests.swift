@@ -108,6 +108,22 @@ struct AppViewModelTestRunContextTests {
         #expect(!startTestRun.contains("CalendarMCPContextFetcher"))
     }
 
+    @Test("Live Watch active transcript path auto-fetches Google Calendar API context once when connected")
+    func liveWatchActiveTranscriptPathAutoFetchesCalendarAPIContextOnce() throws {
+        let sourceURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent("Sources/MeetingRescue/AppViewModel.swift")
+        let source = try String(contentsOf: sourceURL, encoding: .utf8)
+        let loadTranscript = try #require(source.slice(from: "private func loadTranscriptForViewing", to: "private func readFullContent"))
+        let autoFetch = try #require(source.slice(from: "private func autoFetchGoogleCalendarAPIContextForLiveWatchIfNeeded()", to: "private func triggerAutomaticAnalysisIfNeeded()"))
+
+        #expect(loadTranscript.contains("autoFetchGoogleCalendarAPIContextForLiveWatchIfNeeded()"))
+        #expect(autoFetch.contains("transcriptRunMode == .liveWatch"))
+        #expect(autoFetch.contains("activeTranscriptURL"))
+        #expect(autoFetch.contains("hasStoredRefreshToken()"))
+        #expect(autoFetch.contains("autoFetchedGoogleCalendarMeetingIDs"))
+        #expect(autoFetch.contains("fetchGoogleCalendarAPIContext()"))
+    }
+
     @Test("analysis request includes local glossary supplemental context")
     @MainActor
     func analysisRequestIncludesLocalGlossaryContext() throws {
