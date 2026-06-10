@@ -57,6 +57,15 @@ private enum AdaptivePane: CaseIterable, Hashable {
         }
     }
 
+    var compactTitle: String {
+        switch self {
+        case .meetings:
+            return "Meetings"
+        case .intelligence:
+            return "Meeting\nIntelligence"
+        }
+    }
+
     var systemImage: String {
         switch self {
         case .meetings:
@@ -985,11 +994,16 @@ struct ContentView: View {
     private func compactIntelligenceHeader(availableWidth: CGFloat?) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 10) {
-                Label("Meeting Intelligence", systemImage: "sparkles")
+                Label {
+                    Text(AdaptivePane.intelligence.compactTitle)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                } icon: {
+                    Image(systemName: "sparkles")
+                }
                     .font(.headline)
                     .foregroundStyle(Color.smoothInk)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.82)
 
                 Spacer(minLength: 8)
 
@@ -2725,9 +2739,15 @@ struct ContentView: View {
                 activeOverlayPane = activeOverlayPane == pane ? nil : pane
             }
         } label: {
-            Label(pane.title, systemImage: pane.systemImage)
+            Label {
+                Text(pane.compactTitle)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            } icon: {
+                Image(systemName: pane.systemImage)
+            }
                 .font(.caption.weight(.semibold))
-                .lineLimit(1)
                 .foregroundStyle(activeOverlayPane == pane ? Color.smoothOnAccent : Color.smoothInk)
                 .padding(.horizontal, 9)
                 .padding(.vertical, 6)
@@ -2789,12 +2809,14 @@ struct ContentView: View {
                     .foregroundStyle(Color.smoothAccent)
                     .frame(width: 30, height: 30)
                     .background(Color.smoothMint, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                Text(pane.title)
+                Text(pane.compactTitle)
                     .font(.caption2.weight(.bold))
                     .foregroundStyle(Color.smoothInk)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.center)
                     .rotationEffect(.degrees(-90))
-                    .fixedSize()
-                    .frame(width: 30, height: 82)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(width: 34, height: 94)
                 Spacer(minLength: 0)
             }
             .padding(.vertical, 12)

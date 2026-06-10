@@ -77,6 +77,18 @@ struct ContentViewContextWiringTests {
         #expect(source.contains("intelligenceMode = .glossary"))
     }
 
+    @Test("compact Meeting Intelligence labels can wrap to two lines")
+    func compactMeetingIntelligenceLabelsCanWrapToTwoLines() throws {
+        let sourceURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent("Sources/MeetingRescue/ContentView.swift")
+        let source = try String(contentsOf: sourceURL, encoding: .utf8)
+
+        #expect(source.contains(#"return "Meeting\nIntelligence""#))
+        #expect(source.contains("pane.compactTitle"))
+        #expect(source.contains(".lineLimit(2)"))
+        #expect(source.contains(".multilineTextAlignment(.center)"))
+    }
+
     @Test("settings glossary section no longer hosts suggestion review")
     func settingsGlossarySectionNoLongerHostsSuggestionReview() throws {
         let sourceURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
