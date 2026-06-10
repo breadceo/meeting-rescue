@@ -1,0 +1,15 @@
+Sources/MeetingRescue/AppViewModel.swift
+  h_d82ccb34241a0d 721,2561,2664-2682
+Tests/MeetingRescueTests/AppViewModelTestRunContextTests.swift
+  h_d82ccb34241a0d 111-126
+---
+{
+  "schema_version": "zax-attestation/1.1.0",
+  "base_commit_sha": "cb434ca2493a447b2601b8ce71fafceb3174f50e",
+  "prompts": {},
+  "humans": {
+    "h_d82ccb34241a0d": {
+      "author": "ethan@zigbang.com"
+    }
+  }
+}
