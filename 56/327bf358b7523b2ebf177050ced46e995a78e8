@@ -1,0 +1,17 @@
+docs/local-glossary-hardening-validation.md
+  h_d82ccb34241a0d 1-54
+execution-log.md
+  h_d82ccb34241a0d 5-20
+tasks.md
+  h_d82ccb34241a0d 579-597
+---
+{
+  "schema_version": "zax-attestation/1.1.0",
+  "base_commit_sha": "56327bf358b7523b2ebf177050ced46e995a78e8",
+  "prompts": {},
+  "humans": {
+    "h_d82ccb34241a0d": {
+      "author": "ethan@zigbang.com"
+    }
+  }
+}
