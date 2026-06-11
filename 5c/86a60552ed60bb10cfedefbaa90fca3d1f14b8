@@ -1,0 +1,17 @@
+Sources/MeetingRescue/ContentView.swift
+  h_d82ccb34241a0d 140-141,217-228,945,959-984,987,989-992,994
+Sources/MeetingRescue/SelectableTranscriptTextView.swift
+  h_d82ccb34241a0d 6,41,53,56,76
+Tests/MeetingRescueTests/ContentViewContextWiringTests.swift
+  h_d82ccb34241a0d 106-108,134,139-140,149-150,153-154
+---
+{
+  "schema_version": "zax-attestation/1.1.0",
+  "base_commit_sha": "5c86a60552ed60bb10cfedefbaa90fca3d1f14b8",
+  "prompts": {},
+  "humans": {
+    "h_d82ccb34241a0d": {
+      "author": "ethan@zigbang.com"
+    }
+  }
+}
