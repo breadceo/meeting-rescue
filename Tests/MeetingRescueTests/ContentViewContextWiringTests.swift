@@ -92,6 +92,19 @@ struct ContentViewContextWiringTests {
         #expect(source.contains("intelligenceMode = .glossary"))
     }
 
+    @Test("selectable transcript bridge captures raw text selection")
+    func selectableTranscriptBridgeCapturesRawTextSelection() throws {
+        let selectableURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent("Sources/MeetingRescue/SelectableTranscriptTextView.swift")
+        let selectable = try String(contentsOf: selectableURL, encoding: .utf8)
+
+        #expect(selectable.contains("NSViewRepresentable"))
+        #expect(selectable.contains("NSTextView"))
+        #expect(selectable.contains("textViewDidChangeSelection"))
+        #expect(selectable.contains("onSelectionChange"))
+        #expect(selectable.contains("scrollToLine"))
+    }
+
     @Test("wide intelligence header stacks tabs without wrapping title")
     func wideIntelligenceHeaderStacksTabsWithoutWrappingTitle() throws {
         let sourceURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
