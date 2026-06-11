@@ -1,0 +1,15 @@
+Sources/MeetingRescue/SelectableTranscriptTextView.swift
+  h_d82ccb34241a0d 1-112
+Tests/MeetingRescueTests/ContentViewContextWiringTests.swift
+  h_d82ccb34241a0d 95-107
+---
+{
+  "schema_version": "zax-attestation/1.1.0",
+  "base_commit_sha": "03eb26bd7a6a961b4dfc2bf148fbeb05e6e76771",
+  "prompts": {},
+  "humans": {
+    "h_d82ccb34241a0d": {
+      "author": "ethan@zigbang.com"
+    }
+  }
+}
