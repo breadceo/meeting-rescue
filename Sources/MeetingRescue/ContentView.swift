@@ -857,28 +857,38 @@ struct ContentView: View {
     }
 
     private var rawTranscriptHeader: some View {
-        HStack(spacing: 10) {
-            Label("Raw Transcript", systemImage: "doc.text")
-                .font(.headline)
-                .foregroundStyle(Color.smoothInk)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                Label("Raw Transcript", systemImage: "doc.text")
+                    .font(.headline)
+                    .foregroundStyle(Color.smoothInk)
+                    .lineLimit(1)
+                    .layoutPriority(1)
 
-            Spacer(minLength: 8)
+                Spacer(minLength: 8)
 
-            Text("\(viewModel.rawTranscriptLineCount) lines")
-                .font(.caption)
-                .foregroundStyle(Color.smoothMuted)
-
-            Picker("Transcript view", selection: $transcriptDisplayMode) {
-                ForEach(TranscriptDisplayMode.allCases) { mode in
-                    Text(mode.displayName).tag(mode)
-                }
+                Text("\(viewModel.rawTranscriptLineCount) lines")
+                    .font(.caption)
+                    .foregroundStyle(Color.smoothMuted)
+                    .lineLimit(1)
             }
-            .pickerStyle(.segmented)
-            .frame(width: 142)
-            .help("원문과 용어 사전이 적용된 표시를 전환")
 
-            if viewModel.shouldShowMomentMarker {
-                momentMarkerTranscriptMenu
+            HStack(spacing: 8) {
+                Picker("Transcript view", selection: $transcriptDisplayMode) {
+                    ForEach(TranscriptDisplayMode.allCases) { mode in
+                        Text(mode.displayName).tag(mode)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.segmented)
+                .frame(width: 142)
+                .help("원문과 용어 사전이 적용된 표시를 전환")
+
+                if viewModel.shouldShowMomentMarker {
+                    momentMarkerTranscriptMenu
+                }
+
+                Spacer(minLength: 0)
             }
         }
         .padding(.horizontal, 16)
