@@ -1,0 +1,25 @@
+Sources/MeetingRescue/AppViewModel.swift
+  h_d82ccb34241a0d 241-246,416-436,441,447-453,455-465,478-489,497,499-501,507-510,519-520,544-545,616-617,674-675,677,680-684,816-822,896-897,1029,1035-1111,1215,1220,1223-1225,1232-1239,1266-1307,1541,1725,1743,1751,1771,2542-2543,2545-2552,2554,2565,2651,2887,2891-2892,3443,4005,4024
+Sources/MeetingRescueCore/LocalGlossaryKoreanSuggestionEngine.swift
+  h_d82ccb34241a0d 426,430-432,573-575,587-589,709-714,718-744,763-804,1060-1067,1074-1075,1089-1150
+Sources/MeetingRescueCore/LocalGlossaryMatcher.swift
+  h_d82ccb34241a0d 4-41,46-58,61,65-68,78-114,161-166,173-178,182-205
+Tests/MeetingRescueCoreTests/LocalGlossaryMatcherTests.swift
+  h_d82ccb34241a0d 64-117
+Tests/MeetingRescueCoreTests/LocalGlossarySuggestionEngineTests.swift
+  h_d82ccb34241a0d 385-872
+Tests/MeetingRescueTests/AppViewModelTestRunContextTests.swift
+  h_d82ccb34241a0d 152-195,219-242
+docs/superpowers/plans/2026-06-11-raw-transcript-glossary-selection.md
+  h_d82ccb34241a0d 1-935
+---
+{
+  "schema_version": "zax-attestation/1.1.0",
+  "base_commit_sha": "8fa38f0b8986947548aaddbdc954564cbcebcf17",
+  "prompts": {},
+  "humans": {
+    "h_d82ccb34241a0d": {
+      "author": "ethan@zigbang.com"
+    }
+  }
+}
