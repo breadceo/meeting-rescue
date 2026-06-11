@@ -1,0 +1,17 @@
+Sources/MeetingRescue/LocalGlossaryQualityABRunner.swift
+  h_d82ccb34241a0d 1-434
+Sources/MeetingRescue/MeetingRescueApp.swift
+  h_d82ccb34241a0d 10
+Tests/MeetingRescueTests/LocalGlossaryQualityABRunnerTests.swift
+  h_d82ccb34241a0d 1-43
+---
+{
+  "schema_version": "zax-attestation/1.1.0",
+  "base_commit_sha": "541628db7f8397ece7160b1d0b2b500133f2abd1",
+  "prompts": {},
+  "humans": {
+    "h_d82ccb34241a0d": {
+      "author": "ethan@zigbang.com"
+    }
+  }
+}
