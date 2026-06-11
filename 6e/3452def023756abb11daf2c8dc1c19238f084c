@@ -1,0 +1,19 @@
+Sources/MeetingRescue/ContentView.swift
+  h_d82ccb34241a0d 52-67,139,871-879,917-918,920,933-941,943-944,950-953,955-956
+Sources/MeetingRescueCore/LocalGlossaryTranscriptRenderer.swift
+  h_d82ccb34241a0d 1-154
+Tests/MeetingRescueCoreTests/LocalGlossaryMatcherTests.swift
+  h_d82ccb34241a0d 65-108
+Tests/MeetingRescueTests/ContentViewContextWiringTests.swift
+  h_d82ccb34241a0d 126-144
+---
+{
+  "schema_version": "zax-attestation/1.1.0",
+  "base_commit_sha": "6e3452def023756abb11daf2c8dc1c19238f084c",
+  "prompts": {},
+  "humans": {
+    "h_d82ccb34241a0d": {
+      "author": "ethan@zigbang.com"
+    }
+  }
+}
