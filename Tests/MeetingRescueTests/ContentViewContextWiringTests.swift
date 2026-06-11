@@ -105,6 +105,24 @@ struct ContentViewContextWiringTests {
         #expect(selectable.contains("scrollToLine"))
     }
 
+    @Test("raw transcript exposes selected text glossary registration sheet")
+    func rawTranscriptExposesSelectedTextGlossaryRegistrationSheet() throws {
+        let sourceURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent("Sources/MeetingRescue/ContentView.swift")
+        let source = try String(contentsOf: sourceURL, encoding: .utf8)
+
+        #expect(source.contains("@State private var selectedRawTranscriptGlossaryText"))
+        #expect(source.contains("@State private var glossarySelectionSheet"))
+        #expect(source.contains("SelectableTranscriptTextView("))
+        #expect(source.contains("LocalGlossaryManualSelection.sanitizedText"))
+        #expect(source.contains("선택한 텍스트"))
+        #expect(source.contains("새 용어로 등록"))
+        #expect(source.contains("기존 용어 alias로 추가"))
+        #expect(source.contains("LocalGlossarySelectionSheet"))
+        #expect(source.contains("viewModel.addManualLocalGlossaryTerm"))
+        #expect(source.contains("viewModel.addManualLocalGlossaryAlias"))
+    }
+
     @Test("wide intelligence header stacks tabs without wrapping title")
     func wideIntelligenceHeaderStacksTabsWithoutWrappingTitle() throws {
         let sourceURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)

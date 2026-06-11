@@ -44,6 +44,11 @@ private struct EditingCandidate: Equatable {
     var id: String
 }
 
+private struct LocalGlossarySelectionSheetModel: Identifiable, Equatable {
+    var id = UUID()
+    var selectedText: String
+}
+
 private enum AdaptivePane: CaseIterable, Hashable {
     case meetings
     case intelligence
@@ -113,6 +118,8 @@ struct ContentView: View {
     @State private var isParticipantsPopoverPresented = false
     @State private var manuallyCollapsedPanes: Set<AdaptivePane> = []
     @State private var activeOverlayPane: AdaptivePane?
+    @State private var selectedRawTranscriptGlossaryText = ""
+    @State private var glossarySelectionSheet: LocalGlossarySelectionSheetModel?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -142,6 +149,32 @@ struct ContentView: View {
         }
         .sheet(item: $selectedAnalysisAttempt) { attempt in
             AnalysisAttemptDetailView(attempt: attempt)
+        }
+        .sheet(item: $glossarySelectionSheet) { model in
+            LocalGlossarySelectionSheet(
+                selectedText: model.selectedText,
+                terms: viewModel.localGlossaryState.terms,
+                onAddNew: { canonical, category in
+                    viewModel.addManualLocalGlossaryTerm(
+                        selectedText: model.selectedText,
+                        canonical: canonical,
+                        category: category
+                    )
+                    glossarySelectionSheet = nil
+                    selectedRawTranscriptGlossaryText = ""
+                },
+                onAddAlias: { termID in
+                    viewModel.addManualLocalGlossaryAlias(
+                        selectedText: model.selectedText,
+                        toTermID: termID
+                    )
+                    glossarySelectionSheet = nil
+                    selectedRawTranscriptGlossaryText = ""
+                },
+                onCancel: {
+                    glossarySelectionSheet = nil
+                }
+            )
         }
         .sheet(
             isPresented: Binding(
@@ -855,25 +888,19 @@ struct ContentView: View {
     }
 
     private var rawTranscriptScroll: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                rawTranscriptLineList
-                rawTranscriptGlossaryFooter
-                Color.clear
-                    .frame(height: 1)
-                    .id("bottom")
-            }
-            .background(Color.smoothSurface)
-            .onChange(of: viewModel.rawTranscriptRevision) {
-                proxy.scrollTo("bottom", anchor: .bottom)
-            }
-            .onChange(of: viewModel.transcriptFocusRequest) { _, request in
-                guard let request else {
-                    return
+        VStack(spacing: 0) {
+            SelectableTranscriptTextView(
+                text: viewModel.rawTranscript,
+                revision: viewModel.rawTranscriptRevision,
+                focusLineID: viewModel.highlightedTranscriptLineID,
+                onSelectionChange: { selectedText in
+                    selectedRawTranscriptGlossaryText = LocalGlossaryManualSelection.sanitizedText(selectedText)
                 }
-                proxy.scrollTo(request.lineID, anchor: .center)
-            }
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            rawTranscriptGlossaryFooter
         }
+        .background(Color.smoothSurface)
     }
 
     private var rawTranscriptGlossaryFooter: some View {
@@ -884,6 +911,17 @@ struct ContentView: View {
                     .foregroundStyle(Color.smoothMuted)
             }
             Spacer(minLength: 0)
+            if LocalGlossaryManualSelection.isValid(selectedRawTranscriptGlossaryText) {
+                Button {
+                    glossarySelectionSheet = LocalGlossarySelectionSheetModel(
+                        selectedText: selectedRawTranscriptGlossaryText
+                    )
+                } label: {
+                    Label("선택한 텍스트", systemImage: "text.badge.plus")
+                }
+                .buttonStyle(.borderless)
+                .help("Raw Transcript에서 선택한 텍스트를 용어 사전에 등록")
+            }
             Button {
                 intelligenceMode = .glossary
                 withAnimation(.easeInOut(duration: 0.16)) {
@@ -4615,6 +4653,122 @@ private struct MarkdownReadinessPreviewSheet: View {
         .padding(20)
         .frame(width: 460)
         .background(Color.smoothCanvas)
+    }
+}
+
+private struct LocalGlossarySelectionSheet: View {
+    let selectedText: String
+    let terms: [LocalGlossaryTerm]
+    let onAddNew: (String, LocalGlossaryCategory) -> Void
+    let onAddAlias: (String) -> Void
+    let onCancel: () -> Void
+
+    @State private var canonical: String
+    @State private var category: LocalGlossaryCategory = .domainTerm
+    @State private var selectedTermID: String
+
+    init(
+        selectedText: String,
+        terms: [LocalGlossaryTerm],
+        onAddNew: @escaping (String, LocalGlossaryCategory) -> Void,
+        onAddAlias: @escaping (String) -> Void,
+        onCancel: @escaping () -> Void
+    ) {
+        self.selectedText = selectedText
+        self.terms = terms
+        self.onAddNew = onAddNew
+        self.onAddAlias = onAddAlias
+        self.onCancel = onCancel
+        _canonical = State(initialValue: selectedText)
+        _selectedTermID = State(initialValue: Self.recommendedTermID(for: selectedText, terms: terms))
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Label("선택한 텍스트", systemImage: "text.badge.plus")
+                    .font(.headline)
+                Spacer()
+                Button("닫기") {
+                    onCancel()
+                }
+                .buttonStyle(.borderless)
+            }
+
+            Text(selectedText)
+                .font(.system(.body, design: .monospaced))
+                .foregroundStyle(Color.smoothInk)
+                .padding(10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.smoothSurface, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("새 용어로 등록")
+                    .font(.subheadline.weight(.semibold))
+                TextField("대표 용어", text: $canonical)
+                    .textFieldStyle(.roundedBorder)
+                Picker("유형", selection: $category) {
+                    ForEach(LocalGlossaryCategory.allCases) { value in
+                        Text(value.displayName).tag(value)
+                    }
+                }
+                HStack {
+                    Spacer()
+                    Button {
+                        onAddNew(canonical.trimmingCharacters(in: .whitespacesAndNewlines), category)
+                    } label: {
+                        Label("새 용어로 등록", systemImage: "plus.circle")
+                    }
+                    .buttonStyle(SmoothActionButtonStyle())
+                    .disabled(!LocalGlossaryManualSelection.isValid(canonical))
+                }
+            }
+
+            if !terms.isEmpty {
+                Divider()
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("기존 용어 alias로 추가")
+                        .font(.subheadline.weight(.semibold))
+                    Picker("기존 용어", selection: $selectedTermID) {
+                        ForEach(Self.sortedTerms(for: selectedText, terms: terms)) { term in
+                            Text(term.canonical).tag(term.id)
+                        }
+                    }
+                    HStack {
+                        Spacer()
+                        Button {
+                            onAddAlias(selectedTermID)
+                        } label: {
+                            Label("기존 용어 alias로 추가", systemImage: "link.badge.plus")
+                        }
+                        .buttonStyle(.borderless)
+                        .disabled(selectedTermID.isEmpty)
+                    }
+                }
+            }
+        }
+        .padding(20)
+        .frame(width: 480)
+        .background(Color.smoothCanvas)
+    }
+
+    private static func recommendedTermID(for selectedText: String, terms: [LocalGlossaryTerm]) -> String {
+        sortedTerms(for: selectedText, terms: terms).first?.id ?? ""
+    }
+
+    private static func sortedTerms(for selectedText: String, terms: [LocalGlossaryTerm]) -> [LocalGlossaryTerm] {
+        let selected = MeetingHistorySearch.compactNormalize(selectedText)
+        return terms.sorted { lhs, rhs in
+            let lhsValues = lhs.allMatchValues.map(MeetingHistorySearch.compactNormalize)
+            let rhsValues = rhs.allMatchValues.map(MeetingHistorySearch.compactNormalize)
+            let lhsScore = lhsValues.contains { $0.contains(selected) || selected.contains($0) } ? 1 : 0
+            let rhsScore = rhsValues.contains { $0.contains(selected) || selected.contains($0) } ? 1 : 0
+            if lhsScore != rhsScore {
+                return lhsScore > rhsScore
+            }
+            return lhs.canonical.localizedStandardCompare(rhs.canonical) == .orderedAscending
+        }
     }
 }
 
