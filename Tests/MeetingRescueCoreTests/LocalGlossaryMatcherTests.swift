@@ -62,6 +62,50 @@ struct LocalGlossaryMatcherTests {
         #expect(value.contains("jecks"))
     }
 
+    @Test("transcript renderer shows canonical glossary terms without changing raw text")
+    func transcriptRendererShowsCanonicalTermsWithoutChangingRawText() throws {
+        let state = LocalGlossaryState(terms: [
+            LocalGlossaryTerm(
+                id: "term-ios",
+                canonical: "iOS",
+                aliases: ["아이오에스", "아이유에스"],
+                category: .acronym
+            ),
+            LocalGlossaryTerm(
+                id: "term-workflow",
+                canonical: "워크플로우",
+                aliases: ["워크 플로"],
+                category: .domainTerm
+            )
+        ])
+        let rawTranscript = "[00:10] Ethan: 아이오에스 지표와 워크 플로를 봅니다."
+
+        let rendered = LocalGlossaryTranscriptRenderer.render(rawTranscript, state: state)
+
+        #expect(rawTranscript.contains("아이오에스"))
+        #expect(rendered.text.contains("iOS 지표와 워크플로우를 봅니다."))
+        #expect(rendered.replacementCount == 2)
+        #expect(rendered.replacements.map(\.alias) == ["아이오에스", "워크 플로"])
+        #expect(rendered.replacements.map(\.canonical) == ["iOS", "워크플로우"])
+    }
+
+    @Test("transcript renderer prefers longer aliases first")
+    func transcriptRendererPrefersLongerAliasesFirst() {
+        let state = LocalGlossaryState(terms: [
+            LocalGlossaryTerm(
+                id: "term-oneovil",
+                canonical: "원오빌",
+                aliases: ["원오", "워너비"],
+                category: .project
+            )
+        ])
+
+        let rendered = LocalGlossaryTranscriptRenderer.render("워너비 지표와 원오 논의", state: state)
+
+        #expect(rendered.text == "원오빌 지표와 원오빌 논의")
+        #expect(rendered.replacementCount == 2)
+    }
+
     @Test("prepared matcher can skip evidence for search index paths")
     func preparedMatcherCanSkipEvidenceForSearchIndexPaths() {
         let state = LocalGlossaryState(terms: [

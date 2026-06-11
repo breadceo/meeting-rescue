@@ -123,6 +123,25 @@ struct ContentViewContextWiringTests {
         #expect(source.contains("viewModel.addManualLocalGlossaryAlias"))
     }
 
+    @Test("raw transcript exposes glossary applied display toggle")
+    func rawTranscriptExposesGlossaryAppliedDisplayToggle() throws {
+        let sourceURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent("Sources/MeetingRescue/ContentView.swift")
+        let source = try String(contentsOf: sourceURL, encoding: .utf8)
+        let rawScroll = try #require(source.slice(from: "private var rawTranscriptScroll", to: "private var rawTranscriptGlossaryFooter"))
+        let header = try #require(source.slice(from: "private var rawTranscriptHeader", to: "private var momentMarkerTranscriptMenu"))
+
+        #expect(source.contains("private enum TranscriptDisplayMode"))
+        #expect(source.contains("@State private var transcriptDisplayMode"))
+        #expect(header.contains("Picker(\"Transcript view\""))
+        #expect(header.contains("원문"))
+        #expect(source.contains("용어 적용"))
+        #expect(header.contains("mode.displayName"))
+        #expect(rawScroll.contains("LocalGlossaryTranscriptRenderer.render"))
+        #expect(rawScroll.contains("renderedTranscript.text"))
+        #expect(source.contains("replacementCount"))
+    }
+
     @Test("wide intelligence header stacks tabs without wrapping title")
     func wideIntelligenceHeaderStacksTabsWithoutWrappingTitle() throws {
         let sourceURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)

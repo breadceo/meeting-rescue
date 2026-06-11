@@ -49,6 +49,22 @@ private struct LocalGlossarySelectionSheetModel: Identifiable, Equatable {
     var selectedText: String
 }
 
+private enum TranscriptDisplayMode: String, CaseIterable, Identifiable {
+    case raw
+    case glossaryApplied
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .raw:
+            return "원문"
+        case .glossaryApplied:
+            return "용어 적용"
+        }
+    }
+}
+
 private enum AdaptivePane: CaseIterable, Hashable {
     case meetings
     case intelligence
@@ -120,6 +136,7 @@ struct ContentView: View {
     @State private var activeOverlayPane: AdaptivePane?
     @State private var selectedRawTranscriptGlossaryText = ""
     @State private var glossarySelectionSheet: LocalGlossarySelectionSheetModel?
+    @State private var transcriptDisplayMode: TranscriptDisplayMode = .raw
 
     var body: some View {
         VStack(spacing: 0) {
@@ -851,6 +868,15 @@ struct ContentView: View {
                 .font(.caption)
                 .foregroundStyle(Color.smoothMuted)
 
+            Picker("Transcript view", selection: $transcriptDisplayMode) {
+                ForEach(TranscriptDisplayMode.allCases) { mode in
+                    Text(mode.displayName).tag(mode)
+                }
+            }
+            .pickerStyle(.segmented)
+            .frame(width: 142)
+            .help("원문과 용어 사전이 적용된 표시를 전환")
+
             if viewModel.shouldShowMomentMarker {
                 momentMarkerTranscriptMenu
             }
@@ -888,9 +914,10 @@ struct ContentView: View {
     }
 
     private var rawTranscriptScroll: some View {
-        VStack(spacing: 0) {
+        let renderedTranscript = displayedTranscript
+        return VStack(spacing: 0) {
             SelectableTranscriptTextView(
-                text: viewModel.rawTranscript,
+                text: renderedTranscript.text,
                 revision: viewModel.rawTranscriptRevision,
                 focusLineID: viewModel.highlightedTranscriptLineID,
                 onSelectionChange: { selectedText in
@@ -903,15 +930,30 @@ struct ContentView: View {
         .background(Color.smoothSurface)
     }
 
+    private var displayedTranscript: LocalGlossaryRenderedTranscript {
+        switch transcriptDisplayMode {
+        case .raw:
+            return LocalGlossaryRenderedTranscript(text: viewModel.rawTranscript, replacements: [])
+        case .glossaryApplied:
+            return LocalGlossaryTranscriptRenderer.render(viewModel.rawTranscript, state: viewModel.localGlossaryState)
+        }
+    }
+
     private var rawTranscriptGlossaryFooter: some View {
-        HStack(spacing: 8) {
+        let renderedTranscript = displayedTranscript
+        return HStack(spacing: 8) {
             Label("용어 후보 \(viewModel.localGlossarySuggestionCount)개", systemImage: "text.book.closed")
             if viewModel.activeLocalGlossaryMatchCount > 0 {
                 Text("힌트 \(viewModel.activeLocalGlossaryMatchCount)개 적용 중")
                     .foregroundStyle(Color.smoothMuted)
             }
+            if transcriptDisplayMode == .glossaryApplied {
+                Text("용어 적용 \(renderedTranscript.replacementCount)개")
+                    .foregroundStyle(Color.smoothMuted)
+            }
             Spacer(minLength: 0)
-            if LocalGlossaryManualSelection.isValid(selectedRawTranscriptGlossaryText) {
+            if transcriptDisplayMode == .raw,
+               LocalGlossaryManualSelection.isValid(selectedRawTranscriptGlossaryText) {
                 Button {
                     glossarySelectionSheet = LocalGlossarySelectionSheetModel(
                         selectedText: selectedRawTranscriptGlossaryText
