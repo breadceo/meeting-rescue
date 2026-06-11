@@ -8,30 +8,32 @@
     <description>Meeting Rescue release updates.</description>
     <language>ko</language>
     <item>
-      <title>Meeting Rescue 0.1.16</title>
+      <title>Meeting Rescue 0.1.17</title>
       <description><![CDATA[
-        <h2>Meeting Rescue v0.1.16</h2>
+        <h2>Meeting Rescue v0.1.17</h2>
         <ul>
-        <li>Google Calendar API 직접 연결을 추가해 현재 회의와 겹치는 캘린더 일정을 컨텍스트로 가져올 수 있게 했습니다.</li>
-        <li>Test Run에서도 저장된 Calendar context snapshot을 재사용해 실제 회의 없이 캘린더 컨텍스트 반영 흐름을 검증할 수 있게 했습니다.</li>
-        <li>컨텍스트 탭을 다시 열고, 사용자에게 불필요한 Google Calendar MCP 메뉴는 숨긴 상태로 정리했습니다.</li>
-        <li>회의실/room code/title 매칭을 보강해 반복 회의와 관련 회의 연결의 정확도를 높였습니다.</li>
-        <li>가장 잘 맞는 캘린더 후보가 명확하면 기본으로 선택하고, room code 충돌이나 애매한 후보는 수동 선택으로 남기도록 했습니다.</li>
+        <li>기존 raw transcript history에서 로컬 용어 후보를 찾고 검토할 수 있는 용어집 워크플로우를 추가했습니다.</li>
+        <li>Meeting Intelligence에 `용어` 탭을 추가해 후보를 새 용어로 등록하거나 기존 용어의 alias로 연결할 수 있게 했습니다.</li>
+        <li>Raw Transcript에서 텍스트를 직접 선택해 로컬 용어집에 등록할 수 있게 했습니다.</li>
+        <li>Transcript 표시를 `원문`과 `용어 적용` 보기로 전환할 수 있게 해 전사 오류가 보정된 문맥을 바로 비교할 수 있게 했습니다.</li>
+        <li>로컬 용어집을 분석 prompt와 검색 인덱스에 낮은 우선순위 힌트로 반영해 요약/검색 품질 개선을 검증할 수 있게 했습니다.</li>
+        <li>용어 후보 스캔의 진행 상태와 진단 로그, offline scoring runner, glossary 적용 전/후 A/B runner를 추가해 품질 검증을 반복할 수 있게 했습니다.</li>
+        <li>좁은 화면과 중간 폭 화면에서 Raw Transcript와 Meeting Intelligence 헤더가 깨지지 않도록 레이아웃을 정리했습니다.</li>
         </ul>
-        <p><a href="https://github.com/breadceo/meeting-rescue/releases/tag/v0.1.16">Release notes</a></p>
+        <p><a href="https://github.com/breadceo/meeting-rescue/releases/tag/v0.1.17">Release notes</a></p>
       ]]></description>
-      <pubDate>Tue, 09 Jun 2026 16:56:10 +0900</pubDate>
-      <sparkle:version>77</sparkle:version>
-      <sparkle:shortVersionString>0.1.16</sparkle:shortVersionString>
+      <pubDate>Thu, 11 Jun 2026 21:27:03 +0900</pubDate>
+      <sparkle:version>109</sparkle:version>
+      <sparkle:shortVersionString>0.1.17</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
       <enclosure
-        url="https://github.com/breadceo/meeting-rescue/releases/download/v0.1.16/Meeting-Rescue-v0.1.16-notarized.dmg"
-        sparkle:edSignature="HYi893CACX3sZFdX6KZztEfNmWwO0YV/ZwxtZbARK/+O6jjWQ93iQymu7rEEuVZihmVCFpNTA/V/885nh/gVAA==" length="7141146"
+        url="https://github.com/breadceo/meeting-rescue/releases/download/v0.1.17/Meeting-Rescue-v0.1.17-notarized.dmg"
+        sparkle:edSignature="l3cYiAeVADgymlmYLOJoA7GahnwuGVSqECEh4Bp7VaU5S5Z41iXgZtbdf2uYLtqJaMNfvGPPyoI7+ZpB3qOcDA==" length="7754653"
         type="application/x-apple-diskimage" />
     </item>
   </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: E3F7io93tAWKBb3yQj7fj6RR5p/Oim3LwIut/Tvlc+rfgFRhxlWFam/QgMOxgivA38OubvMk9ytyR6Y9220EBg==
-length: 2080
+edSignature: +NXYnSj32/PXA5cIE+igQ8X2DGQB132+4nkRFt3cvoS75FCbPQktfeayO7Bac70FlcWM/XxCA71aJ1VIur0TAg==
+length: 2434
 -->
