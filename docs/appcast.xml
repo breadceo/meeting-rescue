@@ -8,32 +8,27 @@
     <description>Meeting Rescue release updates.</description>
     <language>ko</language>
     <item>
-      <title>Meeting Rescue 0.1.17</title>
+      <title>Meeting Rescue 0.1.18</title>
       <description><![CDATA[
-        <h2>Meeting Rescue v0.1.17</h2>
+        <h2>Meeting Rescue v0.1.18</h2>
         <ul>
-        <li>기존 raw transcript history에서 로컬 용어 후보를 찾고 검토할 수 있는 용어집 워크플로우를 추가했습니다.</li>
-        <li>Meeting Intelligence에 `용어` 탭을 추가해 후보를 새 용어로 등록하거나 기존 용어의 alias로 연결할 수 있게 했습니다.</li>
-        <li>Raw Transcript에서 텍스트를 직접 선택해 로컬 용어집에 등록할 수 있게 했습니다.</li>
-        <li>Transcript 표시를 `원문`과 `용어 적용` 보기로 전환할 수 있게 해 전사 오류가 보정된 문맥을 바로 비교할 수 있게 했습니다.</li>
-        <li>로컬 용어집을 분석 prompt와 검색 인덱스에 낮은 우선순위 힌트로 반영해 요약/검색 품질 개선을 검증할 수 있게 했습니다.</li>
-        <li>용어 후보 스캔의 진행 상태와 진단 로그, offline scoring runner, glossary 적용 전/후 A/B runner를 추가해 품질 검증을 반복할 수 있게 했습니다.</li>
-        <li>좁은 화면과 중간 폭 화면에서 Raw Transcript와 Meeting Intelligence 헤더가 깨지지 않도록 레이아웃을 정리했습니다.</li>
+        <li>긴 transcript에서 `용어 적용` 보기로 전환했을 때 CPU 사용량이 크게 오를 수 있던 문제를 수정했습니다.</li>
+        <li>용어 적용 transcript 렌더링을 캐시하고, 텍스트 뷰 갱신 시 긴 문자열 전체 비교를 반복하지 않도록 개선했습니다.</li>
         </ul>
-        <p><a href="https://github.com/breadceo/meeting-rescue/releases/tag/v0.1.17">Release notes</a></p>
+        <p><a href="https://github.com/breadceo/meeting-rescue/releases/tag/v0.1.18">Release notes</a></p>
       ]]></description>
-      <pubDate>Thu, 11 Jun 2026 21:27:03 +0900</pubDate>
-      <sparkle:version>109</sparkle:version>
-      <sparkle:shortVersionString>0.1.17</sparkle:shortVersionString>
+      <pubDate>Thu, 11 Jun 2026 21:56:17 +0900</pubDate>
+      <sparkle:version>112</sparkle:version>
+      <sparkle:shortVersionString>0.1.18</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
       <enclosure
-        url="https://github.com/breadceo/meeting-rescue/releases/download/v0.1.17/Meeting-Rescue-v0.1.17-notarized.dmg"
-        sparkle:edSignature="l3cYiAeVADgymlmYLOJoA7GahnwuGVSqECEh4Bp7VaU5S5Z41iXgZtbdf2uYLtqJaMNfvGPPyoI7+ZpB3qOcDA==" length="7754653"
+        url="https://github.com/breadceo/meeting-rescue/releases/download/v0.1.18/Meeting-Rescue-v0.1.18-notarized.dmg"
+        sparkle:edSignature="9o2Xm9/Mgnmh4Ib1w3lHLrOQyjNQlkVsjk0/V7yTQh2x3cxdD3tyMwfy7cjm+b6OBOiihcwR2V4tkCGRji6rBg==" length="7778428"
         type="application/x-apple-diskimage" />
     </item>
   </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: +NXYnSj32/PXA5cIE+igQ8X2DGQB132+4nkRFt3cvoS75FCbPQktfeayO7Bac70FlcWM/XxCA71aJ1VIur0TAg==
-length: 2434
+edSignature: 9L79QhQq4Lgl1nvUx/TOGLj23py7083cSwBzPQKADbZ4+oIzeqTm7z0Cf9SldVnQZN7h+DMl4TSOBK7wBjWgAg==
+length: 1590
 -->
