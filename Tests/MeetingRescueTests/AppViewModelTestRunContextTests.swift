@@ -251,6 +251,57 @@ struct AppViewModelTestRunContextTests {
         #expect(source.contains("func markLocalGlossaryReviewCandidateAsNotSame"))
         #expect(source.contains("func dismissLocalGlossaryReviewCandidate"))
     }
+
+    @Test("view model adds selected raw transcript text as a manual glossary term")
+    @MainActor
+    func viewModelAddsSelectedTranscriptTextAsManualGlossaryTerm() throws {
+        let rootURL = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("meeting-rescue-manual-glossary-\(UUID().uuidString)", isDirectory: true)
+        defer {
+            try? FileManager.default.removeItem(at: rootURL)
+        }
+        let stateStore = ApplicationStateStore(rootURL: rootURL.appendingPathComponent("state", isDirectory: true))
+        let viewModel = AppViewModel(stateStore: stateStore)
+
+        viewModel.rawTranscript = "Ethan: 워크 플로 쪽을 다시 보겠습니다."
+        viewModel.addManualLocalGlossaryTerm(
+            selectedText: "워크 플로",
+            canonical: "워크플로우",
+            category: .domainTerm
+        )
+
+        let term = try #require(viewModel.localGlossaryState.terms.first)
+        #expect(term.canonical == "워크플로우")
+        #expect(term.aliases.contains("워크 플로"))
+        #expect(term.source == .manualSelection)
+        #expect(viewModel.localGlossaryStatusMessage.contains("Raw Transcript"))
+    }
+
+    @Test("view model adds selected raw transcript text as alias to existing term")
+    @MainActor
+    func viewModelAddsSelectedTranscriptTextAsAlias() throws {
+        let rootURL = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("meeting-rescue-manual-glossary-alias-\(UUID().uuidString)", isDirectory: true)
+        defer {
+            try? FileManager.default.removeItem(at: rootURL)
+        }
+        let stateStore = ApplicationStateStore(rootURL: rootURL.appendingPathComponent("state", isDirectory: true))
+        let viewModel = AppViewModel(stateStore: stateStore)
+
+        viewModel.localGlossaryState = LocalGlossaryState(terms: [
+            LocalGlossaryTerm(
+                id: "term-ios",
+                canonical: "iOS",
+                aliases: ["아이오에스"],
+                category: .acronym
+            )
+        ])
+        viewModel.addManualLocalGlossaryAlias(selectedText: "아이유에스", toTermID: "term-ios")
+
+        let term = try #require(viewModel.localGlossaryState.terms.first)
+        #expect(term.aliases.contains("아이유에스"))
+        #expect(viewModel.localGlossaryStatusMessage.contains("alias"))
+    }
 }
 
 private extension String {

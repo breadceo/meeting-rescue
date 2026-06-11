@@ -1732,6 +1732,39 @@ final class AppViewModel: ObservableObject {
         localGlossaryStatusMessage = "용어 후보를 숨겼습니다."
     }
 
+    func addManualLocalGlossaryTerm(
+        selectedText: String,
+        canonical: String,
+        category: LocalGlossaryCategory = .domainTerm
+    ) {
+        guard localGlossaryState.addManualSelectionTerm(
+            selectedText: selectedText,
+            canonical: canonical,
+            category: category
+        ) != nil else {
+            localGlossaryStatusMessage = "선택한 텍스트를 용어로 추가할 수 없습니다."
+            return
+        }
+        try? stateStore.saveLocalGlossaryState(localGlossaryState)
+        localGlossaryStatusMessage = "Raw Transcript 선택을 용어 사전에 추가했습니다."
+        refreshActiveLocalGlossaryMatchCountIfNeeded()
+        refreshMeetingHistory(force: true)
+    }
+
+    func addManualLocalGlossaryAlias(
+        selectedText: String,
+        toTermID termID: String
+    ) {
+        guard localGlossaryState.addManualSelectionAlias(selectedText: selectedText, toTermID: termID) else {
+            localGlossaryStatusMessage = "선택한 텍스트를 alias로 추가할 수 없습니다."
+            return
+        }
+        try? stateStore.saveLocalGlossaryState(localGlossaryState)
+        localGlossaryStatusMessage = "Raw Transcript 선택을 기존 용어 alias로 추가했습니다."
+        refreshActiveLocalGlossaryMatchCountIfNeeded()
+        refreshMeetingHistory(force: true)
+    }
+
     func acceptLocalGlossaryReviewCandidateAsNewTerm(
         id: String,
         canonical: String,
