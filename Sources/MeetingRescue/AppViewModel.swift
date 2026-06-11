@@ -238,6 +238,12 @@ private struct MeetingHistoryBuildResult: Sendable {
     let includesRawTranscriptSearch: Bool
 }
 
+private struct MeetingHistoryBuildSignatures: Sendable {
+    let fileSignature: String
+    let searchIndexFileSignature: String
+    let signature: String
+}
+
 struct MeetingSearchIndexProgress: Equatable {
     enum State: Equatable {
         case idle
@@ -407,17 +413,56 @@ private struct GoogleCalendarFetchWindow {
     var meetingEnd: Date
 }
 
+private func localGlossaryHistorySignature(
+    state: LocalGlossaryState,
+    isEnabled: Bool
+) -> String {
+    guard isEnabled else {
+        return "glossary:off"
+    }
+    let termSignature = state.enabledTerms
+        .map { term in
+            [
+                term.id,
+                term.canonical,
+                term.category.rawValue,
+                term.aliases.joined(separator: ","),
+                "\(term.updatedAt.timeIntervalSince1970)"
+            ].joined(separator: ":")
+        }
+        .joined(separator: ";")
+    return "glossary:\(termSignature)"
+}
+
 private struct MeetingHistoryBuilder: Sendable {
     let stateStore: ApplicationStateStore
     let rawTranscriptSearchLineLimit: Int
     let includeRawTranscriptSearch: Bool
+    let includeLocalGlossarySearchSections: Bool
     let searchIndexExclusionURL: URL?
     let localGlossaryState: LocalGlossaryState
     let localGlossaryEnabled: Bool
 
     func build(folderURL: URL) -> MeetingHistoryBuildResult {
+        buildIfChanged(folderURL: folderURL, previousSignature: nil)!
+    }
+
+    func buildIfChanged(
+        folderURL: URL,
+        previousSignature: String?
+    ) -> MeetingHistoryBuildResult? {
         let candidates = LatestTranscriptSelector.textFiles(in: folderURL)
-        let glossarySignature = localGlossaryEnabled ? "glossary:\(localGlossaryState.updatedAt.timeIntervalSince1970)" : "glossary:off"
+        let signatures = makeSignatures(candidates: candidates)
+        if let previousSignature, previousSignature == signatures.signature {
+            return nil
+        }
+        return build(candidates: candidates, signatures: signatures)
+    }
+
+    private func makeSignatures(candidates: [TranscriptFileCandidate]) -> MeetingHistoryBuildSignatures {
+        let glossarySignature = includeLocalGlossarySearchSections
+            ? localGlossaryHistorySignature(state: localGlossaryState, isEnabled: localGlossaryEnabled)
+            : "glossary:query-time"
         let fileSignature = candidates
             .sorted { $0.url.path < $1.url.path }
             .map { "\($0.url.path):\($0.modificationDate.timeIntervalSince1970)" }
@@ -430,6 +475,18 @@ private struct MeetingHistoryBuilder: Sendable {
             .joined(separator: "|")
         let searchIndexFileSignature = "\(glossarySignature)|\(rawSearchIndexFileSignature)"
         let signature = "\(includeRawTranscriptSearch ? "raw" : "structured")|\(glossarySignature)|\(fileSignature)"
+        return MeetingHistoryBuildSignatures(
+            fileSignature: fileSignature,
+            searchIndexFileSignature: searchIndexFileSignature,
+            signature: signature
+        )
+    }
+
+    private func build(
+        candidates: [TranscriptFileCandidate],
+        signatures: MeetingHistoryBuildSignatures
+    ) -> MeetingHistoryBuildResult {
+        let preparedGlossaryState = LocalGlossaryMatcher.PreparedState(state: localGlossaryState)
         let items = candidates
             .sorted { lhs, rhs in
                 if lhs.modificationDate == rhs.modificationDate {
@@ -437,17 +494,20 @@ private struct MeetingHistoryBuilder: Sendable {
                 }
                 return lhs.modificationDate > rhs.modificationDate
             }
-            .map(makeHistoryItem)
+            .map { makeHistoryItem(from: $0, preparedGlossaryState: preparedGlossaryState) }
         return MeetingHistoryBuildResult(
-            fileSignature: fileSignature,
-            searchIndexFileSignature: searchIndexFileSignature,
-            signature: signature,
+            fileSignature: signatures.fileSignature,
+            searchIndexFileSignature: signatures.searchIndexFileSignature,
+            signature: signatures.signature,
             items: items,
             includesRawTranscriptSearch: includeRawTranscriptSearch
         )
     }
 
-    private func makeHistoryItem(from candidate: TranscriptFileCandidate) -> MeetingHistoryItem {
+    private func makeHistoryItem(
+        from candidate: TranscriptFileCandidate,
+        preparedGlossaryState: LocalGlossaryMatcher.PreparedState
+    ) -> MeetingHistoryItem {
         let analysis = stateStore.loadAnalysisState(for: candidate.url)
         let metadata = stateStore.loadSession(for: candidate.url)?.metadata
             ?? loadMetadataPreview(from: candidate.url)
@@ -456,7 +516,8 @@ private struct MeetingHistoryBuilder: Sendable {
         let searchSections = makeHistorySearchSections(
             url: candidate.url,
             metadata: metadata,
-            snapshot: snapshot
+            snapshot: snapshot,
+            preparedGlossaryState: preparedGlossaryState
         )
         let searchIndex = searchSections.map(\.text).joined(separator: " ")
         return MeetingHistoryItem(
@@ -480,7 +541,8 @@ private struct MeetingHistoryBuilder: Sendable {
     private func makeHistorySearchSections(
         url: URL,
         metadata: MeetingMetadata,
-        snapshot: AnalysisSnapshot?
+        snapshot: AnalysisSnapshot?,
+        preparedGlossaryState: LocalGlossaryMatcher.PreparedState
     ) -> [MeetingHistorySearchSection] {
         var sections: [MeetingHistorySearchSection] = [
             .init(field: .title, text: metadata.displayTitle, weight: 92),
@@ -551,7 +613,8 @@ private struct MeetingHistoryBuilder: Sendable {
         sections.append(contentsOf: localGlossarySearchSections(
             from: sections,
             state: localGlossaryState,
-            isEnabled: localGlossaryEnabled
+            isEnabled: localGlossaryEnabled && includeLocalGlossarySearchSections,
+            preparedState: preparedGlossaryState
         ))
 
         return sections.filter { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
@@ -608,13 +671,17 @@ private struct MeetingHistoryBuilder: Sendable {
 private func localGlossarySearchSections(
     from sections: [MeetingHistorySearchSection],
     state: LocalGlossaryState,
-    isEnabled: Bool
+    isEnabled: Bool,
+    preparedState: LocalGlossaryMatcher.PreparedState
 ) -> [MeetingHistorySearchSection] {
-    guard isEnabled else {
+    guard isEnabled, !preparedState.isEmpty else {
         return []
     }
-    let sourceText = sections.map(\.text).joined(separator: "\n")
-    let matches = LocalGlossaryMatcher.matches(in: sourceText, state: state)
+    let matches = LocalGlossaryMatcher.matches(
+        in: sections,
+        preparedState: preparedState,
+        includeEvidence: false
+    )
     guard !matches.isEmpty else {
         return []
     }
@@ -746,7 +813,13 @@ final class AppViewModel: ObservableObject {
         }
     }
     @Published var liveMeetingUpdated = false
-    @Published var rawTranscript = ""
+    @Published var rawTranscript = "" {
+        didSet {
+            if rawTranscript.isEmpty {
+                resetActiveLocalGlossaryMatchCount()
+            }
+        }
+    }
     @Published var rawTranscriptPreviewLines: [String] = []
     @Published private(set) var transcriptSpeakers: [String] = []
     @Published var rawTranscriptRevision = 0
@@ -820,6 +893,8 @@ final class AppViewModel: ObservableObject {
     private var transcriptHighlightClearTask: Task<Void, Never>?
     private var transcriptFocusToken = 0
     private var historyLiveBaselineCandidate: TranscriptFileCandidate?
+    private var activeLocalGlossaryMatchSignature = ""
+    private var activeLocalGlossaryMatchTask: Task<Void, Never>?
     private let replayFallbackDelaySeconds: TimeInterval = 0.35
     private let replayMinimumDelaySeconds: TimeInterval = 0.05
     private let failedAnalysisRetryDelaySeconds = 8
@@ -951,15 +1026,87 @@ final class AppViewModel: ObservableObject {
         selectedFolderURL != nil && (activeTranscriptURL != nil || analysisState.latestSnapshot != nil)
     }
 
-    var activeLocalGlossaryMatchCount: Int {
-        guard settings.localGlossaryEnabled else {
-            return 0
-        }
-        return LocalGlossaryMatcher.matches(in: rawTranscript, state: localGlossaryState).count
-    }
+    @Published private(set) var activeLocalGlossaryMatchCount = 0
 
     var localGlossarySuggestionCount: Int {
         localGlossaryState.suggestions.count
+    }
+
+    private func refreshActiveLocalGlossaryMatchCountIfNeeded() {
+        let signature = activeLocalGlossaryMatchSignatureForCurrentState()
+        guard signature != activeLocalGlossaryMatchSignature else {
+            return
+        }
+        activeLocalGlossaryMatchTask?.cancel()
+        activeLocalGlossaryMatchTask = nil
+        activeLocalGlossaryMatchSignature = signature
+        guard settings.localGlossaryEnabled, !rawTranscript.isEmpty else {
+            activeLocalGlossaryMatchCount = 0
+            return
+        }
+        activeLocalGlossaryMatchCount = LocalGlossaryMatcher.matches(
+            in: rawTranscript,
+            state: localGlossaryState
+        ).count
+    }
+
+    private func scheduleActiveLocalGlossaryMatchCountRefresh() {
+        let signature = activeLocalGlossaryMatchSignatureForCurrentState()
+        guard signature != activeLocalGlossaryMatchSignature else {
+            return
+        }
+        activeLocalGlossaryMatchTask?.cancel()
+        activeLocalGlossaryMatchSignature = signature
+        guard settings.localGlossaryEnabled, !rawTranscript.isEmpty else {
+            activeLocalGlossaryMatchTask = nil
+            activeLocalGlossaryMatchCount = 0
+            return
+        }
+        let transcript = rawTranscript
+        let state = localGlossaryState
+        activeLocalGlossaryMatchTask = Task { @MainActor [weak self, signature, transcript, state] in
+            try? await Task.sleep(nanoseconds: 350_000_000)
+            guard !Task.isCancelled else {
+                return
+            }
+            let count = await Task.detached(priority: .utility) {
+                LocalGlossaryMatcher.matches(in: transcript, state: state).count
+            }.value
+            guard !Task.isCancelled,
+                  let self,
+                  self.activeLocalGlossaryMatchSignature == signature else {
+                return
+            }
+            self.activeLocalGlossaryMatchCount = count
+            self.activeLocalGlossaryMatchTask = nil
+        }
+    }
+
+    private func resetActiveLocalGlossaryMatchCount() {
+        activeLocalGlossaryMatchTask?.cancel()
+        activeLocalGlossaryMatchTask = nil
+        activeLocalGlossaryMatchSignature = ""
+        activeLocalGlossaryMatchCount = 0
+    }
+
+    private func activeLocalGlossaryMatchSignatureForCurrentState() -> String {
+        let termSignature = localGlossaryState.enabledTerms
+            .map { term in
+                [
+                    term.id,
+                    term.canonical,
+                    term.category.rawValue,
+                    term.aliases.joined(separator: ","),
+                    "\(term.updatedAt.timeIntervalSince1970)"
+                ].joined(separator: ":")
+            }
+            .joined(separator: ";")
+        return [
+            settings.localGlossaryEnabled ? "on" : "off",
+            "\(rawTranscriptRevision)",
+            "\(rawTranscript.count)",
+            termSignature
+        ].joined(separator: "|")
     }
 
     var historyFacetSelection: MeetingHistoryFacetSelection {
@@ -1065,23 +1212,31 @@ final class AppViewModel: ObservableObject {
         let facetSelection = historyFacetSelection
         let sortOrder = historySortOrder
         let databaseIsReady = searchIndexProgress.isReady
+        let searchQueries = localGlossarySearchQueries(for: trimmed)
         searchDatabaseQueryGeneration += 1
         let generation = searchDatabaseQueryGeneration
 
         searchDatabaseQueryTask?.cancel()
-        searchDatabaseQueryTask = Task(priority: .utility) { [weak self, searchDatabase, trimmed, items, facetSelection, sortOrder, databaseIsReady, generation] in
+        searchDatabaseQueryTask = Task(priority: .utility) { [weak self, searchDatabase, trimmed, searchQueries, items, facetSelection, sortOrder, databaseIsReady, generation] in
             let results: ([String: MeetingHistorySearchMatch], [MeetingHistorySearchResult]) = await Task.detached(priority: .utility) {
                 let databaseResults: [MeetingSearchDatabaseResult] = if databaseIsReady, let searchDatabase {
-                    (try? searchDatabase.search(query: trimmed, includeSemantic: false)) ?? []
+                    searchQueries.flatMap { query in
+                        (try? searchDatabase.search(query: query, includeSemantic: false)) ?? []
+                    }
                 } else {
                     []
                 }
                 guard !Task.isCancelled else {
                     return ([:], [])
                 }
-                let databaseMatchesByPath = Dictionary(
-                    uniqueKeysWithValues: databaseResults.map { ($0.path, $0.match) }
-                )
+                var databaseMatchesByPath: [String: MeetingHistorySearchMatch] = [:]
+                for result in databaseResults {
+                    if let existing = databaseMatchesByPath[result.path],
+                       existing.score >= result.match.score {
+                        continue
+                    }
+                    databaseMatchesByPath[result.path] = result.match
+                }
                 let filteredResults = buildMeetingHistorySearchResults(
                     items: items,
                     query: trimmed,
@@ -1106,6 +1261,48 @@ final class AppViewModel: ObservableObject {
                 self.filteredMeetingHistorySearchResults = results.1
             }
         }
+    }
+
+    private func localGlossarySearchQueries(for query: String) -> [String] {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard settings.localGlossaryEnabled, !trimmed.isEmpty else {
+            return trimmed.isEmpty ? [] : [trimmed]
+        }
+        let normalizedQuery = MeetingHistorySearch.normalize(trimmed)
+        let compactQuery = MeetingHistorySearch.compactNormalize(normalizedQuery)
+        guard !normalizedQuery.isEmpty else {
+            return [trimmed]
+        }
+
+        var values = [trimmed]
+        for term in localGlossaryState.enabledTerms {
+            let matchValues = term.allMatchValues
+            let queryMatchesTerm = matchValues.contains { value in
+                let normalizedValue = MeetingHistorySearch.normalize(value)
+                guard normalizedValue.count >= 2 else {
+                    return false
+                }
+                let compactValue = MeetingHistorySearch.compactNormalize(normalizedValue)
+                return normalizedQuery == normalizedValue
+                    || compactQuery == compactValue
+                    || normalizedQuery.contains(normalizedValue)
+                    || (compactValue.count >= 3 && compactQuery.contains(compactValue))
+            }
+            if queryMatchesTerm {
+                values.append(contentsOf: matchValues)
+            }
+        }
+
+        var seen = Set<String>()
+        return values
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .filter { value in
+                let key = MeetingHistorySearch.compactNormalize(value)
+                return seen.insert(key).inserted
+            }
+            .prefix(12)
+            .map { $0 }
     }
 
     func openHistorySearchResult(_ item: MeetingHistoryItem, anchorTimestamp: String?) {
@@ -1341,6 +1538,7 @@ final class AppViewModel: ObservableObject {
     func setLocalGlossaryEnabled(_ isEnabled: Bool) {
         settings.localGlossaryEnabled = isEnabled
         saveSettings()
+        refreshActiveLocalGlossaryMatchCountIfNeeded()
         refreshMeetingHistory(force: true)
     }
 
@@ -1524,6 +1722,7 @@ final class AppViewModel: ObservableObject {
         localGlossaryState.acceptSuggestion(id: id, canonical: canonical, category: category)
         try? stateStore.saveLocalGlossaryState(localGlossaryState)
         localGlossaryStatusMessage = "용어 사전에 추가했습니다."
+        refreshActiveLocalGlossaryMatchCountIfNeeded()
         refreshMeetingHistory(force: true)
     }
 
@@ -1541,6 +1740,7 @@ final class AppViewModel: ObservableObject {
         localGlossaryState.acceptReviewCandidateAsNewTerm(id: id, canonical: canonical, category: category)
         try? stateStore.saveLocalGlossaryState(localGlossaryState)
         localGlossaryStatusMessage = "검토 후보를 새 용어로 추가했습니다."
+        refreshActiveLocalGlossaryMatchCountIfNeeded()
         refreshMeetingHistory(force: true)
     }
 
@@ -1548,6 +1748,7 @@ final class AppViewModel: ObservableObject {
         localGlossaryState.addReviewCandidate(id: id, asAliasesToTermID: termID)
         try? stateStore.saveLocalGlossaryState(localGlossaryState)
         localGlossaryStatusMessage = "기존 용어 alias로 추가했습니다."
+        refreshActiveLocalGlossaryMatchCountIfNeeded()
         refreshMeetingHistory(force: true)
     }
 
@@ -1567,6 +1768,7 @@ final class AppViewModel: ObservableObject {
         localGlossaryState.deleteTerm(id: id)
         try? stateStore.saveLocalGlossaryState(localGlossaryState)
         localGlossaryStatusMessage = "용어를 삭제했습니다."
+        refreshActiveLocalGlossaryMatchCountIfNeeded()
         refreshMeetingHistory(force: true)
     }
 
@@ -2337,17 +2539,19 @@ final class AppViewModel: ObservableObject {
         let searchIndexExclusionURL = activeSearchIndexExclusionURL()
         let localGlossaryState = localGlossaryState
         let localGlossaryEnabled = settings.localGlossaryEnabled
-        historyRefreshTask = Task { [weak self, selectedFolderURL, stateStore, lineLimit, force, shouldIncludeRawTranscriptSearch, searchIndexExclusionURL, localGlossaryState, localGlossaryEnabled] in
+        let previousHistorySignature = force ? nil : lastHistorySignature
+        historyRefreshTask = Task { [weak self, selectedFolderURL, stateStore, lineLimit, shouldIncludeRawTranscriptSearch, searchIndexExclusionURL, localGlossaryState, localGlossaryEnabled, previousHistorySignature] in
             let result = await Task.detached(priority: .utility) {
-                MeetingHistoryBuilder(
-                    stateStore: stateStore,
-                    rawTranscriptSearchLineLimit: lineLimit,
-                    includeRawTranscriptSearch: shouldIncludeRawTranscriptSearch,
-                    searchIndexExclusionURL: searchIndexExclusionURL,
-                    localGlossaryState: localGlossaryState,
-                    localGlossaryEnabled: localGlossaryEnabled
+                    MeetingHistoryBuilder(
+                        stateStore: stateStore,
+                        rawTranscriptSearchLineLimit: lineLimit,
+                        includeRawTranscriptSearch: shouldIncludeRawTranscriptSearch,
+                        includeLocalGlossarySearchSections: false,
+                        searchIndexExclusionURL: searchIndexExclusionURL,
+                        localGlossaryState: localGlossaryState,
+                        localGlossaryEnabled: localGlossaryEnabled
                 )
-                .build(folderURL: selectedFolderURL)
+                .buildIfChanged(folderURL: selectedFolderURL, previousSignature: previousHistorySignature)
             }
             .value
 
@@ -2358,7 +2562,7 @@ final class AppViewModel: ObservableObject {
             guard !Task.isCancelled, self.selectedFolderURL == selectedFolderURL else {
                 return
             }
-            guard force || result.signature != self.lastHistorySignature else {
+            guard let result else {
                 return
             }
             self.lastHistorySignature = result.signature
@@ -2444,6 +2648,7 @@ final class AppViewModel: ObservableObject {
                         stateStore: stateStore,
                         rawTranscriptSearchLineLimit: lineLimit,
                         includeRawTranscriptSearch: true,
+                        includeLocalGlossarySearchSections: false,
                         searchIndexExclusionURL: excludedURL,
                         localGlossaryState: localGlossaryState,
                         localGlossaryEnabled: localGlossaryEnabled
@@ -2679,10 +2884,12 @@ final class AppViewModel: ObservableObject {
             sections.append(contentsOf: rawTranscriptSearchSections(from: rawPreview))
         }
 
+        let preparedGlossaryState = LocalGlossaryMatcher.PreparedState(state: localGlossaryState)
         sections.append(contentsOf: localGlossarySearchSections(
             from: sections,
             state: localGlossaryState,
-            isEnabled: settings.localGlossaryEnabled
+            isEnabled: settings.localGlossaryEnabled,
+            preparedState: preparedGlossaryState
         ))
 
         return sections.filter { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
@@ -3233,6 +3440,7 @@ final class AppViewModel: ObservableObject {
         metadata = TranscriptParser.parse(rawTranscript).metadata
         self.rawTranscript = rawTranscript
         rawTranscriptLineCount = rawTranscript.components(separatedBy: .newlines).count
+        refreshActiveLocalGlossaryMatchCountIfNeeded()
     }
 
     func analysisRequestForTesting(reason: String) -> AnalysisRequest? {
@@ -3794,6 +4002,7 @@ final class AppViewModel: ObservableObject {
         rawTranscriptPreviewLines = lines
         transcriptSpeakers = transcriptSpeakerList(from: lines)
         rawTranscriptRevision += 1
+        refreshActiveLocalGlossaryMatchCountIfNeeded()
     }
 
     private func appendTranscriptPreview(_ text: String) {
@@ -3812,6 +4021,7 @@ final class AppViewModel: ObservableObject {
         rawTranscriptLineCount = rawTranscriptPreviewLines.count
         transcriptSpeakers = transcriptSpeakerList(from: rawTranscriptPreviewLines)
         rawTranscriptRevision += 1
+        scheduleActiveLocalGlossaryMatchCountRefresh()
     }
 
     private func transcriptSpeakerList(from lines: [String]) -> [String] {

@@ -149,6 +149,50 @@ struct AppViewModelTestRunContextTests {
         #expect(request.supplementalContextSources.contains { $0.kind == .domainGlossary && $0.excerpt.contains("canonical: zax") })
     }
 
+    @Test("active local glossary match count is cached and refreshed on transcript or term changes")
+    @MainActor
+    func activeLocalGlossaryMatchCountIsCachedAndRefreshed() throws {
+        let rootURL = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("meeting-rescue-glossary-cache-\(UUID().uuidString)", isDirectory: true)
+        defer {
+            try? FileManager.default.removeItem(at: rootURL)
+        }
+
+        let stateStore = ApplicationStateStore(rootURL: rootURL.appendingPathComponent("state", isDirectory: true))
+        try stateStore.saveLocalGlossaryState(LocalGlossaryState(terms: [
+            LocalGlossaryTerm(id: "term-zax", canonical: "zax", aliases: ["jax"], category: .project)
+        ]))
+        let transcriptURL = rootURL.appendingPathComponent("meeting.txt")
+        try FileManager.default.createDirectory(at: rootURL, withIntermediateDirectories: true)
+        try "[03:12] Alex: jax workflow를 봅시다.".write(to: transcriptURL, atomically: true, encoding: .utf8)
+
+        let viewModel = AppViewModel(stateStore: stateStore)
+        viewModel.loadTranscriptForTesting(url: transcriptURL, rawTranscript: "[03:12] Alex: jax workflow를 봅시다.")
+
+        #expect(viewModel.activeLocalGlossaryMatchCount == 1)
+
+        viewModel.setLocalGlossaryEnabled(false)
+        #expect(viewModel.activeLocalGlossaryMatchCount == 0)
+
+        viewModel.setLocalGlossaryEnabled(true)
+        #expect(viewModel.activeLocalGlossaryMatchCount == 1)
+
+        viewModel.deleteLocalGlossaryTerm(id: "term-zax")
+        #expect(viewModel.activeLocalGlossaryMatchCount == 0)
+    }
+
+    @Test("active local glossary match count does not scan from a SwiftUI getter")
+    func activeLocalGlossaryMatchCountDoesNotScanFromGetter() throws {
+        let sourceURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent("Sources/MeetingRescue/AppViewModel.swift")
+        let source = try String(contentsOf: sourceURL, encoding: .utf8)
+        let declaration = try #require(source.slice(from: "@Published private(set) var activeLocalGlossaryMatchCount", to: "var localGlossarySuggestionCount"))
+
+        #expect(declaration.contains("@Published private(set) var activeLocalGlossaryMatchCount"))
+        #expect(!declaration.contains("LocalGlossaryMatcher.matches"))
+        #expect(source.contains("private func refreshActiveLocalGlossaryMatchCountIfNeeded()"))
+    }
+
     @Test("local glossary refresh scans the full selected raw transcript folder")
     func localGlossaryRefreshScansSelectedRawTranscriptFolder() throws {
         let sourceURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
@@ -170,6 +214,30 @@ struct AppViewModelTestRunContextTests {
         #expect(refresh.contains("replaceSuggestions(strict: suggestions, review: reviewCandidates)"))
         #expect(refresh.contains("reviewCandidates=\\(reviewCandidates.count)"))
         #expect(!refresh.contains("meetingHistoryItems.map"))
+    }
+
+    @Test("history and search index glossary work uses term signature and prepared matcher")
+    func historyAndSearchIndexGlossaryWorkUsesTermSignatureAndPreparedMatcher() throws {
+        let sourceURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent("Sources/MeetingRescue/AppViewModel.swift")
+        let source = try String(contentsOf: sourceURL, encoding: .utf8)
+        let builder = try #require(source.slice(from: "private struct MeetingHistoryBuilder", to: "@MainActor\nfinal class AppViewModel"))
+        let glossarySections = try #require(source.slice(from: "private func localGlossarySearchSections", to: "private extension String"))
+        let historyRefresh = try #require(source.slice(from: "private func refreshMeetingHistory", to: "private func activeSearchIndexExclusionURL"))
+        let searchIndexBuild = try #require(source.slice(from: "private func startSearchIndexBuildIfNeeded", to: "private func isTranscriptOpenForSearchIndex"))
+        let searchDatabaseRefresh = try #require(source.slice(from: "private func refreshSearchDatabaseMatches", to: "func openHistorySearchResult"))
+
+        #expect(builder.contains("localGlossaryHistorySignature"))
+        #expect(!builder.contains("localGlossaryState.updatedAt"))
+        #expect(builder.contains("buildIfChanged"))
+        #expect(historyRefresh.contains("previousHistorySignature"))
+        #expect(builder.contains("includeLocalGlossarySearchSections"))
+        #expect(builder.contains("LocalGlossaryMatcher.PreparedState"))
+        #expect(glossarySections.contains("preparedState:"))
+        #expect(glossarySections.contains("includeEvidence: false"))
+        #expect(!glossarySections.contains("sourceText"))
+        #expect(searchIndexBuild.contains("includeLocalGlossarySearchSections: false"))
+        #expect(searchDatabaseRefresh.contains("localGlossarySearchQueries(for: trimmed)"))
     }
 
     @Test("AppViewModel exposes review candidate actions")

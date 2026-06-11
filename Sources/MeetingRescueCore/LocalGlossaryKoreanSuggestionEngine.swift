@@ -423,7 +423,11 @@ public enum LocalGlossaryKoreanSuggestionEngine {
         let aliases = cluster
             .map(\.display)
             .normalizedKoreanSuggestionAliases()
+            .filter { !isNonGlossaryKoreanAlias(MeetingHistorySearch.compactNormalize($0)) }
         guard aliases.count >= 2 else {
+            return nil
+        }
+        guard looksLikeGlossaryNounCandidate(aliases: aliases, cluster: cluster) else {
             return nil
         }
         guard aliases
@@ -566,6 +570,9 @@ public enum LocalGlossaryKoreanSuggestionEngine {
         if aliases.contains(where: { isGenericPointerPhrase(MeetingHistorySearch.compactNormalize($0)) }) {
             score -= 0.60
         }
+        if aliases.contains(where: { isPredicativeKoreanCandidate(MeetingHistorySearch.compactNormalize($0)) }) {
+            score -= 0.35
+        }
         return min(1, max(0, score))
     }
 
@@ -575,6 +582,9 @@ public enum LocalGlossaryKoreanSuggestionEngine {
 
     private static func noisePenaltyForKoreanAliases(_ aliases: [String]) -> Double {
         if aliases.contains(where: { isGenericPointerPhrase(MeetingHistorySearch.compactNormalize($0)) }) {
+            return 1
+        }
+        if aliases.allSatisfy({ isPredicativeKoreanCandidate(MeetingHistorySearch.compactNormalize($0)) }) {
             return 1
         }
         if aliases.count > 4 {
@@ -696,7 +706,40 @@ public enum LocalGlossaryKoreanSuggestionEngine {
         guard !isGenericConversationalCandidate(compact) else {
             return false
         }
+        guard !isPredicativeKoreanCandidate(compact) else {
+            return false
+        }
+        guard !isNonGlossaryKoreanAlias(compact) else {
+            return false
+        }
         return true
+    }
+
+    private static func looksLikeGlossaryNounCandidate(
+        aliases: [String],
+        cluster: [KoreanPhraseCandidate]
+    ) -> Bool {
+        let compactAliases = aliases.map(MeetingHistorySearch.compactNormalize)
+        guard compactAliases.contains(where: { !isPredicativeKoreanCandidate($0) }) else {
+            return false
+        }
+        if compactAliases.contains(where: hasKoreanGlossaryNounSignal) {
+            return true
+        }
+
+        let contextValues = cluster.reduce(into: Set<String>()) { result, candidate in
+            result.formUnion(candidate.contextValues)
+        }
+        if !contextValues.intersection(koreanDomainContextTokens).isEmpty {
+            return true
+        }
+
+        return compactAliases.contains { compact in
+            compact.count >= 3
+                && !isGenericPointerPhrase(compact)
+                && !isGenericConversationalCandidate(compact)
+                && !hasWeakConversationalSuffix(compact)
+        }
     }
 
     private static func isGenericPointerPhrase(_ compact: String) -> Bool {
@@ -714,6 +757,48 @@ public enum LocalGlossaryKoreanSuggestionEngine {
     private static func isGenericConversationalCandidate(_ compact: String) -> Bool {
         koreanGenericConversationalPrefixes.contains { prefix in
             compact.hasPrefix(prefix)
+        }
+    }
+
+    private static func isNonGlossaryKoreanAlias(_ compact: String) -> Bool {
+        isGenericPointerPhrase(compact)
+            || isGenericConversationalCandidate(compact)
+            || isPredicativeKoreanCandidate(compact)
+            || hasWeakConversationalSuffix(compact)
+            || koreanGenericConversationalFragments.contains { compact.contains($0) }
+    }
+
+    private static func isPredicativeKoreanCandidate(_ compact: String) -> Bool {
+        if isGenericConversationalCandidate(compact) {
+            return true
+        }
+        guard koreanPredicativeSurfaceHints.contains(where: { compact.contains($0) }) else {
+            return false
+        }
+        if koreanPredicativeFragments.contains(where: { compact.contains($0) }) {
+            return true
+        }
+        return koreanPredicativeRoots.contains { root in
+            guard let range = compact.range(of: root) else {
+                return false
+            }
+            let suffix = String(compact[range.upperBound...])
+            guard !suffix.isEmpty else {
+                return false
+            }
+            return koreanPredicativeSuffixes.contains { suffix.hasPrefix($0) }
+        }
+    }
+
+    private static func hasKoreanGlossaryNounSignal(_ compact: String) -> Bool {
+        koreanGlossaryNounSignals.contains { signal in
+            compact.contains(signal)
+        }
+    }
+
+    private static func hasWeakConversationalSuffix(_ compact: String) -> Bool {
+        koreanWeakConversationalSuffixes.contains { suffix in
+            compact.hasSuffix(suffix)
         }
     }
 
@@ -972,14 +1057,22 @@ private let koreanStopWords: Set<String> = [
     "경우", "부분", "관련", "대한", "대해서", "때문에", "회의", "회의록", "회의실",
     "말씀", "생각", "사람", "분들", "내용", "얘기", "이야기", "질문", "답변",
     "확인", "진행", "정리", "공유", "준비", "업데이트", "문제", "이슈", "느낌",
-    "정도", "방식", "방향", "상황", "기능", "작업", "일정", "시간"
+    "정도", "방식", "방향", "상황", "기능", "작업", "일정", "시간",
+    "그다음", "그러니까", "그니까", "예를", "보면", "보니까", "가지고", "갖고",
+    "수도", "해야", "있는", "있을", "거고", "거라고", "같아서", "한번",
+    "해보려고", "해볼려고", "보여주", "보여주고", "보여줄", "기본적", "기본적인",
+    "부분이", "부분이고", "월요일", "화요일", "수요일", "목요일", "금요일", "토요일",
+    "일요일", "보려고", "볼려고", "예정", "예정이", "예정이라", "있어서",
+    "요거", "고거", "주전", "전주", "초의", "고민", "고민하고", "고민하다",
+    "없으시면", "있으시면", "가능하시면", "상황인", "상황인데"
 ]
 
 private let koreanGenericSuffixes: [String] = [
     "같아", "같고", "같은", "같긴", "같기", "같아서", "싶어", "싶기", "싶긴", "싶어서",
     "합니다", "했습니다", "있습니다", "나왔습니다", "나왔고", "필요하다", "필요하다고",
     "필요할", "필요한", "되는데", "되는지", "좋겠다", "좋겠다고", "좋을", "주시면",
-    "주세요", "만들어", "만들어서", "하는지", "있어서", "있어", "봅니다"
+    "주세요", "만들어", "만들어서", "하는지", "있어서", "있어", "봅니다",
+    "없습니다", "않습니다", "습니다"
 ]
 
 private let koreanGenericPointerPrefixes: [String] = [
@@ -993,7 +1086,68 @@ private let koreanGenericPointerSuffixes: [String] = [
 private let koreanGenericConversationalPrefixes: [String] = [
     "하고", "되어", "예를들어", "진행하", "진행해", "업데이트하", "업데이트해",
     "작업하", "요렇게", "이렇게", "그렇게", "고렇게", "나오", "가능하",
-    "들어가", "있었", "상황이", "상태입", "필요없", "필요하", "전달해", "모르겠"
+    "들어가", "들어간", "들어갈", "나온", "나올", "있었", "상황이", "상태입",
+    "필요없", "필요하", "전달해", "모르겠", "그다음", "그러니까", "그니까",
+    "그러니", "예를", "보면", "보니까", "일단은", "어쨌든", "초의", "해야",
+    "보여주", "보여지", "만들어", "가지고", "갖고", "있는거", "없는거", "하는거",
+    "있을거", "수도", "수는", "해보", "해볼", "기본적", "부분이", "같아서", "주시",
+    "얘기하", "보려고", "볼려고", "예정", "있어서", "요거", "고거", "초의",
+    "고민", "고민하", "없으시면", "있으시면", "가능하시면", "상황인", "상황인데"
+]
+
+private let koreanGenericConversationalFragments: [String] = [
+    "해야되", "해야될", "해야하", "보여주", "보여줄", "보여지", "하는거", "있는거",
+    "없는거", "있을거", "가지고있는", "갖고있는", "수도있는", "수도있을", "있기때문",
+    "없기때문", "때문", "만들어", "떨어지", "보면", "수는", "해보려고",
+    "해볼려고", "부분이고", "부분이", "같아서", "주시고", "주시기", "얘기하면",
+    "얘기하면서", "보려고", "볼려고", "예정이에", "예정이라", "있어서",
+    "요거", "고거", "주전", "초의", "고민하고", "고민하다", "없으시면",
+    "있으시면", "가능하시면", "상황인", "상황인데"
+]
+
+private let koreanPredicativeRoots: [String] = [
+    "가능", "개선", "검토", "계산", "공유", "관리", "등록", "반영", "배포", "변경",
+    "비교", "삭제", "사용", "생각", "생성", "수정", "실행", "연결", "요청", "완료",
+    "이해", "입력", "작업", "전달", "적용", "정리", "조정", "준비", "진행", "처리",
+    "추가", "출력", "통합", "확인", "확장", "협의", "호출", "만들", "중요", "얘기",
+    "노출", "고민"
+]
+
+private let koreanPredicativeSuffixes: [String] = [
+    "하", "하기", "한", "할", "함", "해", "해서", "하게", "하고", "하는", "하면", "하며", "했고",
+    "했", "해야", "하다", "된", "될", "되는", "되면", "돼", "되어", "된다", "됩", "한지",
+    "할지", "하는지", "했는지", "했을지"
+]
+
+private let koreanPredicativeSurfaceHints: [String] = [
+    "하", "한", "할", "함", "해", "했", "해야", "하는", "하면", "하며", "된", "될",
+    "되는", "되면", "돼", "되어", "됩", "하고"
+]
+
+private let koreanPredicativeFragments: [String] = [
+    "가능한", "가능할", "작업한", "작업할", "진행한", "진행할", "업데이트한", "업데이트할",
+    "공유한", "공유할", "확인한", "확인할", "정리한", "정리할", "전달한", "전달할",
+    "전달해", "반영한", "반영할", "수정한", "수정할", "변경한", "변경할", "적용한",
+    "적용할", "생성한", "생성할", "호출한", "호출할", "계산한", "계산할", "검토한",
+    "검토할", "처리한", "처리할", "배포한", "배포할", "연결한", "연결할", "추가한",
+    "추가할", "삭제한", "삭제할", "등록한", "등록할", "사용한", "사용할", "요청한",
+    "요청할", "들어간", "들어갈", "나온", "나올", "되는", "되어", "하고있는",
+    "하고있는데"
+]
+
+private let koreanWeakConversationalSuffixes: [String] = [
+    "한데", "하는데", "할지", "한지", "해서", "하게", "했고", "합니다", "됩니다",
+    "있고", "있는데", "있어서", "같은", "같고", "싶은", "싶고", "보면", "보니",
+    "봐야", "되는", "된다", "되면", "되게", "거는", "거를", "거죠", "되나",
+    "되지", "되고", "하기", "해야", "때문", "적인", "이고", "하", "해", "할",
+    "주전", "초의", "으시면", "시면", "인데"
+]
+
+private let koreanGlossaryNounSignals: [String] = [
+    "건수", "검색", "계약", "결제", "금액", "매물", "문의", "상품", "상담", "서비스",
+    "신규", "아이오에스", "안드로이드", "어드민", "오가닉", "오피스텔", "응답률", "이용금액",
+    "임대인", "전환", "전환율", "주문", "중개사", "지표", "채팅", "활성", "활성제",
+    "환불", "비율", "비중", "유저", "율", "률", "액"
 ]
 
 private let koreanDomainContextTokens: Set<String> = [

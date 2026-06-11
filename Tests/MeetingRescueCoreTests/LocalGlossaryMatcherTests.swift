@@ -61,4 +61,58 @@ struct LocalGlossaryMatcherTests {
         #expect(value.contains("zax"))
         #expect(value.contains("jecks"))
     }
+
+    @Test("prepared matcher can skip evidence for search index paths")
+    func preparedMatcherCanSkipEvidenceForSearchIndexPaths() {
+        let state = LocalGlossaryState(terms: [
+            LocalGlossaryTerm(
+                id: "term-zax",
+                canonical: "zax",
+                aliases: ["jax", "jecks"],
+                category: .project
+            )
+        ])
+        let preparedState = LocalGlossaryMatcher.PreparedState(state: state)
+
+        let matches = LocalGlossaryMatcher.matches(
+            in: "[03:12] Alex: jax workflow와 jecks 검색을 맞춥니다.",
+            preparedState: preparedState,
+            includeEvidence: false
+        )
+
+        #expect(matches.count == 1)
+        #expect(matches[0].canonical == "zax")
+        #expect(matches[0].matchedAliases == ["jax", "jecks"])
+        #expect(matches[0].evidenceExcerpts.isEmpty)
+    }
+
+    @Test("prepared matcher can scan pre-normalized search sections")
+    func preparedMatcherCanScanPreNormalizedSearchSections() {
+        let state = LocalGlossaryState(terms: [
+            LocalGlossaryTerm(
+                id: "term-zax",
+                canonical: "zax",
+                aliases: ["jax", "제이엑스"],
+                category: .project
+            )
+        ])
+        let preparedState = LocalGlossaryMatcher.PreparedState(state: state)
+        let sections = [
+            MeetingHistorySearchSection(
+                field: .rawTranscript,
+                text: "[03:12] Alex: 제이 엑스 workflow를 검색합니다.",
+                weight: 24
+            )
+        ]
+
+        let matches = LocalGlossaryMatcher.matches(
+            in: sections,
+            preparedState: preparedState
+        )
+
+        #expect(matches.count == 1)
+        #expect(matches[0].canonical == "zax")
+        #expect(matches[0].matchedAliases == ["제이엑스"])
+        #expect(matches[0].evidenceExcerpts.isEmpty)
+    }
 }
