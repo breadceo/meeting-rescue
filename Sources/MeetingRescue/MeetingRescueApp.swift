@@ -7,6 +7,7 @@ struct MeetingRescueApp: App {
 
     init() {
         _ = LocalGlossaryScoringRunner.runFromCommandLineIfRequested()
+        _ = LocalGlossaryQualityABRunner.runFromCommandLineIfRequested()
         _ = GoogleCalendarSmokeRunner.runFromCommandLineIfRequested()
         _ = CalendarQualityABRunner.runFromCommandLineIfRequested()
     }
