@@ -137,6 +137,8 @@ struct ContentView: View {
     @State private var selectedRawTranscriptGlossaryText = ""
     @State private var glossarySelectionSheet: LocalGlossarySelectionSheetModel?
     @State private var transcriptDisplayMode: TranscriptDisplayMode = .raw
+    @State private var cachedDisplayedTranscript = LocalGlossaryRenderedTranscript(text: "", replacements: [])
+    @State private var cachedDisplayedTranscriptSignature = ""
 
     var body: some View {
         VStack(spacing: 0) {
@@ -211,6 +213,18 @@ struct ContentView: View {
         }
         .onChange(of: sparkleUpdater.blockingSheetDismissalRequestID) {
             dismissBlockingSheetsForUpdate()
+        }
+        .onAppear {
+            refreshDisplayedTranscriptCacheIfNeeded()
+        }
+        .onChange(of: transcriptDisplayMode) {
+            refreshDisplayedTranscriptCacheIfNeeded()
+        }
+        .onChange(of: viewModel.rawTranscriptRevision) {
+            refreshDisplayedTranscriptCacheIfNeeded()
+        }
+        .onChange(of: viewModel.localGlossaryState.updatedAt) {
+            refreshDisplayedTranscriptCacheIfNeeded()
         }
     }
 
@@ -928,6 +942,7 @@ struct ContentView: View {
         return VStack(spacing: 0) {
             SelectableTranscriptTextView(
                 text: renderedTranscript.text,
+                textIdentity: cachedDisplayedTranscriptSignature,
                 revision: viewModel.rawTranscriptRevision,
                 focusLineID: viewModel.highlightedTranscriptLineID,
                 onSelectionChange: { selectedText in
@@ -941,12 +956,42 @@ struct ContentView: View {
     }
 
     private var displayedTranscript: LocalGlossaryRenderedTranscript {
+        cachedDisplayedTranscript
+    }
+
+    private var displayedTranscriptSignature: String {
         switch transcriptDisplayMode {
         case .raw:
-            return LocalGlossaryRenderedTranscript(text: viewModel.rawTranscript, replacements: [])
+            return [
+                transcriptDisplayMode.rawValue,
+                "\(viewModel.rawTranscriptRevision)",
+                "\(viewModel.rawTranscript.count)"
+            ].joined(separator: ":")
         case .glossaryApplied:
-            return LocalGlossaryTranscriptRenderer.render(viewModel.rawTranscript, state: viewModel.localGlossaryState)
+            return [
+                transcriptDisplayMode.rawValue,
+                "\(viewModel.rawTranscriptRevision)",
+                "\(viewModel.rawTranscript.count)",
+                "\(viewModel.localGlossaryState.updatedAt.timeIntervalSince1970)"
+            ].joined(separator: ":")
         }
+    }
+
+    private func refreshDisplayedTranscriptCacheIfNeeded() {
+        let signature = displayedTranscriptSignature
+        guard cachedDisplayedTranscriptSignature != signature else {
+            return
+        }
+        switch transcriptDisplayMode {
+        case .raw:
+            cachedDisplayedTranscript = LocalGlossaryRenderedTranscript(text: viewModel.rawTranscript, replacements: [])
+        case .glossaryApplied:
+            cachedDisplayedTranscript = LocalGlossaryTranscriptRenderer.render(
+                viewModel.rawTranscript,
+                state: viewModel.localGlossaryState
+            )
+        }
+        cachedDisplayedTranscriptSignature = signature
     }
 
     private var rawTranscriptGlossaryFooter: some View {

@@ -3,6 +3,7 @@ import SwiftUI
 
 struct SelectableTranscriptTextView: NSViewRepresentable {
     var text: String
+    var textIdentity: String
     var revision: Int
     var focusLineID: Int?
     var onSelectionChange: (String) -> Void
@@ -37,6 +38,7 @@ struct SelectableTranscriptTextView: NSViewRepresentable {
 
         scrollView.documentView = textView
         context.coordinator.textView = textView
+        context.coordinator.lastTextIdentity = textIdentity
         context.coordinator.lastRevision = revision
         return scrollView
     }
@@ -48,9 +50,10 @@ struct SelectableTranscriptTextView: NSViewRepresentable {
 
         context.coordinator.onSelectionChange = onSelectionChange
 
-        if textView.string != text {
+        if context.coordinator.lastTextIdentity != textIdentity {
             let selectedRange = textView.selectedRange()
             textView.string = text
+            context.coordinator.lastTextIdentity = textIdentity
             let textLength = (text as NSString).length
             if NSMaxRange(selectedRange) <= textLength {
                 textView.setSelectedRange(selectedRange)
@@ -70,6 +73,7 @@ struct SelectableTranscriptTextView: NSViewRepresentable {
     final class Coordinator: NSObject, NSTextViewDelegate {
         weak var textView: NSTextView?
         var onSelectionChange: (String) -> Void
+        var lastTextIdentity = ""
         var lastRevision = 0
         private var lastFocusedLineID: Int?
 

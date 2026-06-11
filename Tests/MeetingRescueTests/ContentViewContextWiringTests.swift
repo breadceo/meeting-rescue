@@ -103,6 +103,9 @@ struct ContentViewContextWiringTests {
         #expect(selectable.contains("textViewDidChangeSelection"))
         #expect(selectable.contains("onSelectionChange"))
         #expect(selectable.contains("scrollToLine"))
+        #expect(selectable.contains("textIdentity"))
+        #expect(selectable.contains("lastTextIdentity"))
+        #expect(!selectable.contains("textView.string != text"))
     }
 
     @Test("raw transcript exposes selected text glossary registration sheet")
@@ -128,11 +131,13 @@ struct ContentViewContextWiringTests {
         let sourceURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
             .appendingPathComponent("Sources/MeetingRescue/ContentView.swift")
         let source = try String(contentsOf: sourceURL, encoding: .utf8)
-        let rawScroll = try #require(source.slice(from: "private var rawTranscriptScroll", to: "private var rawTranscriptGlossaryFooter"))
+        let rawScroll = try #require(source.slice(from: "private var rawTranscriptScroll", to: "private var displayedTranscript"))
         let header = try #require(source.slice(from: "private var rawTranscriptHeader", to: "private var momentMarkerTranscriptMenu"))
 
         #expect(source.contains("private enum TranscriptDisplayMode"))
         #expect(source.contains("@State private var transcriptDisplayMode"))
+        #expect(source.contains("@State private var cachedDisplayedTranscript"))
+        #expect(source.contains("@State private var cachedDisplayedTranscriptSignature"))
         #expect(header.contains("VStack(alignment: .leading"))
         #expect(header.contains("HStack(spacing: 10)"))
         #expect(header.contains("HStack(spacing: 8)"))
@@ -141,9 +146,12 @@ struct ContentViewContextWiringTests {
         #expect(source.contains("용어 적용"))
         #expect(header.contains("mode.displayName"))
         #expect(header.contains(".labelsHidden()"))
-        #expect(rawScroll.contains("LocalGlossaryTranscriptRenderer.render"))
+        #expect(rawScroll.contains("cachedDisplayedTranscript"))
+        #expect(!rawScroll.contains("LocalGlossaryTranscriptRenderer.render"))
         #expect(rawScroll.contains("renderedTranscript.text"))
         #expect(source.contains("replacementCount"))
+        #expect(source.contains("refreshDisplayedTranscriptCacheIfNeeded"))
+        #expect(source.contains("displayedTranscriptSignature"))
     }
 
     @Test("wide intelligence header stacks tabs without wrapping title")
