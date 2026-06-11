@@ -30,12 +30,41 @@ public enum LocalGlossaryCategory: String, Codable, CaseIterable, Identifiable, 
 
 public enum LocalGlossaryTermSource: String, Codable, Sendable {
     case manual
+    case manualSelection
     case suggested
 }
 
 public enum LocalGlossaryCandidateLane: String, Codable, Sendable {
     case strict
     case review
+}
+
+public enum LocalGlossaryManualSelection {
+    public static let maximumSelectedTextLength = 80
+
+    public static func sanitizedText(_ rawText: String) -> String {
+        var value = rawText
+            .replacingOccurrences(of: "\r", with: "\n")
+            .components(separatedBy: .whitespacesAndNewlines)
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+            .trimmedGlossaryText
+
+        if let range = value.range(
+            of: #"^\[[0-9]{1,2}:[0-9]{2}(?::[0-9]{2})?\]\s*[^:]{1,40}:\s*"#,
+            options: .regularExpression
+        ) {
+            value.removeSubrange(range)
+            value = value.trimmedGlossaryText
+        }
+
+        return value
+    }
+
+    public static func isValid(_ rawText: String) -> Bool {
+        let value = sanitizedText(rawText)
+        return !value.isEmpty && value.count <= maximumSelectedTextLength
+    }
 }
 
 public struct LocalGlossaryTerm: Codable, Equatable, Identifiable, Sendable {
@@ -640,6 +669,69 @@ public struct LocalGlossaryState: Codable, Equatable, Sendable {
         reviewCandidates.removeAll { $0.id == id }
         rejectedSuggestionIDs.insert(id)
         updatedAt = Date()
+    }
+
+    @discardableResult
+    public mutating func addManualSelectionTerm(
+        selectedText rawSelectedText: String,
+        canonical rawCanonical: String,
+        category: LocalGlossaryCategory = .domainTerm
+    ) -> String? {
+        let selectedText = LocalGlossaryManualSelection.sanitizedText(rawSelectedText)
+        let canonical = LocalGlossaryManualSelection.sanitizedText(rawCanonical)
+        guard LocalGlossaryManualSelection.isValid(selectedText),
+              LocalGlossaryManualSelection.isValid(canonical) else {
+            return nil
+        }
+
+        let now = Date()
+        let newTerm = LocalGlossaryTerm(
+            canonical: canonical,
+            aliases: selectedText == canonical ? [] : [selectedText],
+            category: category,
+            note: "Raw Transcript 선택으로 추가됨",
+            source: .manualSelection,
+            createdAt: now,
+            updatedAt: now
+        )
+
+        terms.removeAll { existing in
+            MeetingHistorySearch.compactNormalize(existing.canonical) == MeetingHistorySearch.compactNormalize(newTerm.canonical)
+        }
+        terms.append(newTerm)
+        updatedAt = now
+        return newTerm.id
+    }
+
+    @discardableResult
+    public mutating func addManualSelectionAlias(
+        selectedText rawSelectedText: String,
+        toTermID termID: String
+    ) -> Bool {
+        let selectedText = LocalGlossaryManualSelection.sanitizedText(rawSelectedText)
+        guard LocalGlossaryManualSelection.isValid(selectedText),
+              let termIndex = terms.firstIndex(where: { $0.id == termID }) else {
+            return false
+        }
+
+        let canonical = terms[termIndex].canonical
+        guard MeetingHistorySearch.compactNormalize(selectedText) != MeetingHistorySearch.compactNormalize(canonical) else {
+            return false
+        }
+
+        let nextAliases = (terms[termIndex].aliases + [selectedText])
+            .normalizedGlossaryValues(excluding: [canonical])
+        guard nextAliases != terms[termIndex].aliases else {
+            return false
+        }
+
+        terms[termIndex].aliases = nextAliases
+        if terms[termIndex].source == .suggested {
+            terms[termIndex].source = .manualSelection
+        }
+        terms[termIndex].updatedAt = Date()
+        updatedAt = Date()
+        return true
     }
 
     public mutating func deleteTerm(id: String) {

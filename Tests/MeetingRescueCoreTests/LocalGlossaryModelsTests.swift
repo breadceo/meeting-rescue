@@ -307,6 +307,94 @@ struct LocalGlossaryModelsTests {
         #expect(state.rejectedSuggestionIDs.contains(candidate.id))
     }
 
+    @Test("manual glossary selection collapses whitespace and rejects oversized text")
+    func manualGlossarySelectionSanitizesText() {
+        #expect(LocalGlossaryManualSelection.sanitizedText("  워크\n플로  ") == "워크 플로")
+        #expect(LocalGlossaryManualSelection.sanitizedText("[00:12] Ethan: 아이오에스") == "아이오에스")
+        #expect(LocalGlossaryManualSelection.sanitizedText("   ").isEmpty)
+
+        let tooLong = String(repeating: "가", count: 81)
+        #expect(!LocalGlossaryManualSelection.isValid(tooLong))
+        #expect(LocalGlossaryManualSelection.isValid("워크 플로"))
+    }
+
+    @Test("manual selected text can create a new local glossary term")
+    func manualSelectionCanCreateNewTerm() throws {
+        var state = LocalGlossaryState()
+
+        let termID = state.addManualSelectionTerm(
+            selectedText: "워크 플로",
+            canonical: "워크플로우",
+            category: .domainTerm
+        )
+
+        let id = try #require(termID)
+        let term = try #require(state.terms.first(where: { $0.id == id }))
+        #expect(term.canonical == "워크플로우")
+        #expect(term.aliases == ["워크 플로"])
+        #expect(term.category == .domainTerm)
+        #expect(term.source == .manualSelection)
+    }
+
+    @Test("manual selected text identical to canonical does not duplicate alias")
+    func manualSelectionAvoidsDuplicateCanonicalAlias() throws {
+        var state = LocalGlossaryState()
+
+        _ = state.addManualSelectionTerm(
+            selectedText: "iOS",
+            canonical: "iOS",
+            category: .acronym
+        )
+
+        let term = try #require(state.terms.first)
+        #expect(term.canonical == "iOS")
+        #expect(term.aliases.isEmpty)
+    }
+
+    @Test("manual selected text can be added to existing term aliases")
+    func manualSelectionCanAddAliasToExistingTerm() throws {
+        var state = LocalGlossaryState(terms: [
+            LocalGlossaryTerm(
+                id: "term-workflow",
+                canonical: "워크플로우",
+                aliases: ["workflow"],
+                category: .product
+            )
+        ])
+
+        let didAdd = state.addManualSelectionAlias(
+            selectedText: "워크 플로",
+            toTermID: "term-workflow"
+        )
+
+        let term = try #require(state.terms.first)
+        #expect(didAdd)
+        #expect(term.aliases == ["workflow", "워크 플로"])
+    }
+
+    @Test("manual selected alias ignores invalid and duplicate values")
+    func manualSelectionAliasRejectsInvalidValues() throws {
+        var state = LocalGlossaryState(terms: [
+            LocalGlossaryTerm(
+                id: "term-ios",
+                canonical: "iOS",
+                aliases: ["아이오에스"],
+                category: .acronym
+            )
+        ])
+
+        let emptyResult = state.addManualSelectionAlias(selectedText: "   ", toTermID: "term-ios")
+        let canonicalResult = state.addManualSelectionAlias(selectedText: "iOS", toTermID: "term-ios")
+        let duplicateResult = state.addManualSelectionAlias(selectedText: "아이오에스", toTermID: "term-ios")
+
+        #expect(!emptyResult)
+        #expect(!canonicalResult)
+        #expect(!duplicateResult)
+
+        let term = try #require(state.terms.first)
+        #expect(term.aliases == ["아이오에스"])
+    }
+
     @Test("local glossary state decodes legacy JSON without review queue fields")
     func localGlossaryStateDecodesLegacyReviewQueueDefaults() throws {
         let legacyJSON = """
