@@ -193,6 +193,42 @@ struct AppViewModelTestRunContextTests {
         #expect(source.contains("private func refreshActiveLocalGlossaryMatchCountIfNeeded()"))
     }
 
+    @Test("Live Watch skips history refresh when active transcript has no appended content")
+    func liveWatchSkipsHistoryRefreshWhenTranscriptIsUnchanged() throws {
+        let sourceURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent("Sources/MeetingRescue/AppViewModel.swift")
+        let source = try String(contentsOf: sourceURL, encoding: .utf8)
+        let scanFolder = try #require(source.slice(from: "private func scanFolder()", to: "private func switchActiveTranscript"))
+        let readAppend = try #require(source.slice(from: "private func readAppendedContent", to: "private func refreshParsedState"))
+
+        #expect(scanFolder.contains("let didReadAppendedContent = readAppendedContent(from: latestURL)"))
+        #expect(scanFolder.contains("if didReadAppendedContent {\n                refreshMeetingHistory()\n            }"))
+        #expect(!scanFolder.contains("readAppendedContent(from: latestURL)\n        }\n        refreshMeetingHistory()"))
+        #expect(readAppend.contains("private func readAppendedContent(from url: URL) -> Bool"))
+        #expect(readAppend.contains("return true"))
+        #expect(readAppend.contains("return false"))
+    }
+
+    @Test("Live Watch caches latest transcript directory scan between ticks")
+    func liveWatchCachesLatestTranscriptDirectoryScanBetweenTicks() throws {
+        let sourceURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent("Sources/MeetingRescue/AppViewModel.swift")
+        let source = try String(contentsOf: sourceURL, encoding: .utf8)
+        let startWatching = try #require(source.slice(from: "func startWatching(folderURL: URL)", to: "private func ensureFolderScanTimer()"))
+        let latestCandidate = try #require(source.slice(from: "private func currentLatestTranscriptCandidate", to: "private func captureHistoryLiveBaseline"))
+        let captureBaseline = try #require(source.slice(from: "private func captureHistoryLiveBaseline", to: "private func scanFolder()"))
+
+        #expect(source.contains("latestTranscriptFullScanInterval"))
+        #expect(source.contains("cachedLatestTranscriptCandidate"))
+        #expect(source.contains("lastLatestTranscriptScanAt"))
+        #expect(startWatching.contains("cachedLatestTranscriptCandidate = nil"))
+        #expect(startWatching.contains("lastLatestTranscriptScanAt = nil"))
+        #expect(latestCandidate.contains("force: Bool = false"))
+        #expect(latestCandidate.contains("refreshCachedLatestTranscriptCandidate()"))
+        #expect(latestCandidate.contains("latestTranscriptFullScanInterval"))
+        #expect(captureBaseline.contains("currentLatestTranscriptCandidate(force: true)"))
+    }
+
     @Test("local glossary refresh scans the full selected raw transcript folder")
     func localGlossaryRefreshScansSelectedRawTranscriptFolder() throws {
         let sourceURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
@@ -238,6 +274,23 @@ struct AppViewModelTestRunContextTests {
         #expect(!glossarySections.contains("sourceText"))
         #expect(searchIndexBuild.contains("includeLocalGlossarySearchSections: false"))
         #expect(searchDatabaseRefresh.contains("localGlossarySearchQueries(for: trimmed)"))
+    }
+
+    @Test("history builder bounds eager metadata preview during idle refresh")
+    func historyBuilderBoundsEagerMetadataPreviewDuringIdleRefresh() throws {
+        let sourceURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent("Sources/MeetingRescue/AppViewModel.swift")
+        let source = try String(contentsOf: sourceURL, encoding: .utf8)
+        let builder = try #require(source.slice(from: "private struct MeetingHistoryBuilder", to: "@MainActor\nfinal class AppViewModel"))
+
+        #expect(builder.contains("eagerMetadataPreviewLimit"))
+        #expect(builder.contains(".enumerated()"))
+        #expect(builder.contains("sortedIndex: offset"))
+        #expect(builder.contains("stateStore.hasAnalysisState(for: candidate.url)"))
+        #expect(builder.contains("stateStore.hasSession(for: candidate.url)"))
+        #expect(builder.contains("shouldLoadMetadataPreview(sortedIndex: sortedIndex, analysis: analysis)"))
+        #expect(builder.contains("sortedIndex < eagerMetadataPreviewLimit"))
+        #expect(builder.contains("includeRawTranscriptSearch"))
     }
 
     @Test("AppViewModel exposes review candidate actions")

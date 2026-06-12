@@ -108,6 +108,73 @@ struct ContentViewContextWiringTests {
         #expect(!selectable.contains("textView.string != text"))
     }
 
+    @Test("selectable transcript bridge pauses live follow on manual scroll")
+    func selectableTranscriptBridgePausesLiveFollowOnManualScroll() throws {
+        let selectableURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent("Sources/MeetingRescue/SelectableTranscriptTextView.swift")
+        let selectable = try String(contentsOf: selectableURL, encoding: .utf8)
+
+        #expect(selectable.contains("scrollToBottomToken"))
+        #expect(selectable.contains("onAutoFollowChange"))
+        #expect(selectable.contains("boundsDidChangeNotification"))
+        #expect(selectable.contains("clipViewBoundsDidChange"))
+        #expect(selectable.contains("isAutoFollowEnabled"))
+        #expect(selectable.contains("isProgrammaticScroll"))
+        #expect(selectable.contains("isNearBottom"))
+        #expect(selectable.contains("scrollToBottom(enableAutoFollow: true)"))
+    }
+
+    @Test("selectable transcript keeps text layout top aligned while following append")
+    func selectableTranscriptKeepsTextLayoutTopAlignedWhileFollowingAppend() throws {
+        let selectableURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent("Sources/MeetingRescue/SelectableTranscriptTextView.swift")
+        let selectable = try String(contentsOf: selectableURL, encoding: .utf8)
+
+        #expect(selectable.contains("configureTextViewLayout"))
+        #expect(selectable.contains("CGFloat.greatestFiniteMagnitude"))
+        #expect(selectable.contains("textView.layoutManager?.ensureLayout"))
+        #expect(selectable.contains("scrollToVisibleBottom"))
+        #expect(!selectable.contains("textView.scrollToEndOfDocument(nil)"))
+    }
+
+    @Test("selectable transcript resets scroll layout when selected document changes")
+    func selectableTranscriptResetsScrollLayoutWhenSelectedDocumentChanges() throws {
+        let selectableURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent("Sources/MeetingRescue/SelectableTranscriptTextView.swift")
+        let selectable = try String(contentsOf: selectableURL, encoding: .utf8)
+        let sourceURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent("Sources/MeetingRescue/ContentView.swift")
+        let source = try String(contentsOf: sourceURL, encoding: .utf8)
+
+        #expect(selectable.contains("documentIdentity"))
+        #expect(selectable.contains("lastDocumentIdentity"))
+        #expect(selectable.contains("resetLayoutForNewDocument"))
+        #expect(selectable.contains("lastFocusedLineID = nil"))
+        #expect(selectable.contains("scrollView.contentView.scroll(to: .zero)"))
+        #expect(selectable.contains("textView.setFrameSize(NSSize(width: width, height: height))"))
+        #expect(source.contains("displayedTranscriptDocumentIdentity"))
+        #expect(source.contains("documentIdentity: displayedTranscriptDocumentIdentity"))
+        #expect(source.contains(".id(displayedTranscriptDocumentIdentity)"))
+    }
+
+    @Test("raw transcript exposes resume live follow button")
+    func rawTranscriptExposesResumeLiveFollowButton() throws {
+        let sourceURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent("Sources/MeetingRescue/ContentView.swift")
+        let source = try String(contentsOf: sourceURL, encoding: .utf8)
+        let rawScroll = try #require(source.slice(from: "private var rawTranscriptScroll", to: "private var displayedTranscript"))
+        let footer = try #require(source.slice(from: "private var rawTranscriptGlossaryFooter", to: "private var header"))
+
+        #expect(source.contains("@State private var rawTranscriptScrollToBottomToken"))
+        #expect(source.contains("@State private var isRawTranscriptAutoFollowPaused"))
+        #expect(rawScroll.contains("scrollToBottomToken: rawTranscriptScrollToBottomToken"))
+        #expect(rawScroll.contains("onAutoFollowChange"))
+        #expect(footer.contains("isRawTranscriptAutoFollowPaused"))
+        #expect(footer.contains("rawTranscriptScrollToBottomToken += 1"))
+        #expect(footer.contains("맨 아래"))
+        #expect(footer.contains("arrow.down.to.line"))
+    }
+
     @Test("raw transcript exposes selected text glossary registration sheet")
     func rawTranscriptExposesSelectedTextGlossaryRegistrationSheet() throws {
         let sourceURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
@@ -144,6 +211,8 @@ struct ContentViewContextWiringTests {
         #expect(header.contains("Picker(\"Transcript view\""))
         #expect(header.contains("원문"))
         #expect(source.contains("용어 적용"))
+        #expect(source.contains("용어 힌트"))
+        #expect(!source.contains("힌트 \\(viewModel.activeLocalGlossaryMatchCount)개 적용 중"))
         #expect(header.contains("mode.displayName"))
         #expect(header.contains(".labelsHidden()"))
         #expect(rawScroll.contains("cachedDisplayedTranscript"))

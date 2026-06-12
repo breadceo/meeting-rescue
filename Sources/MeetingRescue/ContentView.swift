@@ -139,6 +139,8 @@ struct ContentView: View {
     @State private var transcriptDisplayMode: TranscriptDisplayMode = .raw
     @State private var cachedDisplayedTranscript = LocalGlossaryRenderedTranscript(text: "", replacements: [])
     @State private var cachedDisplayedTranscriptSignature = ""
+    @State private var rawTranscriptScrollToBottomToken = 0
+    @State private var isRawTranscriptAutoFollowPaused = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -942,13 +944,19 @@ struct ContentView: View {
         return VStack(spacing: 0) {
             SelectableTranscriptTextView(
                 text: renderedTranscript.text,
+                documentIdentity: displayedTranscriptDocumentIdentity,
                 textIdentity: cachedDisplayedTranscriptSignature,
                 revision: viewModel.rawTranscriptRevision,
                 focusLineID: viewModel.highlightedTranscriptLineID,
+                scrollToBottomToken: rawTranscriptScrollToBottomToken,
                 onSelectionChange: { selectedText in
                     selectedRawTranscriptGlossaryText = LocalGlossaryManualSelection.sanitizedText(selectedText)
+                },
+                onAutoFollowChange: { isFollowing in
+                    isRawTranscriptAutoFollowPaused = !isFollowing
                 }
             )
+            .id(displayedTranscriptDocumentIdentity)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             rawTranscriptGlossaryFooter
         }
@@ -957,6 +965,13 @@ struct ContentView: View {
 
     private var displayedTranscript: LocalGlossaryRenderedTranscript {
         cachedDisplayedTranscript
+    }
+
+    private var displayedTranscriptDocumentIdentity: String {
+        [
+            transcriptDisplayMode.rawValue,
+            viewModel.activeTranscriptURL?.path(percentEncoded: false) ?? "no-transcript"
+        ].joined(separator: ":")
     }
 
     private var displayedTranscriptSignature: String {
@@ -999,12 +1014,24 @@ struct ContentView: View {
         return HStack(spacing: 8) {
             Label("용어 후보 \(viewModel.localGlossarySuggestionCount)개", systemImage: "text.book.closed")
             if viewModel.activeLocalGlossaryMatchCount > 0 {
-                Text("힌트 \(viewModel.activeLocalGlossaryMatchCount)개 적용 중")
+                Text("용어 힌트 \(viewModel.activeLocalGlossaryMatchCount)개")
                     .foregroundStyle(Color.smoothMuted)
             }
             if transcriptDisplayMode == .glossaryApplied {
                 Text("용어 적용 \(renderedTranscript.replacementCount)개")
                     .foregroundStyle(Color.smoothMuted)
+            }
+            if isRawTranscriptAutoFollowPaused {
+                Label("자동 스크롤 일시 중지", systemImage: "pause.circle")
+                    .foregroundStyle(Color.smoothMuted)
+                Button {
+                    rawTranscriptScrollToBottomToken += 1
+                    isRawTranscriptAutoFollowPaused = false
+                } label: {
+                    Label("맨 아래", systemImage: "arrow.down.to.line")
+                }
+                .buttonStyle(.borderless)
+                .help("마지막 줄로 이동하고 새 transcript append 자동 스크롤을 다시 켭니다.")
             }
             Spacer(minLength: 0)
             if transcriptDisplayMode == .raw,

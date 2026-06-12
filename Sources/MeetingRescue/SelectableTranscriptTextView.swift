@@ -3,13 +3,19 @@ import SwiftUI
 
 struct SelectableTranscriptTextView: NSViewRepresentable {
     var text: String
+    var documentIdentity: String
     var textIdentity: String
     var revision: Int
     var focusLineID: Int?
+    var scrollToBottomToken: Int
     var onSelectionChange: (String) -> Void
+    var onAutoFollowChange: (Bool) -> Void
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(onSelectionChange: onSelectionChange)
+        Coordinator(
+            onSelectionChange: onSelectionChange,
+            onAutoFollowChange: onAutoFollowChange
+        )
     }
 
     func makeNSView(context: Context) -> NSScrollView {
@@ -37,9 +43,14 @@ struct SelectableTranscriptTextView: NSViewRepresentable {
         textView.string = text
 
         scrollView.documentView = textView
+        scrollView.contentView.postsBoundsChangedNotifications = true
         context.coordinator.textView = textView
+        context.coordinator.observe(scrollView: scrollView)
+        context.coordinator.configureTextViewLayout(textView, in: scrollView)
+        context.coordinator.lastDocumentIdentity = documentIdentity
         context.coordinator.lastTextIdentity = textIdentity
         context.coordinator.lastRevision = revision
+        context.coordinator.lastScrollToBottomToken = scrollToBottomToken
         return scrollView
     }
 
@@ -49,20 +60,49 @@ struct SelectableTranscriptTextView: NSViewRepresentable {
         }
 
         context.coordinator.onSelectionChange = onSelectionChange
+        context.coordinator.onAutoFollowChange = onAutoFollowChange
+        context.coordinator.observe(scrollView: scrollView)
+        context.coordinator.configureTextViewLayout(textView, in: scrollView)
+
+        let documentDidChange = context.coordinator.lastDocumentIdentity != documentIdentity
+        if documentDidChange {
+            context.coordinator.lastDocumentIdentity = documentIdentity
+        }
 
         if context.coordinator.lastTextIdentity != textIdentity {
             let selectedRange = textView.selectedRange()
             textView.string = text
             context.coordinator.lastTextIdentity = textIdentity
-            let textLength = (text as NSString).length
-            if NSMaxRange(selectedRange) <= textLength {
-                textView.setSelectedRange(selectedRange)
+            if documentDidChange {
+                context.coordinator.resetLayoutForNewDocument(textView, in: scrollView)
+                let emptyRange = NSRange(location: 0, length: 0)
+                if textView.selectedRange() != emptyRange {
+                    textView.setSelectedRange(emptyRange)
+                }
+                context.coordinator.onSelectionChange("")
+            } else {
+                let textLength = (text as NSString).length
+                if NSMaxRange(selectedRange) <= textLength {
+                    textView.setSelectedRange(selectedRange)
+                }
             }
+        } else if documentDidChange {
+            context.coordinator.resetLayoutForNewDocument(textView, in: scrollView)
+            let emptyRange = NSRange(location: 0, length: 0)
+            if textView.selectedRange() != emptyRange {
+                textView.setSelectedRange(emptyRange)
+            }
+            context.coordinator.onSelectionChange("")
         }
 
-        if context.coordinator.lastRevision != revision {
+        if context.coordinator.lastScrollToBottomToken != scrollToBottomToken {
+            context.coordinator.lastScrollToBottomToken = scrollToBottomToken
+            context.coordinator.scrollToBottom(enableAutoFollow: true)
+        } else if context.coordinator.lastRevision != revision {
             context.coordinator.lastRevision = revision
-            textView.scrollToEndOfDocument(nil)
+            if context.coordinator.isAutoFollowEnabled {
+                context.coordinator.scrollToBottom(enableAutoFollow: true)
+            }
         }
 
         if let focusLineID {
@@ -72,13 +112,58 @@ struct SelectableTranscriptTextView: NSViewRepresentable {
 
     final class Coordinator: NSObject, NSTextViewDelegate {
         weak var textView: NSTextView?
+        weak var scrollView: NSScrollView?
         var onSelectionChange: (String) -> Void
+        var onAutoFollowChange: (Bool) -> Void
+        var lastDocumentIdentity = ""
         var lastTextIdentity = ""
         var lastRevision = 0
+        var lastScrollToBottomToken = 0
+        var isAutoFollowEnabled = true
+        var isProgrammaticScroll = false
+        private weak var observedClipView: NSClipView?
         private var lastFocusedLineID: Int?
 
-        init(onSelectionChange: @escaping (String) -> Void) {
+        init(
+            onSelectionChange: @escaping (String) -> Void,
+            onAutoFollowChange: @escaping (Bool) -> Void
+        ) {
             self.onSelectionChange = onSelectionChange
+            self.onAutoFollowChange = onAutoFollowChange
+        }
+
+        deinit {
+            if let observedClipView {
+                NotificationCenter.default.removeObserver(
+                    self,
+                    name: NSView.boundsDidChangeNotification,
+                    object: observedClipView
+                )
+            }
+        }
+
+        @MainActor
+        func observe(scrollView: NSScrollView) {
+            self.scrollView = scrollView
+            let clipView = scrollView.contentView
+            guard observedClipView !== clipView else {
+                return
+            }
+            if let observedClipView {
+                NotificationCenter.default.removeObserver(
+                    self,
+                    name: NSView.boundsDidChangeNotification,
+                    object: observedClipView
+                )
+            }
+            observedClipView = clipView
+            clipView.postsBoundsChangedNotifications = true
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(clipViewBoundsDidChange(_:)),
+                name: NSView.boundsDidChangeNotification,
+                object: clipView
+            )
         }
 
         func textViewDidChangeSelection(_ notification: Notification) {
@@ -93,6 +178,95 @@ struct SelectableTranscriptTextView: NSViewRepresentable {
                 return
             }
             onSelectionChange(String(textView.string[swiftRange]))
+        }
+
+        @objc
+        @MainActor
+        private func clipViewBoundsDidChange(_ notification: Notification) {
+            guard !isProgrammaticScroll,
+                  let scrollView,
+                  let textView else {
+                return
+            }
+            configureTextViewLayout(textView, in: scrollView)
+            setAutoFollowEnabled(isNearBottom(scrollView))
+        }
+
+        @MainActor
+        func scrollToBottom(enableAutoFollow: Bool) {
+            guard let textView,
+                  let scrollView else {
+                return
+            }
+            if enableAutoFollow {
+                setAutoFollowEnabled(true)
+            }
+            scrollToVisibleBottom(scrollView, textView: textView)
+        }
+
+        @MainActor
+        func resetLayoutForNewDocument(_ textView: NSTextView, in scrollView: NSScrollView) {
+            let visibleSize = scrollView.contentSize
+            let width = max(visibleSize.width, 1)
+            let height = max(visibleSize.height, 1)
+
+            lastFocusedLineID = nil
+            setAutoFollowEnabled(true)
+            textView.textContainer?.containerSize = NSSize(
+                width: width,
+                height: CGFloat.greatestFiniteMagnitude
+            )
+            textView.textContainer?.widthTracksTextView = true
+            textView.setFrameSize(NSSize(width: width, height: height))
+            isProgrammaticScroll = true
+            scrollView.contentView.scroll(to: .zero)
+            scrollView.reflectScrolledClipView(scrollView.contentView)
+            DispatchQueue.main.async { [weak self] in
+                self?.isProgrammaticScroll = false
+            }
+        }
+
+        @MainActor
+        func configureTextViewLayout(_ textView: NSTextView, in scrollView: NSScrollView) {
+            let visibleSize = scrollView.contentSize
+            let width = max(visibleSize.width, textView.bounds.width, 1)
+            let height = max(visibleSize.height, textView.bounds.height, 1)
+
+            textView.minSize = NSSize(width: 0, height: height)
+            textView.maxSize = NSSize(
+                width: CGFloat.greatestFiniteMagnitude,
+                height: CGFloat.greatestFiniteMagnitude
+            )
+            textView.textContainer?.containerSize = NSSize(
+                width: width,
+                height: CGFloat.greatestFiniteMagnitude
+            )
+            textView.textContainer?.widthTracksTextView = true
+            if textView.frame.width != width || textView.frame.height < height {
+                textView.setFrameSize(NSSize(width: width, height: height))
+            }
+        }
+
+        @MainActor
+        private func scrollToVisibleBottom(_ scrollView: NSScrollView, textView: NSTextView) {
+            configureTextViewLayout(textView, in: scrollView)
+
+            let visibleSize = scrollView.contentSize
+            let visibleHeight = max(visibleSize.height, 1)
+            let visibleWidth = max(visibleSize.width, textView.bounds.width, 1)
+            let documentHeight = measuredDocumentHeight(textView, minimumHeight: visibleHeight)
+
+            if textView.frame.width != visibleWidth || abs(textView.frame.height - documentHeight) > 0.5 {
+                textView.setFrameSize(NSSize(width: visibleWidth, height: documentHeight))
+            }
+
+            let targetY = max(0, documentHeight - visibleHeight)
+            isProgrammaticScroll = true
+            scrollView.contentView.scroll(to: NSPoint(x: 0, y: targetY))
+            scrollView.reflectScrolledClipView(scrollView.contentView)
+            DispatchQueue.main.async { [weak self] in
+                self?.isProgrammaticScroll = false
+            }
         }
 
         @MainActor
@@ -111,6 +285,39 @@ struct SelectableTranscriptTextView: NSViewRepresentable {
                 offset + (line as NSString).length + 1
             }
             textView.scrollRangeToVisible(NSRange(location: location, length: 0))
+        }
+
+        @MainActor
+        private func measuredDocumentHeight(_ textView: NSTextView, minimumHeight: CGFloat) -> CGFloat {
+            guard let textContainer = textView.textContainer else {
+                return max(minimumHeight, textView.bounds.height)
+            }
+            textView.layoutManager?.ensureLayout(for: textContainer)
+            let usedRect = textView.layoutManager?.usedRect(for: textContainer) ?? .zero
+            let contentHeight = ceil(usedRect.maxY + (textView.textContainerInset.height * 2))
+            return max(minimumHeight, contentHeight)
+        }
+
+        @MainActor
+        private func setAutoFollowEnabled(_ isEnabled: Bool) {
+            guard isAutoFollowEnabled != isEnabled else {
+                return
+            }
+            isAutoFollowEnabled = isEnabled
+            onAutoFollowChange(isEnabled)
+        }
+
+        @MainActor
+        private func isNearBottom(_ scrollView: NSScrollView) -> Bool {
+            guard let documentView = scrollView.documentView else {
+                return true
+            }
+            let visibleRect = scrollView.contentView.documentVisibleRect
+            let documentHeight = documentView.bounds.height
+            guard documentHeight > 0 else {
+                return true
+            }
+            return visibleRect.maxY >= documentHeight - 24
         }
     }
 }

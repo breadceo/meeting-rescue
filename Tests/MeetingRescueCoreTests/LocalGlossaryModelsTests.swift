@@ -87,6 +87,37 @@ struct LocalGlossaryModelsTests {
         #expect(loaded == state)
     }
 
+    @Test("ApplicationStateStore exposes cheap session and analysis existence checks")
+    func stateStoreExposesSessionAndAnalysisExistenceChecks() throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("meeting-rescue-state-exists-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let store = ApplicationStateStore(rootURL: root)
+        let transcriptURL = root.appendingPathComponent("meeting.txt")
+
+        #expect(!store.hasSession(for: transcriptURL))
+        #expect(!store.hasAnalysisState(for: transcriptURL))
+
+        try store.saveSession(
+            MeetingSessionState(
+                sourceFilePath: transcriptURL.path,
+                metadata: MeetingMetadata(room: "R4"),
+                rawReadOffset: 12
+            ),
+            for: transcriptURL
+        )
+        var analysisState = MeetingAnalysisState()
+        analysisState.isCompleted = true
+        try store.saveAnalysisState(analysisState, for: transcriptURL)
+
+        #expect(store.hasSession(for: transcriptURL))
+        #expect(store.hasAnalysisState(for: transcriptURL))
+
+        try store.clearAnalysisState(for: transcriptURL)
+        #expect(!store.hasAnalysisState(for: transcriptURL))
+    }
+
     @Test("replace suggestions removes stale generated candidates")
     func replaceSuggestionsRemovesStaleGeneratedCandidates() {
         var state = LocalGlossaryState(

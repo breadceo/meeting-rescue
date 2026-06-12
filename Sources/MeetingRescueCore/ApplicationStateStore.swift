@@ -69,6 +69,10 @@ public final class ApplicationStateStore: @unchecked Sendable {
         return try? decoder.decode(MeetingSessionState.self, from: data)
     }
 
+    public func hasSession(for sourceURL: URL) -> Bool {
+        fileManager.fileExists(atPath: sessionURL(for: sourceURL).path)
+    }
+
     public func saveAnalysisState(_ state: MeetingAnalysisState, for sourceURL: URL) throws {
         try ensureSessionsDirectory()
         let encoder = JSONEncoder()
@@ -84,6 +88,10 @@ public final class ApplicationStateStore: @unchecked Sendable {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         return (try? decoder.decode(MeetingAnalysisState.self, from: data)) ?? MeetingAnalysisState()
+    }
+
+    public func hasAnalysisState(for sourceURL: URL) -> Bool {
+        fileManager.fileExists(atPath: analysisStateURL(for: sourceURL).path)
     }
 
     public func clearAnalysisState(for sourceURL: URL) throws {

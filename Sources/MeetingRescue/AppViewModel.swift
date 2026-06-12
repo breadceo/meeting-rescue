@@ -442,6 +442,7 @@ private struct MeetingHistoryBuilder: Sendable {
     let searchIndexExclusionURL: URL?
     let localGlossaryState: LocalGlossaryState
     let localGlossaryEnabled: Bool
+    private let eagerMetadataPreviewLimit = 120
 
     func build(folderURL: URL) -> MeetingHistoryBuildResult {
         buildIfChanged(folderURL: folderURL, previousSignature: nil)!
@@ -494,7 +495,14 @@ private struct MeetingHistoryBuilder: Sendable {
                 }
                 return lhs.modificationDate > rhs.modificationDate
             }
-            .map { makeHistoryItem(from: $0, preparedGlossaryState: preparedGlossaryState) }
+            .enumerated()
+            .map { offset, candidate in
+                makeHistoryItem(
+                    from: candidate,
+                    sortedIndex: offset,
+                    preparedGlossaryState: preparedGlossaryState
+                )
+            }
         return MeetingHistoryBuildResult(
             fileSignature: signatures.fileSignature,
             searchIndexFileSignature: signatures.searchIndexFileSignature,
@@ -506,11 +514,20 @@ private struct MeetingHistoryBuilder: Sendable {
 
     private func makeHistoryItem(
         from candidate: TranscriptFileCandidate,
+        sortedIndex: Int,
         preparedGlossaryState: LocalGlossaryMatcher.PreparedState
     ) -> MeetingHistoryItem {
-        let analysis = stateStore.loadAnalysisState(for: candidate.url)
-        let metadata = stateStore.loadSession(for: candidate.url)?.metadata
-            ?? loadMetadataPreview(from: candidate.url)
+        let analysis = stateStore.hasAnalysisState(for: candidate.url)
+            ? stateStore.loadAnalysisState(for: candidate.url)
+            : MeetingAnalysisState()
+        let metadata = if stateStore.hasSession(for: candidate.url),
+                          let session = stateStore.loadSession(for: candidate.url) {
+            session.metadata
+        } else if shouldLoadMetadataPreview(sortedIndex: sortedIndex, analysis: analysis) {
+            loadMetadataPreview(from: candidate.url)
+        } else {
+            MeetingMetadata()
+        }
         let values = try? candidate.url.resourceValues(forKeys: [.fileSizeKey])
         let snapshot = analysis.latestSnapshot
         let searchSections = makeHistorySearchSections(
@@ -536,6 +553,13 @@ private struct MeetingHistoryBuilder: Sendable {
             searchSections: searchSections,
             summaryPreview: snapshot?.currentIssue.summary.truncatedForHistoryRow()
         )
+    }
+
+    private func shouldLoadMetadataPreview(sortedIndex: Int, analysis: MeetingAnalysisState) -> Bool {
+        includeRawTranscriptSearch
+            || sortedIndex < eagerMetadataPreviewLimit
+            || analysis.latestSnapshot != nil
+            || analysis.isCompleted
     }
 
     private func makeHistorySearchSections(
@@ -893,6 +917,9 @@ final class AppViewModel: ObservableObject {
     private var transcriptHighlightClearTask: Task<Void, Never>?
     private var transcriptFocusToken = 0
     private var historyLiveBaselineCandidate: TranscriptFileCandidate?
+    private let latestTranscriptFullScanInterval: TimeInterval = 5
+    private var cachedLatestTranscriptCandidate: TranscriptFileCandidate?
+    private var lastLatestTranscriptScanAt: Date?
     private var activeLocalGlossaryMatchSignature = ""
     private var activeLocalGlossaryMatchTask: Task<Void, Never>?
     private let replayFallbackDelaySeconds: TimeInterval = 0.35
@@ -1375,6 +1402,8 @@ final class AppViewModel: ObservableObject {
         testRunProgressText = ""
         liveMeetingUpdated = false
         historyLiveBaselineCandidate = nil
+        cachedLatestTranscriptCandidate = nil
+        lastLatestTranscriptScanAt = nil
         timer?.invalidate()
         timer = nil
         if securityScopeActive {
@@ -2971,17 +3000,48 @@ final class AppViewModel: ObservableObject {
         return TranscriptTextDecoder.decode(data)
     }
 
-    private func currentLatestTranscriptCandidate() -> TranscriptFileCandidate? {
+    private func currentLatestTranscriptCandidate(force: Bool = false) -> TranscriptFileCandidate? {
         guard let selectedFolderURL else {
             return nil
         }
-        return LatestTranscriptSelector.latestTextFile(
+
+        let now = Date()
+        if !force,
+           let lastLatestTranscriptScanAt,
+           now.timeIntervalSince(lastLatestTranscriptScanAt) < latestTranscriptFullScanInterval,
+           let cachedCandidate = refreshCachedLatestTranscriptCandidate() {
+            return cachedCandidate
+        }
+
+        let candidate = LatestTranscriptSelector.latestTextFile(
             from: LatestTranscriptSelector.textFiles(in: selectedFolderURL)
         )
+        cachedLatestTranscriptCandidate = candidate
+        lastLatestTranscriptScanAt = now
+        return candidate
+    }
+
+    private func refreshCachedLatestTranscriptCandidate() -> TranscriptFileCandidate? {
+        guard let cachedLatestTranscriptCandidate,
+              let values = try? cachedLatestTranscriptCandidate.url.resourceValues(
+                forKeys: [.contentModificationDateKey, .isRegularFileKey]
+              ),
+              values.isRegularFile != false else {
+            self.cachedLatestTranscriptCandidate = nil
+            lastLatestTranscriptScanAt = nil
+            return nil
+        }
+
+        let refreshedCandidate = TranscriptFileCandidate(
+            url: cachedLatestTranscriptCandidate.url,
+            modificationDate: values.contentModificationDate ?? cachedLatestTranscriptCandidate.modificationDate
+        )
+        self.cachedLatestTranscriptCandidate = refreshedCandidate
+        return refreshedCandidate
     }
 
     private func captureHistoryLiveBaseline() {
-        historyLiveBaselineCandidate = currentLatestTranscriptCandidate()
+        historyLiveBaselineCandidate = currentLatestTranscriptCandidate(force: true)
         if let historyLiveBaselineCandidate {
             liveActiveTranscriptURL = historyLiveBaselineCandidate.url
         }
@@ -3034,10 +3094,13 @@ final class AppViewModel: ObservableObject {
 
         if activeTranscriptURL != latestURL {
             switchActiveTranscript(to: latestURL)
+            refreshMeetingHistory()
         } else {
-            readAppendedContent(from: latestURL)
+            let didReadAppendedContent = readAppendedContent(from: latestURL)
+            if didReadAppendedContent {
+                refreshMeetingHistory()
+            }
         }
-        refreshMeetingHistory()
     }
 
     private func switchActiveTranscript(to url: URL) {
@@ -3108,26 +3171,28 @@ final class AppViewModel: ObservableObject {
         }
     }
 
-    private func readAppendedContent(from url: URL) {
+    private func readAppendedContent(from url: URL) -> Bool {
         do {
             let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
             let fileSize = (attributes[.size] as? NSNumber)?.uint64Value ?? 0
             if fileSize < rawReadOffset {
                 readFullContent(from: url, allowFinalTrigger: true)
-                return
+                return true
             }
 
             guard fileSize > rawReadOffset else {
-                return
+                return false
             }
 
             let handle = try FileHandle(forReadingFrom: url)
+            defer {
+                try? handle.close()
+            }
             try handle.seek(toOffset: rawReadOffset)
             let data = try handle.readToEnd() ?? Data()
-            try handle.close()
 
             guard !data.isEmpty else {
-                return
+                return false
             }
 
             let appendedText = TranscriptTextDecoder.decode(data)
@@ -3144,8 +3209,10 @@ final class AppViewModel: ObservableObject {
                 endMarkerSource: String(rawTranscript.suffix(1_024)),
                 allowFinalTrigger: true
             )
+            return true
         } catch {
             statusMessage = "transcript tail 실패: \(error.localizedDescription)"
+            return false
         }
     }
 
