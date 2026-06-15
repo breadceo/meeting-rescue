@@ -291,6 +291,35 @@ struct AppViewModelTestRunContextTests {
         #expect(builder.contains("shouldLoadMetadataPreview(sortedIndex: sortedIndex, analysis: analysis)"))
         #expect(builder.contains("sortedIndex < eagerMetadataPreviewLimit"))
         #expect(builder.contains("includeRawTranscriptSearch"))
+        #expect(builder.contains("TranscriptParser.parseMetadataPreview(text)"))
+        #expect(!builder.contains("TranscriptParser.parse(text).metadata"))
+    }
+
+    @Test("search index rebuild is deferred until history search needs it")
+    func searchIndexRebuildIsDeferredUntilHistorySearchNeedsIt() throws {
+        let sourceURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent("Sources/MeetingRescue/AppViewModel.swift")
+        let source = try String(contentsOf: sourceURL, encoding: .utf8)
+        let searchDatabaseRefresh = try #require(source.slice(from: "private func refreshSearchDatabaseMatches", to: "func openHistorySearchResult"))
+        let searchIndexBuild = try #require(source.slice(from: "private func startSearchIndexBuildIfNeeded", to: "private func isTranscriptOpenForSearchIndex"))
+
+        #expect(source.contains("private struct SearchIndexBuildRequest"))
+        #expect(source.contains("private var pendingSearchIndexBuildRequest: SearchIndexBuildRequest?"))
+        #expect(searchIndexBuild.contains("pendingSearchIndexBuildRequest = SearchIndexBuildRequest("))
+        #expect(searchIndexBuild.contains("debouncedHistorySearchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty"))
+        #expect(searchDatabaseRefresh.contains("let pendingSearchIndexBuildRequest = pendingSearchIndexBuildRequest"))
+        #expect(searchDatabaseRefresh.contains("startSearchIndexBuildIfNeeded("))
+    }
+
+    @Test("live metadata refresh avoids full transcript dialogue parsing")
+    func liveMetadataRefreshAvoidsFullTranscriptDialogueParsing() throws {
+        let sourceURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent("Sources/MeetingRescue/AppViewModel.swift")
+        let source = try String(contentsOf: sourceURL, encoding: .utf8)
+        let refreshParsedState = try #require(source.slice(from: "private func refreshParsedState", to: "private func autoFetchGoogleCalendarAPIContextForLiveWatchIfNeeded"))
+
+        #expect(refreshParsedState.contains("TranscriptParser.parseMetadataPreview(rawTranscript)"))
+        #expect(!refreshParsedState.contains("TranscriptParser.parse(rawTranscript).metadata"))
     }
 
     @Test("AppViewModel exposes review candidate actions")

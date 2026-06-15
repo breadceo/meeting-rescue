@@ -128,7 +128,8 @@ public enum LocalGlossaryHistoryScanner {
                     field: .rawTranscript,
                     text: trimmed,
                     weight: 24,
-                    timestamp: TranscriptTimestampLocator.timestamp(in: trimmed)
+                    timestamp: TranscriptTimestampLocator.timestamp(in: trimmed),
+                    tokenization: .fast
                 )
             }
     }

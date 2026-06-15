@@ -48,6 +48,34 @@ public enum TranscriptParser {
             || rawTranscript.contains("[SYSTEM] Chat Logs has been ended")
     }
 
+    public static func parseMetadataPreview(_ rawTranscript: String, lineLimit: Int = 64) -> MeetingMetadata {
+        var metadata = MeetingMetadata()
+        var unlabeledHeaderLines: [String] = []
+
+        for line in rawTranscript.components(separatedBy: .newlines).prefix(lineLimit) {
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else {
+                continue
+            }
+            guard !trimmed.allSatisfy({ $0 == "#" }) else {
+                continue
+            }
+
+            if applyHeaderLine(trimmed, to: &metadata) {
+                continue
+            }
+
+            if isLikelyTranscriptLine(trimmed) {
+                break
+            }
+
+            unlabeledHeaderLines.append(trimmed)
+        }
+
+        applyUnlabeledHeaderLines(unlabeledHeaderLines, to: &metadata)
+        return metadata
+    }
+
     public static func parse(_ rawTranscript: String) -> ParsedTranscript {
         var metadata = MeetingMetadata()
         var dialogueLines: [DialogueLine] = []
@@ -141,6 +169,38 @@ public enum TranscriptParser {
         }
 
         return nil
+    }
+
+    private static func isLikelyTranscriptLine(_ line: String) -> Bool {
+        if line.hasPrefix("["),
+           let closing = line.firstIndex(of: "]") {
+            return isTimestamp(line[line.index(after: line.startIndex)..<closing])
+        }
+
+        if line.hasPrefix("("),
+           let closing = line.firstIndex(of: ")") {
+            return isTimestamp(line[line.index(after: line.startIndex)..<closing])
+        }
+
+        guard let firstSpace = line.firstIndex(where: { $0.isWhitespace }) else {
+            return false
+        }
+        let timestampCandidate = line[..<firstSpace]
+        guard isTimestamp(timestampCandidate) else {
+            return false
+        }
+        let remainder = line[line.index(after: firstSpace)...]
+        return remainder.contains { $0 == ":" || $0 == "：" }
+    }
+
+    private static func isTimestamp(_ value: Substring) -> Bool {
+        let components = value.split(separator: ":")
+        guard components.count == 2 || components.count == 3 else {
+            return false
+        }
+        return components.allSatisfy { component in
+            !component.isEmpty && component.allSatisfy(\.isNumber)
+        }
     }
 
     private static func applyUnlabeledHeaderLines(_ lines: [String], to metadata: inout MeetingMetadata) {

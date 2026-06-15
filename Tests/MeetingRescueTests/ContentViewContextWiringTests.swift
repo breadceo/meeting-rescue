@@ -124,6 +124,21 @@ struct ContentViewContextWiringTests {
         #expect(selectable.contains("scrollToBottom(enableAutoFollow: true)"))
     }
 
+    @Test("selectable transcript defers SwiftUI state callbacks outside updateNSView")
+    func selectableTranscriptDefersSwiftUIStateCallbacksOutsideUpdateNSView() throws {
+        let selectableURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent("Sources/MeetingRescue/SelectableTranscriptTextView.swift")
+        let selectable = try String(contentsOf: selectableURL, encoding: .utf8)
+        let updateNSView = try #require(selectable.slice(from: "func updateNSView", to: "final class Coordinator"))
+        let autoFollowSetter = try #require(selectable.slice(from: "private func setAutoFollowEnabled", to: "func emitSelectionChange"))
+
+        #expect(selectable.contains("func emitSelectionChange"))
+        #expect(selectable.contains("private func emitAutoFollowChange"))
+        #expect(selectable.contains("Task { @MainActor in"))
+        #expect(!updateNSView.contains("context.coordinator.onSelectionChange("))
+        #expect(!autoFollowSetter.contains("onAutoFollowChange(isEnabled)"))
+    }
+
     @Test("selectable transcript keeps text layout top aligned while following append")
     func selectableTranscriptKeepsTextLayoutTopAlignedWhileFollowingAppend() throws {
         let selectableURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)

@@ -244,6 +244,12 @@ private struct MeetingHistoryBuildSignatures: Sendable {
     let signature: String
 }
 
+private struct SearchIndexBuildRequest: Equatable, Sendable {
+    let folderURL: URL
+    let fileSignature: String
+    let excludedURL: URL?
+}
+
 struct MeetingSearchIndexProgress: Equatable {
     enum State: Equatable {
         case idle
@@ -656,7 +662,7 @@ private struct MeetingHistoryBuilder: Sendable {
             return MeetingMetadata()
         }
         let text = TranscriptTextDecoder.decode(data)
-        return TranscriptParser.parse(text).metadata
+        return TranscriptParser.parseMetadataPreview(text)
     }
 
     private func loadTranscriptSearchPreview(from url: URL) -> String {
@@ -686,7 +692,8 @@ private struct MeetingHistoryBuilder: Sendable {
                     field: .rawTranscript,
                     text: trimmed,
                     weight: 24,
-                    timestamp: TranscriptTimestampLocator.timestamp(in: trimmed)
+                    timestamp: TranscriptTimestampLocator.timestamp(in: trimmed),
+                    tokenization: .fast
                 )
             }
     }
@@ -906,6 +913,7 @@ final class AppViewModel: ObservableObject {
     private var historyRefreshTask: Task<Void, Never>?
     private var historyIncludesRawTranscriptSearch = false
     private var searchIndexBuildTask: Task<Void, Never>?
+    private var pendingSearchIndexBuildRequest: SearchIndexBuildRequest?
     private var lastReadySearchIndexSignature: String?
     private var searchDatabaseQueryTask: Task<Void, Never>?
     private var searchDatabaseQueryGeneration = 0
@@ -1238,6 +1246,14 @@ final class AppViewModel: ObservableObject {
         let items = meetingHistoryItems
         let facetSelection = historyFacetSelection
         let sortOrder = historySortOrder
+        if !searchIndexProgress.isReady,
+           let pendingSearchIndexBuildRequest = pendingSearchIndexBuildRequest {
+            startSearchIndexBuildIfNeeded(
+                folderURL: pendingSearchIndexBuildRequest.folderURL,
+                fileSignature: pendingSearchIndexBuildRequest.fileSignature,
+                excludedURL: pendingSearchIndexBuildRequest.excludedURL
+            )
+        }
         let databaseIsReady = searchIndexProgress.isReady
         let searchQueries = localGlossarySearchQueries(for: trimmed)
         searchDatabaseQueryGeneration += 1
@@ -2659,6 +2675,7 @@ final class AppViewModel: ObservableObject {
         if excludedURL != nil {
             searchIndexBuildTask?.cancel()
             searchIndexBuildTask = nil
+            pendingSearchIndexBuildRequest = nil
             if !searchIndexProgress.isReady {
                 searchIndexProgress = .idle
             }
@@ -2666,6 +2683,17 @@ final class AppViewModel: ObservableObject {
         }
 
         if lastReadySearchIndexSignature == fileSignature, searchIndexProgress.isReady {
+            pendingSearchIndexBuildRequest = nil
+            return
+        }
+
+        if debouncedHistorySearchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            pendingSearchIndexBuildRequest = SearchIndexBuildRequest(
+                folderURL: folderURL,
+                fileSignature: fileSignature,
+                excludedURL: excludedURL
+            )
+            searchIndexProgress = .idle
             return
         }
 
@@ -2673,6 +2701,7 @@ final class AppViewModel: ObservableObject {
             return
         }
 
+        pendingSearchIndexBuildRequest = nil
         let stateStore = stateStore
         let lineLimit = rawTranscriptSearchLineLimit
         let localGlossaryState = localGlossaryState
@@ -2983,7 +3012,7 @@ final class AppViewModel: ObservableObject {
             return MeetingMetadata()
         }
         let text = TranscriptTextDecoder.decode(data)
-        return TranscriptParser.parse(text).metadata
+        return TranscriptParser.parseMetadataPreview(text)
     }
 
     private func loadTranscriptSearchPreview(from url: URL) -> String {
@@ -3223,7 +3252,7 @@ final class AppViewModel: ObservableObject {
         allowFinalTrigger: Bool = true
     ) {
         if parseMetadata {
-            metadata = TranscriptParser.parse(rawTranscript).metadata
+            metadata = TranscriptParser.parseMetadataPreview(rawTranscript)
         }
         let state = MeetingSessionState(
             sourceFilePath: url.path,
@@ -4188,7 +4217,8 @@ final class AppViewModel: ObservableObject {
                     field: .rawTranscript,
                     text: trimmed,
                     weight: 24,
-                    timestamp: TranscriptTimestampLocator.timestamp(in: trimmed)
+                    timestamp: TranscriptTimestampLocator.timestamp(in: trimmed),
+                    tokenization: .fast
                 )
             }
     }

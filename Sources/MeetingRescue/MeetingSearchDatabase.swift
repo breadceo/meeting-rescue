@@ -269,12 +269,12 @@ final class MeetingSearchDatabase: @unchecked Sendable {
             bindOptionalText(section.timestamp, at: 3, in: ftsStatement)
             bindText(section.text, at: 4, in: ftsStatement)
             bindText(String(section.weight), at: 5, in: ftsStatement)
-            bindText(MeetingHistorySearch.indexText(for: section.text), at: 6, in: ftsStatement)
+            bindText(MeetingHistorySearch.indexText(for: section.text, tokenization: section.tokenization), at: 6, in: ftsStatement)
             guard sqlite3_step(ftsStatement) == SQLITE_DONE else {
                 throw error(db, fallback: "검색 segment 저장에 실패했습니다.")
             }
 
-            let vector = MeetingHistorySearch.semanticVectorString(for: section.text)
+            let vector = MeetingHistorySearch.semanticVectorString(for: section.text, tokenization: section.tokenization)
             guard !vector.isEmpty else {
                 continue
             }

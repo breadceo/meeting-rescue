@@ -71,6 +71,35 @@ struct MeetingHistorySearchTests {
         #expect(anchorMatch?.timestamp == "09:04")
     }
 
+    @Test("raw transcript fast tokenization keeps compact Korean phrase anchors")
+    func rawTranscriptFastTokenizationKeepsCompactKoreanPhraseAnchors() {
+        let sections = [
+            MeetingHistorySearchSection(
+                field: .rawTranscript,
+                text: "[09:04] Casey Lee: 마케팅팀이랑 소통해서 확인하도록 하겠습니다.",
+                weight: 24,
+                timestamp: "09:04",
+                tokenization: .fast
+            )
+        ]
+
+        let anchorMatch = MeetingHistorySearch.timestampedMatch(sections: sections, query: "마케팅 팀")
+
+        #expect(anchorMatch?.field == .rawTranscript)
+        #expect(anchorMatch?.timestamp == "09:04")
+    }
+
+    @Test("fast tokenization keeps Hangul grams without natural language tokens")
+    func fastTokenizationKeepsHangulGramsWithoutNaturalLanguageTokens() {
+        let fastTokens = MeetingHistorySearch.tokenize("마케팅팀이랑", tokenization: .fast)
+        let expandedTokens = MeetingHistorySearch.expandedTokens("마케팅팀이랑", tokenization: .fast)
+
+        #expect(fastTokens == ["마케팅팀이랑"])
+        #expect(expandedTokens.contains("마케팅팀이랑"))
+        #expect(expandedTokens.contains("마케"))
+        #expect(expandedTokens.contains("케팅팀"))
+    }
+
     @Test("minor typo in English query can still match local fuzzy tokens")
     func fuzzyEnglishTypoMatches() {
         let sections = [

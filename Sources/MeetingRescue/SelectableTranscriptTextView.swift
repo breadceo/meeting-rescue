@@ -8,8 +8,8 @@ struct SelectableTranscriptTextView: NSViewRepresentable {
     var revision: Int
     var focusLineID: Int?
     var scrollToBottomToken: Int
-    var onSelectionChange: (String) -> Void
-    var onAutoFollowChange: (Bool) -> Void
+    var onSelectionChange: @MainActor @Sendable (String) -> Void
+    var onAutoFollowChange: @MainActor @Sendable (Bool) -> Void
 
     func makeCoordinator() -> Coordinator {
         Coordinator(
@@ -79,7 +79,7 @@ struct SelectableTranscriptTextView: NSViewRepresentable {
                 if textView.selectedRange() != emptyRange {
                     textView.setSelectedRange(emptyRange)
                 }
-                context.coordinator.onSelectionChange("")
+                context.coordinator.emitSelectionChange("")
             } else {
                 let textLength = (text as NSString).length
                 if NSMaxRange(selectedRange) <= textLength {
@@ -92,7 +92,7 @@ struct SelectableTranscriptTextView: NSViewRepresentable {
             if textView.selectedRange() != emptyRange {
                 textView.setSelectedRange(emptyRange)
             }
-            context.coordinator.onSelectionChange("")
+            context.coordinator.emitSelectionChange("")
         }
 
         if context.coordinator.lastScrollToBottomToken != scrollToBottomToken {
@@ -113,8 +113,8 @@ struct SelectableTranscriptTextView: NSViewRepresentable {
     final class Coordinator: NSObject, NSTextViewDelegate {
         weak var textView: NSTextView?
         weak var scrollView: NSScrollView?
-        var onSelectionChange: (String) -> Void
-        var onAutoFollowChange: (Bool) -> Void
+        var onSelectionChange: @MainActor @Sendable (String) -> Void
+        var onAutoFollowChange: @MainActor @Sendable (Bool) -> Void
         var lastDocumentIdentity = ""
         var lastTextIdentity = ""
         var lastRevision = 0
@@ -125,8 +125,8 @@ struct SelectableTranscriptTextView: NSViewRepresentable {
         private var lastFocusedLineID: Int?
 
         init(
-            onSelectionChange: @escaping (String) -> Void,
-            onAutoFollowChange: @escaping (Bool) -> Void
+            onSelectionChange: @escaping @MainActor @Sendable (String) -> Void,
+            onAutoFollowChange: @escaping @MainActor @Sendable (Bool) -> Void
         ) {
             self.onSelectionChange = onSelectionChange
             self.onAutoFollowChange = onAutoFollowChange
@@ -168,16 +168,16 @@ struct SelectableTranscriptTextView: NSViewRepresentable {
 
         func textViewDidChangeSelection(_ notification: Notification) {
             guard let textView = notification.object as? NSTextView else {
-                onSelectionChange("")
+                emitSelectionChange("")
                 return
             }
             let selectedRange = textView.selectedRange()
             guard selectedRange.length > 0,
                   let swiftRange = Range(selectedRange, in: textView.string) else {
-                onSelectionChange("")
+                emitSelectionChange("")
                 return
             }
-            onSelectionChange(String(textView.string[swiftRange]))
+            emitSelectionChange(String(textView.string[swiftRange]))
         }
 
         @objc
@@ -304,7 +304,21 @@ struct SelectableTranscriptTextView: NSViewRepresentable {
                 return
             }
             isAutoFollowEnabled = isEnabled
-            onAutoFollowChange(isEnabled)
+            emitAutoFollowChange(isEnabled)
+        }
+
+        func emitSelectionChange(_ selectedText: String) {
+            let callback = onSelectionChange
+            Task { @MainActor in
+                callback(selectedText)
+            }
+        }
+
+        private func emitAutoFollowChange(_ isEnabled: Bool) {
+            let callback = onAutoFollowChange
+            Task { @MainActor in
+                callback(isEnabled)
+            }
         }
 
         @MainActor

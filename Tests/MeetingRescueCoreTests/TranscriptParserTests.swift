@@ -78,4 +78,44 @@ struct TranscriptParserTests {
         #expect(TranscriptParser.containsEndMarker("[00:01][SYSTEM] Chat Logs has been ended"))
         #expect(!TranscriptParser.containsEndMarker("[00:01] Alex: 계속 진행합니다."))
     }
+
+    @Test("metadata preview parses headers without dialogue lines")
+    func metadataPreviewParsesHeadersWithoutDialogueLines() {
+        let raw = """
+        Room: Weekly Sync
+        Date/Time: 2026-05-14 09:30
+        Participants: Alex, Mina, Joon
+
+        [00:00:01] Alex: 안녕하세요.
+        [00:00:03] Mina: 오늘 목표를 정리하겠습니다.
+        """
+
+        let metadata = TranscriptParser.parseMetadataPreview(raw)
+
+        #expect(metadata.room == "Weekly Sync")
+        #expect(metadata.dateTime == "2026-05-14 09:30")
+        #expect(metadata.participants == ["Alex", "Mina", "Joon"])
+    }
+
+    @Test("metadata preview supports unlabeled recordings header")
+    func metadataPreviewSupportsUnlabeledRecordingsHeader() {
+        let raw = """
+        Sample Room L4
+        2026-05-14 17:32:45
+        Jordan Park(jordan@example.com), Alex Rivera(alex@example.com)
+        ############################################################
+
+        [00:00][SYSTEM] 대화 기록 시작됨
+        [00:05] Riley Chen: 녹음 감사합니다.
+        """
+
+        let metadata = TranscriptParser.parseMetadataPreview(raw)
+
+        #expect(metadata.room == "Sample Room L4")
+        #expect(metadata.dateTime == "2026-05-14 17:32:45")
+        #expect(metadata.participants == [
+            "Jordan Park(jordan@example.com)",
+            "Alex Rivera(alex@example.com)"
+        ])
+    }
 }

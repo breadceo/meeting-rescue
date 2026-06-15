@@ -51,12 +51,18 @@ public enum MeetingHistorySearchField: String, Equatable, Sendable {
     }
 }
 
+public enum MeetingHistorySearchTokenization: Equatable, Sendable {
+    case full
+    case fast
+}
+
 public struct MeetingHistorySearchSection: Equatable, Sendable {
     public var field: MeetingHistorySearchField
     public var text: String
     public var normalizedText: String
     public var compactNormalizedText: String
     public var searchTokens: Set<String>
+    public var tokenization: MeetingHistorySearchTokenization
     public var weight: Int
     public var timestamp: String?
 
@@ -64,13 +70,15 @@ public struct MeetingHistorySearchSection: Equatable, Sendable {
         field: MeetingHistorySearchField,
         text: String,
         weight: Int,
-        timestamp: String? = nil
+        timestamp: String? = nil,
+        tokenization: MeetingHistorySearchTokenization = .full
     ) {
         self.field = field
         self.text = text
         self.normalizedText = MeetingHistorySearch.normalize(text)
         self.compactNormalizedText = MeetingHistorySearch.compactNormalize(text)
-        self.searchTokens = MeetingHistorySearch.expandedTokens(text)
+        self.searchTokens = MeetingHistorySearch.expandedTokens(text, tokenization: tokenization)
+        self.tokenization = tokenization
         self.weight = weight
         self.timestamp = timestamp
     }
@@ -163,18 +171,32 @@ public enum MeetingHistorySearch {
     }
 
     public static func tokenize(_ query: String) -> [String] {
+        tokenize(query, tokenization: .full)
+    }
+
+    public static func tokenize(
+        _ query: String,
+        tokenization: MeetingHistorySearchTokenization
+    ) -> [String] {
         let normalizedTerms = normalize(query)
             .split { character in
                 character.isWhitespace || character.isPunctuation || character.isSymbol
             }
             .map(String.init)
             .filter { !$0.isEmpty }
-        let naturalTerms = naturalLanguageTokens(query)
+        let naturalTerms = tokenization == .full ? naturalLanguageTokens(query) : []
         return Array(Set(normalizedTerms + naturalTerms)).sorted()
     }
 
     public static func expandedTokens(_ value: String) -> Set<String> {
-        let baseTokens = tokenize(value)
+        expandedTokens(value, tokenization: .full)
+    }
+
+    public static func expandedTokens(
+        _ value: String,
+        tokenization: MeetingHistorySearchTokenization
+    ) -> Set<String> {
+        let baseTokens = tokenize(value, tokenization: tokenization)
         let grams = baseTokens.flatMap { token in
             token.count >= 3 && token.containsHangul ? characterNGrams(token, sizes: 2...4) : []
         }
@@ -182,9 +204,16 @@ public enum MeetingHistorySearch {
     }
 
     public static func indexText(for value: String) -> String {
+        indexText(for: value, tokenization: .full)
+    }
+
+    public static func indexText(
+        for value: String,
+        tokenization: MeetingHistorySearchTokenization
+    ) -> String {
         let compact = compactNormalize(value)
         var values = [value, normalize(value), compact]
-        values.append(contentsOf: expandedTokens(value))
+        values.append(contentsOf: expandedTokens(value, tokenization: tokenization))
         if compact.count >= 3 {
             values.append(contentsOf: characterNGrams(compact, sizes: 2...4))
         }
@@ -203,7 +232,14 @@ public enum MeetingHistorySearch {
     }
 
     public static func semanticVectorString(for value: String) -> String {
-        let terms = semanticTerms(for: value)
+        semanticVectorString(for: value, tokenization: .full)
+    }
+
+    public static func semanticVectorString(
+        for value: String,
+        tokenization: MeetingHistorySearchTokenization
+    ) -> String {
+        let terms = semanticTerms(for: value, tokenization: tokenization)
         guard !terms.isEmpty else {
             return ""
         }
@@ -361,10 +397,13 @@ public enum MeetingHistorySearch {
         return tokens
     }
 
-    private static func semanticTerms(for value: String) -> [String] {
+    private static func semanticTerms(
+        for value: String,
+        tokenization: MeetingHistorySearchTokenization
+    ) -> [String] {
         let normalized = normalize(value)
         let compact = compactNormalize(value)
-        var terms = Set(expandedTokens(value))
+        var terms = Set(expandedTokens(value, tokenization: tokenization))
         if compact.count >= 3 {
             terms.formUnion(characterNGrams(compact, sizes: 2...4))
         }
