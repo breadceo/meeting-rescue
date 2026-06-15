@@ -1,0 +1,31 @@
+Sources/MeetingRescue/AppViewModel.swift
+  h_d82ccb34241a0d 247-252,665,695-696,916,1249-1256,2678,2686-2696,2704,3015,3255,4220-4221
+Sources/MeetingRescue/MeetingSearchDatabase.swift
+  h_d82ccb34241a0d 272,277
+Sources/MeetingRescue/SelectableTranscriptTextView.swift
+  h_d82ccb34241a0d 11-12,82,95,116-117,128-129,171,177,180,307-321
+Sources/MeetingRescueCore/LocalGlossaryHistoryScanner.swift
+  h_d82ccb34241a0d 131-132
+Sources/MeetingRescueCore/MeetingHistorySearch.swift
+  h_d82ccb34241a0d 54-58,65,73-74,80-81,174-180,187,192-199,207-213,216,235-242,400-403,406
+Sources/MeetingRescueCore/TranscriptParser.swift
+  h_d82ccb34241a0d 51-78,174-205
+Tests/MeetingRescueCoreTests/MeetingHistorySearchTests.swift
+  h_d82ccb34241a0d 74-102
+Tests/MeetingRescueCoreTests/TranscriptParserTests.swift
+  h_d82ccb34241a0d 81-120
+Tests/MeetingRescueTests/AppViewModelTestRunContextTests.swift
+  h_d82ccb34241a0d 294-322
+Tests/MeetingRescueTests/ContentViewContextWiringTests.swift
+  h_d82ccb34241a0d 127-141
+---
+{
+  "schema_version": "zax-attestation/1.1.0",
+  "base_commit_sha": "27e50c7a36e9ed085c47f6bc3e50bf358d0fbd1d",
+  "prompts": {},
+  "humans": {
+    "h_d82ccb34241a0d": {
+      "author": "ethan@zigbang.com"
+    }
+  }
+}
