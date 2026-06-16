@@ -100,6 +100,24 @@ struct MeetingHistorySearchTests {
         #expect(expandedTokens.contains("케팅팀"))
     }
 
+    @Test("index text can reuse precomputed section tokens")
+    func indexTextCanReusePrecomputedSectionTokens() {
+        let section = MeetingHistorySearchSection(
+            field: .rawTranscript,
+            text: "[09:04] Casey Lee: 마케팅팀이랑 소통해서 확인하도록 하겠습니다.",
+            weight: 24,
+            timestamp: "09:04",
+            tokenization: .fast
+        )
+
+        let indexedText = MeetingHistorySearch.indexText(for: section)
+
+        #expect(indexedText.contains(section.normalizedText))
+        #expect(indexedText.contains(section.compactNormalizedText))
+        #expect(indexedText.contains("마케팅팀이랑"))
+        #expect(indexedText.contains("케팅팀"))
+    }
+
     @Test("minor typo in English query can still match local fuzzy tokens")
     func fuzzyEnglishTypoMatches() {
         let sections = [

@@ -151,7 +151,7 @@ struct AppViewModelTestRunContextTests {
 
     @Test("active local glossary match count is cached and refreshed on transcript or term changes")
     @MainActor
-    func activeLocalGlossaryMatchCountIsCachedAndRefreshed() throws {
+    func activeLocalGlossaryMatchCountIsCachedAndRefreshed() async throws {
         let rootURL = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("meeting-rescue-glossary-cache-\(UUID().uuidString)", isDirectory: true)
         defer {
@@ -169,16 +169,30 @@ struct AppViewModelTestRunContextTests {
         let viewModel = AppViewModel(stateStore: stateStore)
         viewModel.loadTranscriptForTesting(url: transcriptURL, rawTranscript: "[03:12] Alex: jax workflow를 봅시다.")
 
-        #expect(viewModel.activeLocalGlossaryMatchCount == 1)
+        #expect(await waitForActiveLocalGlossaryMatchCount(1, in: viewModel))
 
         viewModel.setLocalGlossaryEnabled(false)
         #expect(viewModel.activeLocalGlossaryMatchCount == 0)
 
         viewModel.setLocalGlossaryEnabled(true)
-        #expect(viewModel.activeLocalGlossaryMatchCount == 1)
+        #expect(await waitForActiveLocalGlossaryMatchCount(1, in: viewModel))
 
         viewModel.deleteLocalGlossaryTerm(id: "term-zax")
         #expect(viewModel.activeLocalGlossaryMatchCount == 0)
+    }
+
+    @MainActor
+    private func waitForActiveLocalGlossaryMatchCount(
+        _ expectedCount: Int,
+        in viewModel: AppViewModel
+    ) async -> Bool {
+        for _ in 0..<50 {
+            if viewModel.activeLocalGlossaryMatchCount == expectedCount {
+                return true
+            }
+            try? await Task.sleep(nanoseconds: 20_000_000)
+        }
+        return viewModel.activeLocalGlossaryMatchCount == expectedCount
     }
 
     @Test("active local glossary match count does not scan from a SwiftUI getter")
@@ -191,6 +205,58 @@ struct AppViewModelTestRunContextTests {
         #expect(declaration.contains("@Published private(set) var activeLocalGlossaryMatchCount"))
         #expect(!declaration.contains("LocalGlossaryMatcher.matches"))
         #expect(source.contains("private func refreshActiveLocalGlossaryMatchCountIfNeeded()"))
+    }
+
+    @Test("active transcript append updates speakers and glossary counts incrementally")
+    func activeTranscriptAppendUpdatesSpeakersAndGlossaryIncrementally() throws {
+        let sourceURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent("Sources/MeetingRescue/AppViewModel.swift")
+        let source = try String(contentsOf: sourceURL, encoding: .utf8)
+        let appendPreview = try #require(source.slice(from: "private func appendTranscriptPreview", to: "private func transcriptSpeakerList"))
+        let glossaryRefresh = try #require(source.slice(from: "private func refreshActiveLocalGlossaryMatchCountIfNeeded", to: "private func activeLocalGlossaryMatchSignatureForCurrentState"))
+
+        #expect(source.contains("private var transcriptSpeakerOrder: [String]"))
+        #expect(source.contains("private var activeLocalGlossaryMatchedTermIDs: Set<String>"))
+        #expect(appendPreview.contains("appendTranscriptSpeakers(from:"))
+        #expect(appendPreview.contains("scheduleActiveLocalGlossaryMatchCountRefresh(appendedText: text)"))
+        #expect(!appendPreview.contains("transcriptSpeakerList(from: rawTranscriptPreviewLines)"))
+        #expect(glossaryRefresh.contains("scanActiveLocalGlossaryMatchTermIDs"))
+        #expect(source.contains("includeEvidence: false"))
+        #expect(!glossaryRefresh.contains("activeLocalGlossaryMatchCount = LocalGlossaryMatcher.matches"))
+    }
+
+    @Test("test run replay throttles local fallback snapshot refresh")
+    func testRunReplayThrottlesLocalFallbackSnapshotRefresh() throws {
+        let sourceURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent("Sources/MeetingRescue/AppViewModel.swift")
+        let source = try String(contentsOf: sourceURL, encoding: .utf8)
+        let applyReplayFrame = try #require(source.slice(from: "private func applyReplayFrame", to: "private func updateTestRunProgress"))
+        let fallbackRefresh = try #require(source.slice(from: "private func scheduleTestRunFallbackRefreshIfNeeded", to: "private func refreshMeetingHistory"))
+
+        #expect(source.contains("private var testRunFallbackRefreshTask: Task<Void, Never>?"))
+        #expect(source.contains("private let testRunFallbackMinimumIntervalNanoseconds"))
+        #expect(applyReplayFrame.contains("scheduleTestRunFallbackRefreshIfNeeded"))
+        #expect(!applyReplayFrame.contains("refreshTestRunFallbackIfNeeded"))
+        #expect(fallbackRefresh.contains("testRunFallbackRefreshTask"))
+        #expect(fallbackRefresh.contains("refreshTestRunFallbackIfNeeded"))
+    }
+
+    @Test("automatic trigger UI and runner reuse parsed transcript stats")
+    func automaticTriggerUIAndRunnerReuseParsedTranscriptStats() throws {
+        let sourceURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent("Sources/MeetingRescue/AppViewModel.swift")
+        let source = try String(contentsOf: sourceURL, encoding: .utf8)
+        let summary = try #require(source.slice(from: "var nextAutomaticAnalysisSummary", to: "var filteredMeetingHistoryItems"))
+        let trigger = try #require(source.slice(from: "private func triggerAutomaticAnalysisIfNeeded", to: "private func automaticTriggerPolicyForCurrentMode"))
+
+        #expect(source.contains("private var automaticAnalysisTranscriptStatsCache"))
+        #expect(summary.contains("automaticAnalysisTranscriptStatsForCurrentState()"))
+        #expect(trigger.contains("automaticAnalysisTranscriptStatsForCurrentState()"))
+        #expect(summary.contains("policy.evaluate("))
+        #expect(summary.contains("stats: stats"))
+        #expect(trigger.contains("stats: stats"))
+        #expect(!summary.contains("TranscriptParser.parse(newText)"))
+        #expect(!trigger.contains("rawTranscript: rawTranscript"))
     }
 
     @Test("Live Watch skips history refresh when active transcript has no appended content")
@@ -207,6 +273,38 @@ struct AppViewModelTestRunContextTests {
         #expect(readAppend.contains("private func readAppendedContent(from url: URL) -> Bool"))
         #expect(readAppend.contains("return true"))
         #expect(readAppend.contains("return false"))
+    }
+
+    @Test("Live Watch reloads rewritten transcript files instead of tailing shifted bytes")
+    func liveWatchReloadsRewrittenTranscriptFilesInsteadOfTailingShiftedBytes() throws {
+        let sourceURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent("Sources/MeetingRescue/AppViewModel.swift")
+        let source = try String(contentsOf: sourceURL, encoding: .utf8)
+        let readAppend = try #require(source.slice(from: "private func readAppendedContent", to: "private func refreshParsedState"))
+
+        #expect(readAppend.contains("TranscriptFileAppendPlanner.plan"))
+        #expect(readAppend.contains("currentPrefixSample"))
+        #expect(readAppend.contains("currentSuffixSample"))
+        #expect(readAppend.contains("case .reload:"))
+        #expect(readAppend.contains("readFullContent(from: url, allowFinalTrigger: true)"))
+        #expect(readAppend.contains("rawTranscriptIncrementalDecoder.decode(data)"))
+        #expect(readAppend.contains("rawReadAnchor.advanced(withAppendedData: data)"))
+    }
+
+    @Test("raw transcript display publishes append and reload intent separately")
+    func rawTranscriptDisplayPublishesAppendAndReloadIntentSeparately() throws {
+        let sourceURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent("Sources/MeetingRescue/AppViewModel.swift")
+        let source = try String(contentsOf: sourceURL, encoding: .utf8)
+        let readFull = try #require(source.slice(from: "private func readFullContent", to: "private func readAppendedContent"))
+        let readAppend = try #require(source.slice(from: "private func readAppendedContent", to: "private func refreshParsedState"))
+        let applyReplayFrame = try #require(source.slice(from: "private func applyReplayFrame", to: "private func updateTestRunProgress"))
+
+        #expect(source.contains("struct RawTranscriptDisplayUpdate"))
+        #expect(source.contains("@Published private(set) var rawTranscriptDisplayUpdate"))
+        #expect(readFull.contains("publishRawTranscriptDisplayReload()"))
+        #expect(readAppend.contains("publishRawTranscriptDisplayAppend(appendedText)"))
+        #expect(applyReplayFrame.contains("publishRawTranscriptDisplayAppend(frame.text)"))
     }
 
     @Test("Live Watch caches latest transcript directory scan between ticks")
@@ -309,6 +407,20 @@ struct AppViewModelTestRunContextTests {
         #expect(searchIndexBuild.contains("debouncedHistorySearchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty"))
         #expect(searchDatabaseRefresh.contains("let pendingSearchIndexBuildRequest = pendingSearchIndexBuildRequest"))
         #expect(searchDatabaseRefresh.contains("startSearchIndexBuildIfNeeded("))
+    }
+
+    @Test("database ready search does not fuzzy scan every history item")
+    func databaseReadySearchDoesNotFuzzyScanEveryHistoryItem() throws {
+        let sourceURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent("Sources/MeetingRescue/AppViewModel.swift")
+        let source = try String(contentsOf: sourceURL, encoding: .utf8)
+        let searchResultsBuilder = try #require(source.slice(from: "private func buildMeetingHistorySearchResults", to: "private func sortMeetingHistorySearchResults"))
+        let searchDatabaseRefresh = try #require(source.slice(from: "private func refreshSearchDatabaseMatches", to: "func openHistorySearchResult"))
+
+        #expect(searchResultsBuilder.contains("inMemoryFallbackItemIDs"))
+        #expect(searchResultsBuilder.contains("guard inMemoryFallbackItemIDs?.contains(item.id) ?? true else"))
+        #expect(searchDatabaseRefresh.contains("let inMemoryFallbackItemIDs: Set<String>? = databaseIsReady ? [] : nil"))
+        #expect(searchDatabaseRefresh.contains("inMemoryFallbackItemIDs: inMemoryFallbackItemIDs"))
     }
 
     @Test("live metadata refresh avoids full transcript dialogue parsing")

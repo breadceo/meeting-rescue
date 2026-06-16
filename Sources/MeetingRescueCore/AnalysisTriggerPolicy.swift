@@ -41,10 +41,60 @@ public struct AnalysisTriggerPolicy: Equatable, Sendable {
         case wait(reason: String)
     }
 
+    public struct TranscriptStats: Equatable, Sendable {
+        public var sourceCharacterCount: Int
+        public var startCharacterCount: Int
+        public var newCharacterCount: Int
+        public var dialogueLineCount: Int
+        public var meaningfulDialogueLineCount: Int
+
+        public init(
+            sourceCharacterCount: Int,
+            startCharacterCount: Int,
+            newCharacterCount: Int,
+            dialogueLineCount: Int,
+            meaningfulDialogueLineCount: Int
+        ) {
+            self.sourceCharacterCount = sourceCharacterCount
+            self.startCharacterCount = startCharacterCount
+            self.newCharacterCount = newCharacterCount
+            self.dialogueLineCount = dialogueLineCount
+            self.meaningfulDialogueLineCount = meaningfulDialogueLineCount
+        }
+    }
+
     public var configuration: Configuration
 
     public init(configuration: Configuration = Configuration()) {
         self.configuration = configuration
+    }
+
+    public func transcriptStats(
+        rawTranscript: String,
+        lastAnalyzedTranscriptCharacterCount: Int
+    ) -> TranscriptStats {
+        let sourceCount = rawTranscript.count
+        let startCount = min(max(0, lastAnalyzedTranscriptCharacterCount), sourceCount)
+        guard startCount < sourceCount else {
+            return TranscriptStats(
+                sourceCharacterCount: sourceCount,
+                startCharacterCount: startCount,
+                newCharacterCount: 0,
+                dialogueLineCount: 0,
+                meaningfulDialogueLineCount: 0
+            )
+        }
+
+        let newTranscript = transcriptSlice(rawTranscript, from: startCount, to: sourceCount)
+        let dialogueLines = TranscriptParser.parse(newTranscript).dialogueLines
+        let meaningfulLineCount = dialogueLines.filter(Self.isMeaningfulDialogueLine).count
+        return TranscriptStats(
+            sourceCharacterCount: sourceCount,
+            startCharacterCount: startCount,
+            newCharacterCount: sourceCount - startCount,
+            dialogueLineCount: dialogueLines.count,
+            meaningfulDialogueLineCount: meaningfulLineCount
+        )
     }
 
     public func evaluate(
@@ -54,49 +104,61 @@ public struct AnalysisTriggerPolicy: Equatable, Sendable {
         now: Date,
         lastAutomaticAnalysisAt: Date?
     ) -> Decision {
+        let stats = transcriptStats(
+            rawTranscript: rawTranscript,
+            lastAnalyzedTranscriptCharacterCount: lastAnalyzedTranscriptCharacterCount
+        )
+        return evaluate(
+            stats: stats,
+            latestTranscriptElapsedSeconds: latestTranscriptElapsedSeconds,
+            now: now,
+            lastAutomaticAnalysisAt: lastAutomaticAnalysisAt
+        )
+    }
+
+    public func evaluate(
+        stats: TranscriptStats,
+        latestTranscriptElapsedSeconds: Int,
+        now: Date,
+        lastAutomaticAnalysisAt: Date?
+    ) -> Decision {
         guard latestTranscriptElapsedSeconds >= configuration.minimumMeetingElapsedSeconds else {
             return .wait(reason: "initial-meeting-gate")
         }
 
-        let sourceCount = rawTranscript.count
-        let startCount = min(max(0, lastAnalyzedTranscriptCharacterCount), sourceCount)
-        guard startCount < sourceCount else {
+        guard stats.newCharacterCount > 0 else {
             return .wait(reason: "no-new-transcript")
         }
 
-        let newTranscript = transcriptSlice(rawTranscript, from: startCount, to: sourceCount)
-        let dialogueLines = TranscriptParser.parse(newTranscript).dialogueLines
-        guard !dialogueLines.isEmpty else {
+        guard stats.dialogueLineCount > 0 else {
             return .skip(reason: "system-only")
         }
 
-        let meaningfulLines = dialogueLines.filter(Self.isMeaningfulDialogueLine)
-        if meaningfulLines.isEmpty, dialogueLines.count <= 2 {
+        if stats.meaningfulDialogueLineCount == 0, stats.dialogueLineCount <= 2 {
             return .skip(reason: "low-value-dialogue")
         }
 
-        let newCharacterCount = sourceCount - startCount
         let elapsedSinceLastAttempt = lastAutomaticAnalysisAt.map { now.timeIntervalSince($0) }
         if let elapsedSinceLastAttempt,
            elapsedSinceLastAttempt < TimeInterval(configuration.minBatchWaitSeconds),
            !shouldBypassMinimumWait(
-               meaningfulLineCount: meaningfulLines.count,
-               newCharacterCount: newCharacterCount
+               meaningfulLineCount: stats.meaningfulDialogueLineCount,
+               newCharacterCount: stats.newCharacterCount
            ) {
             return .wait(reason: "min-batch-wait")
         }
 
-        if meaningfulLines.count >= configuration.minNewDialogueLines {
+        if stats.meaningfulDialogueLineCount >= configuration.minNewDialogueLines {
             return .run(reason: "min-dialogue-lines")
         }
 
-        if newCharacterCount >= configuration.minNewTranscriptCharacters {
+        if stats.newCharacterCount >= configuration.minNewTranscriptCharacters {
             return .run(reason: "min-transcript-characters")
         }
 
         if let elapsedSinceLastAttempt,
            elapsedSinceLastAttempt >= TimeInterval(configuration.maxBatchWaitSeconds),
-           !meaningfulLines.isEmpty {
+           stats.meaningfulDialogueLineCount > 0 {
             return .run(reason: "max-wait-flush")
         }
 

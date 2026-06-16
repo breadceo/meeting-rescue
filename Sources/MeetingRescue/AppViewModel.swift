@@ -230,6 +230,27 @@ struct TranscriptFocusRequest: Equatable {
     let token: Int
 }
 
+struct RawTranscriptDisplayUpdate: Equatable {
+    enum Kind: Equatable {
+        case fullReplace
+        case append
+    }
+
+    let sequence: Int
+    let kind: Kind
+    let text: String
+
+    static let initial = RawTranscriptDisplayUpdate(sequence: 0, kind: .fullReplace, text: "")
+
+    static func fullReplace(sequence: Int) -> RawTranscriptDisplayUpdate {
+        RawTranscriptDisplayUpdate(sequence: sequence, kind: .fullReplace, text: "")
+    }
+
+    static func append(sequence: Int, text: String) -> RawTranscriptDisplayUpdate {
+        RawTranscriptDisplayUpdate(sequence: sequence, kind: .append, text: text)
+    }
+}
+
 private struct MeetingHistoryBuildResult: Sendable {
     let fileSignature: String
     let searchIndexFileSignature: String
@@ -743,22 +764,49 @@ private func sortedUnique(_ values: [String]) -> [String] {
     .sorted { $0.localizedStandardCompare($1) == .orderedAscending }
 }
 
+private func scanActiveLocalGlossaryMatchTermIDs(
+    in text: String,
+    preparedState: LocalGlossaryMatcher.PreparedState
+) -> Set<String> {
+    Set(
+        LocalGlossaryMatcher.matches(
+            in: text,
+            preparedState: preparedState,
+            maxMatches: Int.max,
+            includeEvidence: false
+        )
+        .map(\.termID)
+    )
+}
+
 private func buildMeetingHistorySearchResults(
     items: [MeetingHistoryItem],
     query: String,
     facetSelection: MeetingHistoryFacetSelection,
     sortOrder: MeetingHistorySortOrder,
-    databaseMatchesByPath: [String: MeetingHistorySearchMatch]
+    databaseMatchesByPath: [String: MeetingHistorySearchMatch],
+    inMemoryFallbackItemIDs: Set<String>? = nil
 ) -> [MeetingHistorySearchResult] {
     let facetFilteredItems = items.filter {
         facetSelection.matches($0.filterDocument)
     }
     let matchedResults = facetFilteredItems.compactMap { item -> MeetingHistorySearchResult? in
         let databaseMatch = databaseMatchesByPath[item.id]
-        guard let match = databaseMatch ?? item.searchMatch(for: query) else {
+        let inMemoryMatch: MeetingHistorySearchMatch?
+        if databaseMatch == nil {
+            guard inMemoryFallbackItemIDs?.contains(item.id) ?? true else {
+                return nil
+            }
+            inMemoryMatch = item.searchMatch(for: query)
+        } else {
+            inMemoryMatch = nil
+        }
+        guard let match = databaseMatch ?? inMemoryMatch else {
             return nil
         }
-        let anchorTimestamp = match.timestamp ?? databaseMatch?.timestamp ?? item.searchAnchorMatch(for: query)?.timestamp
+        let anchorTimestamp = match.timestamp
+            ?? databaseMatch?.timestamp
+            ?? (inMemoryMatch == nil ? nil : item.searchAnchorMatch(for: query)?.timestamp)
         return MeetingHistorySearchResult(item: item, match: match, anchorTimestamp: anchorTimestamp)
     }
     return sortMeetingHistorySearchResults(
@@ -846,6 +894,7 @@ final class AppViewModel: ObservableObject {
     @Published var liveMeetingUpdated = false
     @Published var rawTranscript = "" {
         didSet {
+            invalidateAutomaticAnalysisTranscriptStats()
             if rawTranscript.isEmpty {
                 resetActiveLocalGlossaryMatchCount()
             }
@@ -854,6 +903,7 @@ final class AppViewModel: ObservableObject {
     @Published var rawTranscriptPreviewLines: [String] = []
     @Published private(set) var transcriptSpeakers: [String] = []
     @Published var rawTranscriptRevision = 0
+    @Published private(set) var rawTranscriptDisplayUpdate = RawTranscriptDisplayUpdate.initial
     @Published var transcriptFocusRequest: TranscriptFocusRequest?
     @Published var highlightedTranscriptLineID: Int?
     @Published var rawTranscriptLineCount = 0
@@ -901,6 +951,12 @@ final class AppViewModel: ObservableObject {
     private var analysisRunGeneration = 0
     private var latestSnapshotIsLocalFallback = false
     private var rawReadOffset: UInt64 = 0
+    private var rawReadAnchor = TranscriptFileReadAnchor()
+    private var rawTranscriptIncrementalDecoder = TranscriptIncrementalTextDecoder()
+    private var rawTranscriptTailUsesIncrementalUTF8 = true
+    private var rawTranscriptDisplayUpdateSequence = 0
+    private var transcriptSpeakerOrder: [String] = []
+    private var transcriptSpeakerKeys: Set<String> = []
     private var securityScopeActive = false
     private var lastAutomaticAnalysisAt: Date?
     private var finalAnalysisTriggeredForMeetingID: String?
@@ -926,10 +982,17 @@ final class AppViewModel: ObservableObject {
     private var transcriptFocusToken = 0
     private var historyLiveBaselineCandidate: TranscriptFileCandidate?
     private let latestTranscriptFullScanInterval: TimeInterval = 5
+    private let transcriptReadAnchorSampleByteLimit = 16_384
     private var cachedLatestTranscriptCandidate: TranscriptFileCandidate?
     private var lastLatestTranscriptScanAt: Date?
     private var activeLocalGlossaryMatchSignature = ""
     private var activeLocalGlossaryMatchTask: Task<Void, Never>?
+    private var activeLocalGlossaryMatchedTermIDs: Set<String> = []
+    private var pendingActiveLocalGlossaryMatchText = ""
+    private var activeLocalGlossaryMatchBaselineCoversCurrentTranscript = true
+    private var testRunFallbackRefreshTask: Task<Void, Never>?
+    private let testRunFallbackMinimumIntervalNanoseconds: UInt64 = 1_000_000_000
+    private var automaticAnalysisTranscriptStatsCache: (signature: String, stats: AnalysisTriggerPolicy.TranscriptStats)?
     private let replayFallbackDelaySeconds: TimeInterval = 0.35
     private let replayMinimumDelaySeconds: TimeInterval = 0.05
     private let failedAnalysisRetryDelaySeconds = 8
@@ -996,10 +1059,9 @@ final class AppViewModel: ObservableObject {
         }
         let policy = automaticTriggerPolicyForCurrentMode()
         let config = policy.configuration
-        let lastAnalyzedCount = analysisState.analyzedTranscriptCharacterCount
-        let newCharacterCount = max(0, rawTranscript.count - lastAnalyzedCount)
-        let newText = transcriptSlice(rawTranscript, from: lastAnalyzedCount, to: rawTranscript.count)
-        let newLines = TranscriptParser.parse(newText).dialogueLines.count
+        let stats = automaticAnalysisTranscriptStatsForCurrentState()
+        let newCharacterCount = stats.newCharacterCount
+        let newLines = stats.dialogueLineCount
         let latestElapsedSeconds = latestTranscriptElapsedSeconds()
         if latestElapsedSeconds < config.minimumMeetingElapsedSeconds {
             return "초기 \(config.minimumMeetingElapsedSeconds - latestElapsedSeconds)초 skip"
@@ -1010,8 +1072,7 @@ final class AppViewModel: ObservableObject {
         let maxWaitRemaining = max(0, config.maxBatchWaitSeconds - elapsedSinceLast)
         let progress = "\(newLines)/\(config.minNewDialogueLines)줄 · \(newCharacterCount)/\(config.minNewTranscriptCharacters)자"
         let decision = policy.evaluate(
-            rawTranscript: rawTranscript,
-            lastAnalyzedTranscriptCharacterCount: lastAnalyzedCount,
+            stats: stats,
             latestTranscriptElapsedSeconds: latestElapsedSeconds,
             now: now,
             lastAutomaticAnalysisAt: lastAutomaticAnalysisAt
@@ -1075,44 +1136,76 @@ final class AppViewModel: ObservableObject {
         activeLocalGlossaryMatchTask?.cancel()
         activeLocalGlossaryMatchTask = nil
         activeLocalGlossaryMatchSignature = signature
+        activeLocalGlossaryMatchedTermIDs = []
+        pendingActiveLocalGlossaryMatchText = ""
+        activeLocalGlossaryMatchCount = 0
         guard settings.localGlossaryEnabled, !rawTranscript.isEmpty else {
-            activeLocalGlossaryMatchCount = 0
+            activeLocalGlossaryMatchBaselineCoversCurrentTranscript = true
             return
         }
-        activeLocalGlossaryMatchCount = LocalGlossaryMatcher.matches(
-            in: rawTranscript,
-            state: localGlossaryState
-        ).count
-    }
 
-    private func scheduleActiveLocalGlossaryMatchCountRefresh() {
-        let signature = activeLocalGlossaryMatchSignatureForCurrentState()
-        guard signature != activeLocalGlossaryMatchSignature else {
-            return
-        }
-        activeLocalGlossaryMatchTask?.cancel()
-        activeLocalGlossaryMatchSignature = signature
-        guard settings.localGlossaryEnabled, !rawTranscript.isEmpty else {
-            activeLocalGlossaryMatchTask = nil
-            activeLocalGlossaryMatchCount = 0
-            return
-        }
+        activeLocalGlossaryMatchBaselineCoversCurrentTranscript = false
         let transcript = rawTranscript
-        let state = localGlossaryState
-        activeLocalGlossaryMatchTask = Task { @MainActor [weak self, signature, transcript, state] in
-            try? await Task.sleep(nanoseconds: 350_000_000)
-            guard !Task.isCancelled else {
-                return
-            }
-            let count = await Task.detached(priority: .utility) {
-                LocalGlossaryMatcher.matches(in: transcript, state: state).count
+        let preparedState = LocalGlossaryMatcher.PreparedState(state: localGlossaryState)
+        activeLocalGlossaryMatchTask = Task { @MainActor [weak self, signature, transcript, preparedState] in
+            let termIDs = await Task.detached(priority: .utility) {
+                scanActiveLocalGlossaryMatchTermIDs(in: transcript, preparedState: preparedState)
             }.value
             guard !Task.isCancelled,
                   let self,
                   self.activeLocalGlossaryMatchSignature == signature else {
                 return
             }
-            self.activeLocalGlossaryMatchCount = count
+            self.activeLocalGlossaryMatchedTermIDs = termIDs
+            self.activeLocalGlossaryMatchCount = termIDs.count
+            self.activeLocalGlossaryMatchBaselineCoversCurrentTranscript = true
+            self.activeLocalGlossaryMatchTask = nil
+        }
+    }
+
+    private func scheduleActiveLocalGlossaryMatchCountRefresh(appendedText text: String) {
+        guard activeLocalGlossaryMatchBaselineCoversCurrentTranscript else {
+            activeLocalGlossaryMatchSignature = ""
+            refreshActiveLocalGlossaryMatchCountIfNeeded()
+            return
+        }
+        let signature = activeLocalGlossaryMatchSignatureForCurrentState()
+        guard signature != activeLocalGlossaryMatchSignature else {
+            return
+        }
+        activeLocalGlossaryMatchTask?.cancel()
+        activeLocalGlossaryMatchSignature = signature
+        guard settings.localGlossaryEnabled, !rawTranscript.isEmpty, !text.isEmpty else {
+            activeLocalGlossaryMatchTask = nil
+            pendingActiveLocalGlossaryMatchText = ""
+            activeLocalGlossaryMatchedTermIDs = []
+            activeLocalGlossaryMatchCount = 0
+            activeLocalGlossaryMatchBaselineCoversCurrentTranscript = true
+            return
+        }
+
+        pendingActiveLocalGlossaryMatchText += text
+        let preparedState = LocalGlossaryMatcher.PreparedState(state: localGlossaryState)
+        activeLocalGlossaryMatchTask = Task { @MainActor [weak self, signature, preparedState] in
+            try? await Task.sleep(nanoseconds: 350_000_000)
+            guard !Task.isCancelled else {
+                return
+            }
+            guard let self,
+                  self.activeLocalGlossaryMatchSignature == signature else {
+                return
+            }
+            let textToScan = self.pendingActiveLocalGlossaryMatchText
+            self.pendingActiveLocalGlossaryMatchText = ""
+            let termIDs = await Task.detached(priority: .utility) {
+                scanActiveLocalGlossaryMatchTermIDs(in: textToScan, preparedState: preparedState)
+            }.value
+            guard !Task.isCancelled,
+                  self.activeLocalGlossaryMatchSignature == signature else {
+                return
+            }
+            self.activeLocalGlossaryMatchedTermIDs.formUnion(termIDs)
+            self.activeLocalGlossaryMatchCount = self.activeLocalGlossaryMatchedTermIDs.count
             self.activeLocalGlossaryMatchTask = nil
         }
     }
@@ -1121,6 +1214,9 @@ final class AppViewModel: ObservableObject {
         activeLocalGlossaryMatchTask?.cancel()
         activeLocalGlossaryMatchTask = nil
         activeLocalGlossaryMatchSignature = ""
+        activeLocalGlossaryMatchedTermIDs = []
+        pendingActiveLocalGlossaryMatchText = ""
+        activeLocalGlossaryMatchBaselineCoversCurrentTranscript = true
         activeLocalGlossaryMatchCount = 0
     }
 
@@ -1280,12 +1376,14 @@ final class AppViewModel: ObservableObject {
                     }
                     databaseMatchesByPath[result.path] = result.match
                 }
+                let inMemoryFallbackItemIDs: Set<String>? = databaseIsReady ? [] : nil
                 let filteredResults = buildMeetingHistorySearchResults(
                     items: items,
                     query: trimmed,
                     facetSelection: facetSelection,
                     sortOrder: sortOrder,
-                    databaseMatchesByPath: databaseMatchesByPath
+                    databaseMatchesByPath: databaseMatchesByPath,
+                    inMemoryFallbackItemIDs: inMemoryFallbackItemIDs
                 )
                 return (databaseMatchesByPath, filteredResults)
             }
@@ -1532,8 +1630,10 @@ final class AppViewModel: ObservableObject {
             activeTranscriptURL = nil
             liveActiveTranscriptURL = nil
             rawTranscript = ""
+            publishRawTranscriptDisplayReload()
             rawTranscriptPreviewLines = []
-            transcriptSpeakers = []
+            resetTranscriptSpeakers()
+            resetActiveLocalGlossaryMatchCount()
             transcriptFocusRequest = nil
             highlightedTranscriptLineID = nil
             rawTranscriptLineCount = 0
@@ -1541,7 +1641,7 @@ final class AppViewModel: ObservableObject {
             analysisState = MeetingAnalysisState()
             analysisStatus = .idle
             transcriptUpdatedAt = nil
-            rawReadOffset = 0
+            resetTranscriptReadTracking()
             Task {
                 await scheduler.setActiveMeetingID(nil)
             }
@@ -1923,8 +2023,10 @@ final class AppViewModel: ObservableObject {
         liveMeetingUpdated = false
         historyLiveBaselineCandidate = nil
         rawTranscript = ""
+        publishRawTranscriptDisplayReload()
         rawTranscriptPreviewLines = []
-        transcriptSpeakers = []
+        resetTranscriptSpeakers()
+        resetActiveLocalGlossaryMatchCount()
         transcriptFocusRequest = nil
         highlightedTranscriptLineID = nil
         rawTranscriptLineCount = 0
@@ -1932,7 +2034,7 @@ final class AppViewModel: ObservableObject {
         analysisState = MeetingAnalysisState()
         analysisStatus = .idle
         transcriptUpdatedAt = nil
-        rawReadOffset = 0
+        resetTranscriptReadTracking()
         securityScopeActive = false
         try? stateStore.deleteFolderBookmark()
         statusMessage = "선택한 폴더를 잊었습니다."
@@ -2439,12 +2541,14 @@ final class AppViewModel: ObservableObject {
             replayCursor = TranscriptReplayCursor(rawTranscript: fullTranscript)
             activeTranscriptURL = fileURL
             rawTranscript = ""
+            publishRawTranscriptDisplayReload()
             rawTranscriptPreviewLines = []
-            transcriptSpeakers = []
+            resetTranscriptSpeakers()
+            resetActiveLocalGlossaryMatchCount()
             transcriptFocusRequest = nil
             highlightedTranscriptLineID = nil
             rawTranscriptLineCount = 0
-            rawReadOffset = 0
+            resetTranscriptReadTracking()
             lastAutomaticAnalysisAt = nil
             finalAnalysisTriggeredForMeetingID = nil
             clearFinalRetryCounts(for: fileURL)
@@ -2524,6 +2628,7 @@ final class AppViewModel: ObservableObject {
             stopReplayTimer()
             testRunPlaybackStatus = .completed
             statusMessage = "Test Run 완료: \(activeTranscriptURL.lastPathComponent)"
+            refreshTestRunFallbackImmediatelyIfNeeded(message: "Test Run 완료 시점의 로컬 preview를 갱신했습니다.")
             triggerAutomaticAnalysisIfNeeded()
         } else if testRunPlaybackStatus == .running {
             scheduleReplayTimer(after: frame.delayAfterSeconds)
@@ -2534,6 +2639,7 @@ final class AppViewModel: ObservableObject {
         rawTranscript += frame.text
         rawReadOffset += UInt64(frame.text.data(using: .utf8)?.count ?? frame.text.count)
         liveTranscriptIndex.append(frame.text)
+        publishRawTranscriptDisplayAppend(frame.text)
         appendTranscriptPreview(frame.text)
         transcriptUpdatedAt = Date()
         refreshParsedState(
@@ -2542,7 +2648,7 @@ final class AppViewModel: ObservableObject {
             endMarkerSource: String(rawTranscript.suffix(1_024))
         )
         updateTestRunProgress(currentLine: frame.currentLine, totalLines: frame.totalLines)
-        refreshTestRunFallbackIfNeeded(message: "Test Run replay에서 로컬 preview를 갱신했습니다.")
+        scheduleTestRunFallbackRefreshIfNeeded(message: "Test Run replay에서 로컬 preview를 갱신했습니다.")
         triggerAutomaticAnalysisIfNeeded()
     }
 
@@ -2580,6 +2686,26 @@ final class AppViewModel: ObservableObject {
         analysisState.updatedAt = Date()
         latestSnapshotIsLocalFallback = true
         try? stateStore.saveAnalysisState(analysisState, for: activeTranscriptURL)
+    }
+
+    private func scheduleTestRunFallbackRefreshIfNeeded(message: String) {
+        guard testRunFallbackRefreshTask == nil else {
+            return
+        }
+        testRunFallbackRefreshTask = Task { @MainActor [weak self, message] in
+            try? await Task.sleep(nanoseconds: self?.testRunFallbackMinimumIntervalNanoseconds ?? 1_000_000_000)
+            guard !Task.isCancelled, let self else {
+                return
+            }
+            self.refreshTestRunFallbackIfNeeded(message: message)
+            self.testRunFallbackRefreshTask = nil
+        }
+    }
+
+    private func refreshTestRunFallbackImmediatelyIfNeeded(message: String) {
+        testRunFallbackRefreshTask?.cancel()
+        testRunFallbackRefreshTask = nil
+        refreshTestRunFallbackIfNeeded(message: message)
     }
 
     private func refreshMeetingHistory(
@@ -3091,15 +3217,17 @@ final class AppViewModel: ObservableObject {
             if transcriptRunMode == .liveWatch {
                 activeTranscriptURL = nil
                 rawTranscript = ""
+                publishRawTranscriptDisplayReload()
                 rawTranscriptPreviewLines = []
-                transcriptSpeakers = []
+                resetTranscriptSpeakers()
+                resetActiveLocalGlossaryMatchCount()
                 transcriptFocusRequest = nil
                 highlightedTranscriptLineID = nil
                 rawTranscriptLineCount = 0
                 metadata = MeetingMetadata()
                 analysisState = MeetingAnalysisState()
                 analysisStatus = .idle
-                rawReadOffset = 0
+                resetTranscriptReadTracking()
                 liveTranscriptIndex.reset()
                 transcriptUpdatedAt = nil
                 statusMessage = "선택한 폴더에서 `.txt` transcript를 기다리는 중입니다."
@@ -3145,12 +3273,14 @@ final class AppViewModel: ObservableObject {
     private func loadTranscriptForViewing(_ url: URL, statusPrefix: String) {
         activeTranscriptURL = url
         rawTranscript = ""
+        publishRawTranscriptDisplayReload()
         rawTranscriptPreviewLines = []
-        transcriptSpeakers = []
+        resetTranscriptSpeakers()
+        resetActiveLocalGlossaryMatchCount()
         transcriptFocusRequest = nil
         highlightedTranscriptLineID = nil
         rawTranscriptLineCount = 0
-        rawReadOffset = 0
+        resetTranscriptReadTracking()
         finalAnalysisTriggeredForMeetingID = nil
         analysisState = stateStore.loadAnalysisState(for: url)
         if analysisState.markInterruptedRunningAttemptsSkipped(
@@ -3182,12 +3312,17 @@ final class AppViewModel: ObservableObject {
     private func readFullContent(from url: URL, allowFinalTrigger: Bool = true) {
         do {
             let data = try Data(contentsOf: url)
-            rawTranscript = TranscriptTextDecoder.decode(data)
+            rawTranscriptTailUsesIncrementalUTF8 = TranscriptTextDecoder.encodingKind(for: data) == .utf8
+            rawTranscriptIncrementalDecoder.reset()
+            rawTranscript = rawTranscriptTailUsesIncrementalUTF8
+                ? rawTranscriptIncrementalDecoder.decode(data)
+                : TranscriptTextDecoder.decode(data)
             if transcriptRunMode != .history {
                 liveTranscriptIndex.rebuild(from: rawTranscript)
             }
+            publishRawTranscriptDisplayReload()
             updateTranscriptPreview()
-            rawReadOffset = UInt64(data.count)
+            updateTranscriptReadAnchor(from: data)
             transcriptUpdatedAt = Date()
             refreshParsedState(
                 for: url,
@@ -3204,33 +3339,59 @@ final class AppViewModel: ObservableObject {
         do {
             let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
             let fileSize = (attributes[.size] as? NSNumber)?.uint64Value ?? 0
-            if fileSize < rawReadOffset {
+            if fileSize < rawReadAnchor.byteCount {
                 readFullContent(from: url, allowFinalTrigger: true)
                 return true
             }
 
-            guard fileSize > rawReadOffset else {
+            let currentPrefixSample = try readTranscriptPrefixSample(
+                from: url,
+                byteLimit: rawReadAnchor.sampleByteLimit
+            )
+            let currentSuffixSample = try readTranscriptSuffixSample(
+                from: url,
+                endingAt: rawReadAnchor.byteCount,
+                byteLimit: rawReadAnchor.sampleByteLimit
+            )
+            let appendPlan = TranscriptFileAppendPlanner.plan(
+                fileSize: fileSize,
+                previousAnchor: rawReadAnchor,
+                currentPrefixSample: currentPrefixSample,
+                currentSuffixSampleAtPreviousEnd: currentSuffixSample
+            )
+
+            switch appendPlan {
+            case .reload:
+                readFullContent(from: url, allowFinalTrigger: true)
+                return true
+            case .unchanged:
                 return false
+            case .appended:
+                break
             }
 
             let handle = try FileHandle(forReadingFrom: url)
             defer {
                 try? handle.close()
             }
-            try handle.seek(toOffset: rawReadOffset)
+            try handle.seek(toOffset: rawReadAnchor.byteCount)
             let data = try handle.readToEnd() ?? Data()
 
             guard !data.isEmpty else {
                 return false
             }
 
-            let appendedText = TranscriptTextDecoder.decode(data)
+            let appendedText = rawTranscriptTailUsesIncrementalUTF8
+                ? rawTranscriptIncrementalDecoder.decode(data)
+                : TranscriptTextDecoder.decode(data)
             rawTranscript += appendedText
             if transcriptRunMode != .history {
                 liveTranscriptIndex.append(appendedText)
             }
+            publishRawTranscriptDisplayAppend(appendedText)
             appendTranscriptPreview(appendedText)
-            rawReadOffset = fileSize
+            rawReadAnchor = rawReadAnchor.advanced(withAppendedData: data)
+            rawReadOffset = rawReadAnchor.byteCount
             transcriptUpdatedAt = Date()
             refreshParsedState(
                 for: url,
@@ -3243,6 +3404,57 @@ final class AppViewModel: ObservableObject {
             statusMessage = "transcript tail 실패: \(error.localizedDescription)"
             return false
         }
+    }
+
+    private func resetTranscriptReadTracking() {
+        rawReadOffset = 0
+        rawReadAnchor = TranscriptFileReadAnchor(sampleByteLimit: transcriptReadAnchorSampleByteLimit)
+        rawTranscriptIncrementalDecoder.reset()
+        rawTranscriptTailUsesIncrementalUTF8 = true
+    }
+
+    private func updateTranscriptReadAnchor(from data: Data) {
+        rawReadAnchor = TranscriptFileReadAnchor(
+            data: data,
+            sampleByteLimit: transcriptReadAnchorSampleByteLimit
+        )
+        rawReadOffset = rawReadAnchor.byteCount
+    }
+
+    private func publishRawTranscriptDisplayReload() {
+        rawTranscriptDisplayUpdateSequence += 1
+        rawTranscriptDisplayUpdate = .fullReplace(sequence: rawTranscriptDisplayUpdateSequence)
+    }
+
+    private func publishRawTranscriptDisplayAppend(_ text: String) {
+        guard !text.isEmpty else {
+            return
+        }
+        rawTranscriptDisplayUpdateSequence += 1
+        rawTranscriptDisplayUpdate = .append(sequence: rawTranscriptDisplayUpdateSequence, text: text)
+    }
+
+    private func readTranscriptPrefixSample(from url: URL, byteLimit: Int) throws -> Data {
+        let handle = try FileHandle(forReadingFrom: url)
+        defer {
+            try? handle.close()
+        }
+        return try handle.read(upToCount: max(0, byteLimit)) ?? Data()
+    }
+
+    private func readTranscriptSuffixSample(from url: URL, endingAt endOffset: UInt64, byteLimit: Int) throws -> Data {
+        guard endOffset > 0, byteLimit > 0 else {
+            return Data()
+        }
+
+        let handle = try FileHandle(forReadingFrom: url)
+        defer {
+            try? handle.close()
+        }
+        let startOffset = endOffset > UInt64(byteLimit) ? endOffset - UInt64(byteLimit) : 0
+        let readCount = Int(endOffset - startOffset)
+        try handle.seek(toOffset: startOffset)
+        return try handle.read(upToCount: readCount) ?? Data()
     }
 
     private func refreshParsedState(
@@ -3317,9 +3529,9 @@ final class AppViewModel: ObservableObject {
             latestTranscriptElapsedSeconds: latestElapsedSeconds
         )
         let policy = automaticTriggerPolicyForCurrentMode()
+        let stats = automaticAnalysisTranscriptStatsForCurrentState()
         let decision = policy.evaluate(
-            rawTranscript: rawTranscript,
-            lastAnalyzedTranscriptCharacterCount: analysisState.analyzedTranscriptCharacterCount,
+            stats: stats,
             latestTranscriptElapsedSeconds: latestElapsedSeconds,
             now: triggerNow,
             lastAutomaticAnalysisAt: lastAutomaticAnalysisAt
@@ -3346,6 +3558,28 @@ final class AppViewModel: ObservableObject {
                 minimumAutomaticAnalysisElapsedSeconds
             )
         )
+    }
+
+    private func automaticAnalysisTranscriptStatsForCurrentState() -> AnalysisTriggerPolicy.TranscriptStats {
+        let signature = [
+            "\(rawTranscriptRevision)",
+            "\(rawTranscript.count)",
+            "\(analysisState.analyzedTranscriptCharacterCount)"
+        ].joined(separator: "|")
+        if let cached = automaticAnalysisTranscriptStatsCache,
+           cached.signature == signature {
+            return cached.stats
+        }
+        let stats = automaticTriggerPolicyForCurrentMode().transcriptStats(
+            rawTranscript: rawTranscript,
+            lastAnalyzedTranscriptCharacterCount: analysisState.analyzedTranscriptCharacterCount
+        )
+        automaticAnalysisTranscriptStatsCache = (signature, stats)
+        return stats
+    }
+
+    private func invalidateAutomaticAnalysisTranscriptStats() {
+        automaticAnalysisTranscriptStatsCache = nil
     }
 
     private func automaticTriggerReferenceDate(now: Date, latestTranscriptElapsedSeconds: Int) -> Date {
@@ -3568,6 +3802,7 @@ final class AppViewModel: ObservableObject {
         activeTranscriptURL = url
         metadata = TranscriptParser.parse(rawTranscript).metadata
         self.rawTranscript = rawTranscript
+        publishRawTranscriptDisplayReload()
         rawTranscriptLineCount = rawTranscript.components(separatedBy: .newlines).count
         refreshActiveLocalGlossaryMatchCountIfNeeded()
     }
@@ -4129,8 +4364,9 @@ final class AppViewModel: ObservableObject {
         let lines = rawTranscript.components(separatedBy: .newlines)
         rawTranscriptLineCount = lines.count
         rawTranscriptPreviewLines = lines
-        transcriptSpeakers = transcriptSpeakerList(from: lines)
+        rebuildTranscriptSpeakers(from: lines)
         rawTranscriptRevision += 1
+        invalidateAutomaticAnalysisTranscriptStats()
         refreshActiveLocalGlossaryMatchCountIfNeeded()
     }
 
@@ -4148,9 +4384,39 @@ final class AppViewModel: ObservableObject {
             }
         }
         rawTranscriptLineCount = rawTranscriptPreviewLines.count
-        transcriptSpeakers = transcriptSpeakerList(from: rawTranscriptPreviewLines)
+        appendTranscriptSpeakers(from: appendedLines)
         rawTranscriptRevision += 1
-        scheduleActiveLocalGlossaryMatchCountRefresh()
+        invalidateAutomaticAnalysisTranscriptStats()
+        scheduleActiveLocalGlossaryMatchCountRefresh(appendedText: text)
+    }
+
+    private func resetTranscriptSpeakers() {
+        transcriptSpeakerOrder = []
+        transcriptSpeakerKeys = []
+        transcriptSpeakers = []
+    }
+
+    private func rebuildTranscriptSpeakers(from lines: [String]) {
+        resetTranscriptSpeakers()
+        appendTranscriptSpeakers(from: lines)
+    }
+
+    private func appendTranscriptSpeakers(from lines: [String]) {
+        var didAppend = false
+        for line in lines {
+            guard let speaker = transcriptSpeakerName(in: line) else {
+                continue
+            }
+            let key = speaker.lowercased()
+            guard transcriptSpeakerKeys.insert(key).inserted else {
+                continue
+            }
+            transcriptSpeakerOrder.append(speaker)
+            didAppend = true
+        }
+        if didAppend {
+            transcriptSpeakers = transcriptSpeakerOrder
+        }
     }
 
     private func transcriptSpeakerList(from lines: [String]) -> [String] {

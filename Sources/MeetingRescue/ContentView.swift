@@ -225,6 +225,9 @@ struct ContentView: View {
         .onChange(of: viewModel.rawTranscriptRevision) {
             refreshDisplayedTranscriptCacheIfNeeded()
         }
+        .onChange(of: viewModel.rawTranscriptDisplayUpdate) {
+            refreshDisplayedTranscriptCacheIfNeeded()
+        }
         .onChange(of: viewModel.localGlossaryState.updatedAt) {
             refreshDisplayedTranscriptCacheIfNeeded()
         }
@@ -946,6 +949,7 @@ struct ContentView: View {
                 text: renderedTranscript.text,
                 documentIdentity: displayedTranscriptDocumentIdentity,
                 textIdentity: cachedDisplayedTranscriptSignature,
+                textUpdate: displayedTranscriptTextUpdate,
                 revision: viewModel.rawTranscriptRevision,
                 focusLineID: viewModel.highlightedTranscriptLineID,
                 scrollToBottomToken: rawTranscriptScrollToBottomToken,
@@ -979,8 +983,7 @@ struct ContentView: View {
         case .raw:
             return [
                 transcriptDisplayMode.rawValue,
-                "\(viewModel.rawTranscriptRevision)",
-                "\(viewModel.rawTranscript.count)"
+                "\(viewModel.rawTranscriptDisplayUpdate.sequence)"
             ].joined(separator: ":")
         case .glossaryApplied:
             return [
@@ -989,6 +992,23 @@ struct ContentView: View {
                 "\(viewModel.rawTranscript.count)",
                 "\(viewModel.localGlossaryState.updatedAt.timeIntervalSince1970)"
             ].joined(separator: ":")
+        }
+    }
+
+    private var displayedTranscriptTextUpdate: SelectableTranscriptTextUpdate {
+        switch transcriptDisplayMode {
+        case .raw:
+            switch viewModel.rawTranscriptDisplayUpdate.kind {
+            case .append:
+                return .append(
+                    sequence: viewModel.rawTranscriptDisplayUpdate.sequence,
+                    text: viewModel.rawTranscriptDisplayUpdate.text
+                )
+            case .fullReplace:
+                return .fullReplace(sequence: viewModel.rawTranscriptDisplayUpdate.sequence)
+            }
+        case .glossaryApplied:
+            return .fullReplace(sequence: viewModel.rawTranscriptDisplayUpdate.sequence)
         }
     }
 

@@ -1,10 +1,130 @@
 import AppKit
 import SwiftUI
 
+struct SelectableTranscriptTextUpdate: Equatable {
+    enum Kind: Equatable {
+        case fullReplace
+        case append
+    }
+
+    let sequence: Int
+    let kind: Kind
+    let text: String
+
+    static let initial = SelectableTranscriptTextUpdate.fullReplace(sequence: 0)
+
+    static func fullReplace(sequence: Int) -> SelectableTranscriptTextUpdate {
+        SelectableTranscriptTextUpdate(sequence: sequence, kind: .fullReplace, text: "")
+    }
+
+    static func append(sequence: Int, text: String) -> SelectableTranscriptTextUpdate {
+        SelectableTranscriptTextUpdate(sequence: sequence, kind: .append, text: text)
+    }
+}
+
+enum SelectableTranscriptTextStorageMutation: Equatable {
+    case unchanged
+    case appended
+    case replaced
+}
+
+enum SelectableTranscriptTextStorageUpdater {
+    @MainActor
+    static func apply(
+        text: String,
+        textUpdate: SelectableTranscriptTextUpdate,
+        documentDidChange: Bool,
+        previousTextIdentity: String,
+        newTextIdentity: String,
+        textView: NSTextView
+    ) -> SelectableTranscriptTextStorageMutation {
+        guard previousTextIdentity != newTextIdentity else {
+            return .unchanged
+        }
+
+        if textUpdate.kind == .append,
+           !documentDidChange,
+           !previousTextIdentity.isEmpty,
+           !textUpdate.text.isEmpty,
+           canAppend(text: text, appendedText: textUpdate.text, to: textView) {
+            append(textUpdate.text, to: textView)
+            return .appended
+        }
+
+        replace(text, in: textView)
+        return .replaced
+    }
+
+    @MainActor
+    private static func canAppend(text: String, appendedText: String, to textView: NSTextView) -> Bool {
+        guard let textStorage = textView.textStorage else {
+            return false
+        }
+        let currentLength = textStorage.length
+        let appendedLength = (appendedText as NSString).length
+        guard appendedLength > 0 else {
+            return false
+        }
+
+        let fullText = text as NSString
+        guard fullText.length == currentLength + appendedLength else {
+            return false
+        }
+        let appendedRange = NSRange(location: currentLength, length: appendedLength)
+        return fullText.substring(with: appendedRange) == appendedText
+    }
+
+    @MainActor
+    private static func append(_ text: String, to textView: NSTextView) {
+        guard let textStorage = textView.textStorage else {
+            textView.string += text
+            return
+        }
+
+        let selectedRanges = textView.selectedRanges
+        let attributes = defaultAttributes(for: textView)
+        textStorage.beginEditing()
+        textStorage.append(NSAttributedString(string: text, attributes: attributes))
+        textStorage.endEditing()
+        restoreSelection(selectedRanges, in: textView)
+    }
+
+    @MainActor
+    private static func replace(_ text: String, in textView: NSTextView) {
+        let selectedRanges = textView.selectedRanges
+        textView.string = text
+        restoreSelection(selectedRanges, in: textView)
+    }
+
+    @MainActor
+    private static func defaultAttributes(for textView: NSTextView) -> [NSAttributedString.Key: Any] {
+        [
+            .font: textView.font ?? NSFont.monospacedSystemFont(ofSize: 13, weight: .regular),
+            .foregroundColor: textView.textColor ?? NSColor.labelColor
+        ]
+    }
+
+    @MainActor
+    private static func restoreSelection(_ ranges: [NSValue], in textView: NSTextView) {
+        let textLength = (textView.string as NSString).length
+        let validRanges = ranges.filter { value in
+            let range = value.rangeValue
+            return range.location <= textLength && NSMaxRange(range) <= textLength
+        }
+
+        if validRanges.isEmpty {
+            textView.setSelectedRange(NSRange(location: textLength, length: 0))
+        } else {
+            textView.setSelectedRanges(validRanges, affinity: .downstream, stillSelecting: false)
+        }
+    }
+}
+
 struct SelectableTranscriptTextView: NSViewRepresentable {
     var text: String
     var documentIdentity: String
     var textIdentity: String
+    var textUpdate: SelectableTranscriptTextUpdate
     var revision: Int
     var focusLineID: Int?
     var scrollToBottomToken: Int
@@ -69,9 +189,16 @@ struct SelectableTranscriptTextView: NSViewRepresentable {
             context.coordinator.lastDocumentIdentity = documentIdentity
         }
 
+        let textMutation: SelectableTranscriptTextStorageMutation
         if context.coordinator.lastTextIdentity != textIdentity {
-            let selectedRange = textView.selectedRange()
-            textView.string = text
+            textMutation = SelectableTranscriptTextStorageUpdater.apply(
+                text: text,
+                textUpdate: textUpdate,
+                documentDidChange: documentDidChange,
+                previousTextIdentity: context.coordinator.lastTextIdentity,
+                newTextIdentity: textIdentity,
+                textView: textView
+            )
             context.coordinator.lastTextIdentity = textIdentity
             if documentDidChange {
                 context.coordinator.resetLayoutForNewDocument(textView, in: scrollView)
@@ -80,13 +207,12 @@ struct SelectableTranscriptTextView: NSViewRepresentable {
                     textView.setSelectedRange(emptyRange)
                 }
                 context.coordinator.emitSelectionChange("")
-            } else {
-                let textLength = (text as NSString).length
-                if NSMaxRange(selectedRange) <= textLength {
-                    textView.setSelectedRange(selectedRange)
-                }
             }
-        } else if documentDidChange {
+        } else {
+            textMutation = .unchanged
+        }
+
+        if documentDidChange && textMutation == .unchanged {
             context.coordinator.resetLayoutForNewDocument(textView, in: scrollView)
             let emptyRange = NSRange(location: 0, length: 0)
             if textView.selectedRange() != emptyRange {
@@ -97,15 +223,24 @@ struct SelectableTranscriptTextView: NSViewRepresentable {
 
         if context.coordinator.lastScrollToBottomToken != scrollToBottomToken {
             context.coordinator.lastScrollToBottomToken = scrollToBottomToken
+            context.coordinator.cancelPendingScrollToBottom()
             context.coordinator.scrollToBottom(enableAutoFollow: true)
+        } else if documentDidChange {
+            context.coordinator.lastRevision = revision
         } else if context.coordinator.lastRevision != revision {
             context.coordinator.lastRevision = revision
             if context.coordinator.isAutoFollowEnabled {
-                context.coordinator.scrollToBottom(enableAutoFollow: true)
+                if textMutation == .appended && focusLineID == nil {
+                    context.coordinator.scheduleCoalescedScrollToBottom()
+                } else {
+                    context.coordinator.cancelPendingScrollToBottom()
+                    context.coordinator.scrollToBottom(enableAutoFollow: true)
+                }
             }
         }
 
         if let focusLineID {
+            context.coordinator.cancelPendingScrollToBottom()
             context.coordinator.scrollToLine(focusLineID)
         }
     }
@@ -123,6 +258,8 @@ struct SelectableTranscriptTextView: NSViewRepresentable {
         var isProgrammaticScroll = false
         private weak var observedClipView: NSClipView?
         private var lastFocusedLineID: Int?
+        private var pendingScrollToBottomTask: Task<Void, Never>?
+        private let appendScrollCoalescingDelayNanoseconds: UInt64 = 80_000_000
 
         init(
             onSelectionChange: @escaping @MainActor @Sendable (String) -> Void,
@@ -133,6 +270,7 @@ struct SelectableTranscriptTextView: NSViewRepresentable {
         }
 
         deinit {
+            pendingScrollToBottomTask?.cancel()
             if let observedClipView {
                 NotificationCenter.default.removeObserver(
                     self,
@@ -205,11 +343,33 @@ struct SelectableTranscriptTextView: NSViewRepresentable {
         }
 
         @MainActor
+        func scheduleCoalescedScrollToBottom() {
+            let delay = appendScrollCoalescingDelayNanoseconds
+            pendingScrollToBottomTask?.cancel()
+            pendingScrollToBottomTask = Task { @MainActor [weak self] in
+                try? await Task.sleep(nanoseconds: delay)
+                guard !Task.isCancelled,
+                      let self,
+                      self.isAutoFollowEnabled else {
+                    return
+                }
+                self.scrollToBottom(enableAutoFollow: false)
+            }
+        }
+
+        @MainActor
+        func cancelPendingScrollToBottom() {
+            pendingScrollToBottomTask?.cancel()
+            pendingScrollToBottomTask = nil
+        }
+
+        @MainActor
         func resetLayoutForNewDocument(_ textView: NSTextView, in scrollView: NSScrollView) {
             let visibleSize = scrollView.contentSize
             let width = max(visibleSize.width, 1)
             let height = max(visibleSize.height, 1)
 
+            cancelPendingScrollToBottom()
             lastFocusedLineID = nil
             setAutoFollowEnabled(true)
             textView.textContainer?.containerSize = NSSize(
@@ -302,6 +462,9 @@ struct SelectableTranscriptTextView: NSViewRepresentable {
         private func setAutoFollowEnabled(_ isEnabled: Bool) {
             guard isAutoFollowEnabled != isEnabled else {
                 return
+            }
+            if !isEnabled {
+                cancelPendingScrollToBottom()
             }
             isAutoFollowEnabled = isEnabled
             emitAutoFollowChange(isEnabled)

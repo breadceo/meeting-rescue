@@ -57,6 +57,30 @@ struct AnalysisTriggerPolicyTests {
         #expect(decision == .skip(reason: "low-value-dialogue"))
     }
 
+    @Test("precomputed transcript stats can drive the same decision without reparsing")
+    func precomputedTranscriptStatsDriveDecision() {
+        let policy = AnalysisTriggerPolicy()
+        let transcript = (1...8)
+            .map { "[01:\(String(format: "%02d", $0))] Speaker: 마케팅 운영 계획과 담당 액션을 확인합니다 \($0)" }
+            .joined(separator: "\n")
+        let stats = policy.transcriptStats(
+            rawTranscript: transcript,
+            lastAnalyzedTranscriptCharacterCount: 0
+        )
+
+        let decision = policy.evaluate(
+            stats: stats,
+            latestTranscriptElapsedSeconds: 90,
+            now: baseDate,
+            lastAutomaticAnalysisAt: baseDate.addingTimeInterval(-60)
+        )
+
+        #expect(stats.newCharacterCount == transcript.count)
+        #expect(stats.dialogueLineCount == 8)
+        #expect(stats.meaningfulDialogueLineCount == 8)
+        #expect(decision == .run(reason: "min-dialogue-lines"))
+    }
+
     @Test("max wait가 지나면 작은 의미 chunk도 flush한다")
     func flushesAfterMaxWait() {
         let policy = AnalysisTriggerPolicy()

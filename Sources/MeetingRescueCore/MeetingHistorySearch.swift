@@ -207,6 +207,19 @@ public enum MeetingHistorySearch {
         indexText(for: value, tokenization: .full)
     }
 
+    public static func indexText(for section: MeetingHistorySearchSection) -> String {
+        var values = [
+            section.text,
+            section.normalizedText,
+            section.compactNormalizedText
+        ]
+        values.append(contentsOf: section.searchTokens)
+        if section.compactNormalizedText.count >= 3 {
+            values.append(contentsOf: characterNGrams(section.compactNormalizedText, sizes: 2...4))
+        }
+        return Array(Set(values.filter { !$0.isEmpty })).joined(separator: " ")
+    }
+
     public static func indexText(
         for value: String,
         tokenization: MeetingHistorySearchTokenization

@@ -31,6 +31,7 @@ final class MeetingSearchDatabase: @unchecked Sendable {
     func rebuild(
         items: [MeetingHistoryItem],
         signature: String,
+        includeSemanticVectors: Bool = false,
         progress: (@Sendable (_ completed: Int, _ total: Int) -> Void)? = nil
     ) throws {
         let db = try openDatabase()
@@ -44,7 +45,7 @@ final class MeetingSearchDatabase: @unchecked Sendable {
             progress?(0, total)
             for (index, item) in items.enumerated() {
                 try Task.checkCancellation()
-                try insert(item: item, in: db)
+                try insert(item: item, includeSemanticVectors: includeSemanticVectors, in: db)
                 progress?(index + 1, total)
             }
             try upsertMetadata(key: "schemaVersion", value: schemaVersion, in: db)
@@ -245,7 +246,7 @@ final class MeetingSearchDatabase: @unchecked Sendable {
         """, in: db)
     }
 
-    private func insert(item: MeetingHistoryItem, in db: OpaquePointer) throws {
+    private func insert(item: MeetingHistoryItem, includeSemanticVectors: Bool, in db: OpaquePointer) throws {
         let ftsSQL = """
         INSERT INTO segments_fts(path, field, timestamp, text, weight, indexedText)
         VALUES (?, ?, ?, ?, ?, ?);
@@ -253,12 +254,21 @@ final class MeetingSearchDatabase: @unchecked Sendable {
         let ftsStatement = try prepare(ftsSQL, in: db)
         defer { sqlite3_finalize(ftsStatement) }
 
-        let semanticSQL = """
-        INSERT INTO segments_semantic(path, field, timestamp, text, weight, vector)
-        VALUES (?, ?, ?, ?, ?, ?);
-        """
-        let semanticStatement = try prepare(semanticSQL, in: db)
-        defer { sqlite3_finalize(semanticStatement) }
+        let semanticStatement: OpaquePointer?
+        if includeSemanticVectors {
+            let semanticSQL = """
+            INSERT INTO segments_semantic(path, field, timestamp, text, weight, vector)
+            VALUES (?, ?, ?, ?, ?, ?);
+            """
+            semanticStatement = try prepare(semanticSQL, in: db)
+        } else {
+            semanticStatement = nil
+        }
+        defer {
+            if let semanticStatement {
+                sqlite3_finalize(semanticStatement)
+            }
+        }
 
         for section in item.searchSections {
             try Task.checkCancellation()
@@ -269,11 +279,14 @@ final class MeetingSearchDatabase: @unchecked Sendable {
             bindOptionalText(section.timestamp, at: 3, in: ftsStatement)
             bindText(section.text, at: 4, in: ftsStatement)
             bindText(String(section.weight), at: 5, in: ftsStatement)
-            bindText(MeetingHistorySearch.indexText(for: section.text, tokenization: section.tokenization), at: 6, in: ftsStatement)
+            bindText(MeetingHistorySearch.indexText(for: section), at: 6, in: ftsStatement)
             guard sqlite3_step(ftsStatement) == SQLITE_DONE else {
                 throw error(db, fallback: "검색 segment 저장에 실패했습니다.")
             }
 
+            guard let semanticStatement else {
+                continue
+            }
             let vector = MeetingHistorySearch.semanticVectorString(for: section.text, tokenization: section.tokenization)
             guard !vector.isEmpty else {
                 continue
