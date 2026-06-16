@@ -1,0 +1,47 @@
+CHANGELOG.md
+  h_d82ccb34241a0d 7-14
+Sources/MeetingRescue/AppViewModel.swift
+  h_d82ccb34241a0d 233-253,767-781,787-788,795-804,807-809,897,906,954-959,985,990-995,1062-1064,1075,1139-1141,1143,1146-1163,1166-1171,1178,1180-1181,1183,1186-1189,1194-1201,1207-1208,1217-1219,1379,1385-1386,1633,1635-1636,1644,2026,2028-2029,2037,2544,2546-2547,2551,2631,2642,2651,2691-2710,3220,3222-3223,3230,3276,3278-3279,3283,3315-3319,3323,3325,3342,3347-3367,3369-3370,3377,3384-3386,3391,3393-3394,3409-3459,3532,3534,3563-3584,3805,4367,4369,4387,4389-4419
+Sources/MeetingRescue/ContentView.swift
+  h_d82ccb34241a0d 228-230,952,986,998-1014
+Sources/MeetingRescue/MeetingSearchDatabase.swift
+  h_d82ccb34241a0d 34,48,249,257-271,282,287-289
+Sources/MeetingRescue/Resources/ReleaseNotes.md
+  h_d82ccb34241a0d 1,4-8
+Sources/MeetingRescue/SelectableTranscriptTextView.swift
+  h_d82ccb34241a0d 4-122,127,192,194-201,211-215,226,228-229,233-238,243,261-262,273,345-365,372,466-468
+Sources/MeetingRescueCore/AnalysisTriggerPolicy.swift
+  h_d82ccb34241a0d 44-65,72-99,106-123,129,133,137,145-146,151,155,161
+Sources/MeetingRescueCore/MeetingHistorySearch.swift
+  h_d82ccb34241a0d 210-222
+Sources/MeetingRescueCore/TranscriptFileReadAnchor.swift
+  h_d82ccb34241a0d 1-82
+Sources/MeetingRescueCore/TranscriptTextDecoder.swift
+  h_d82ccb34241a0d 3-44,51-52,54,56-57,59,61-67,69-92,95-98,106-108,110-148
+Tests/MeetingRescueCoreTests/AnalysisTriggerPolicyTests.swift
+  h_d82ccb34241a0d 60-83
+Tests/MeetingRescueCoreTests/MeetingHistorySearchTests.swift
+  h_d82ccb34241a0d 103-120
+Tests/MeetingRescueCoreTests/TranscriptFileReadAnchorTests.swift
+  h_d82ccb34241a0d 1-79
+Tests/MeetingRescueCoreTests/TranscriptTextDecoderTests.swift
+  h_d82ccb34241a0d 15,19-47,57-67
+Tests/MeetingRescueTests/AppViewModelTestRunContextTests.swift
+  h_d82ccb34241a0d 154,172,178,184-197,210-261,278-309,412-425
+Tests/MeetingRescueTests/ContentViewContextWiringTests.swift
+  h_d82ccb34241a0d 160,171
+Tests/MeetingRescueTests/SelectableTranscriptTextViewTests.swift
+  h_d82ccb34241a0d 1-70
+VERSION
+  h_d82ccb34241a0d 1
+---
+{
+  "schema_version": "zax-attestation/1.1.0",
+  "base_commit_sha": "7b96bf18f25d0cb3fbcd8bf69bbd61d94e5b9fab",
+  "prompts": {},
+  "humans": {
+    "h_d82ccb34241a0d": {
+      "author": "ethan@zigbang.com"
+    }
+  }
+}
