@@ -8,30 +8,26 @@
     <description>Meeting Rescue release updates.</description>
     <language>ko</language>
     <item>
-      <title>Meeting Rescue 0.1.21</title>
+      <title>Meeting Rescue 0.1.22</title>
       <description><![CDATA[
-        <h2>Meeting Rescue v0.1.21</h2>
+        <h2>Meeting Rescue v0.1.22</h2>
         <ul>
-        <li>Live Watch에서 transcript 파일이 header 재작성이나 byte shift로 바뀐 경우 append tail로 오독하지 않고 전체 reload하도록 보강했습니다.</li>
-        <li>Raw Transcript append 경로에서 split UTF-8 문자가 깨지거나 줄이 중복 표시될 수 있던 문제를 수정했습니다.</li>
-        <li>대부분이 NUL byte로 채워진 손상 transcript를 UTF-16 또는 tail-only transcript로 오인하지 않도록 디코딩 방어 로직을 강화했습니다.</li>
-        <li>이전 미팅 파일로 전환할 때 Raw Transcript 스크롤 위치가 이전 문서의 bottom 상태를 물려받는 문제를 수정했습니다.</li>
-        <li>Live Watch 자동 분석 trigger와 history/search 경로의 과도한 재계산을 줄여 긴 transcript 폴더에서 CPU 사용량을 낮췄습니다.</li>
+        <li>Meeting Intelligence 요약 탭에 `관점 정렬` 카드를 추가해 현재 논점에서 참석자 관점 차이와 다음 정렬 질문을 evidence와 함께 볼 수 있게 했습니다.</li>
         </ul>
-        <p><a href="https://github.com/breadceo/meeting-rescue/releases/tag/v0.1.21">Release notes</a></p>
+        <p><a href="https://github.com/breadceo/meeting-rescue/releases/tag/v0.1.22">Release notes</a></p>
       ]]></description>
-      <pubDate>Tue, 16 Jun 2026 16:17:54 +0900</pubDate>
-      <sparkle:version>120</sparkle:version>
-      <sparkle:shortVersionString>0.1.21</sparkle:shortVersionString>
+      <pubDate>Tue, 16 Jun 2026 22:01:03 +0900</pubDate>
+      <sparkle:version>122</sparkle:version>
+      <sparkle:shortVersionString>0.1.22</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
       <enclosure
-        url="https://github.com/breadceo/meeting-rescue/releases/download/v0.1.21/Meeting-Rescue-v0.1.21-notarized.dmg"
-        sparkle:edSignature="TlJDe9+IicZlxdAK/AeY5uL4ua5PVE/qWyIqe1i6iSGtSdCqDblDj6UuoVDHAMidWeXkvdBoH0S3vGGGpzM7AQ==" length="7842454"
+        url="https://github.com/breadceo/meeting-rescue/releases/download/v0.1.22/Meeting-Rescue-v0.1.22-notarized.dmg"
+        sparkle:edSignature="EO0H0v4ylLEkRzvQc9ThNIqNfA7mZeUTjLd6rEF6kV3aGLeQalJNMK9q3Ii2tT+CI3ivpj6vIZ+6gwdmGogYCA==" length="7890708"
         type="application/x-apple-diskimage" />
     </item>
   </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: wxneTClJUkai+lkPcgRapiJtqfdHAEtZikbh9n1MTEopuQ1+07KRlzkccBGyqTYGhEFbc2/kJ35UEvr2s02xAA==
-length: 2123
+edSignature: PZR9Oux1kRr7X1MclPsciu1M4ui4/3aK6qomsqvHWhn8rK8/37R56xD8PR3pPU9VG7sVAPvKkAqP4LYW7BRoAQ==
+length: 1476
 -->
