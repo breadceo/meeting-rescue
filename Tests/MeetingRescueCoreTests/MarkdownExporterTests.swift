@@ -43,6 +43,41 @@ struct MarkdownExporterTests {
                     ]
                 ),
                 currentIssue: CurrentIssue(summary: "요약"),
+                perspectiveAlignments: [
+                    PerspectiveAlignment(
+                        id: "alignment-release-scope",
+                        topic: "실험 기능 릴리즈 범위",
+                        axis: "속도와 안정성의 균형",
+                        sharedGround: "이번 주 안에 범위를 정해야 한다.",
+                        nextQuestion: "오늘 결정할 최소 릴리즈 범위는 어디까지인가?",
+                        perspectives: [
+                            PerspectivePosition(
+                                speaker: "A",
+                                summary: "이번 릴리즈에 포함해야 한다.",
+                                reasoning: "피드백을 빨리 받아야 한다.",
+                                evidence: [
+                                    EvidenceReference(
+                                        timestamp: "00:30",
+                                        speaker: "A",
+                                        excerpt: "이번에 넣죠."
+                                    )
+                                ]
+                            ),
+                            PerspectivePosition(
+                                speaker: "B",
+                                summary: "다음 릴리즈로 미뤄야 한다.",
+                                reasoning: "QA 시간이 부족하다.",
+                                evidence: [
+                                    EvidenceReference(
+                                        timestamp: "00:40",
+                                        speaker: "B",
+                                        excerpt: "QA가 부족해요."
+                                    )
+                                ]
+                            )
+                        ]
+                    )
+                ],
                 topicTimeline: [
                     TopicTimelineItem(
                         id: "topic-1",
@@ -88,6 +123,22 @@ struct MarkdownExporterTests {
         #expect(markdown.contains("- 롤백 owner를 확정해야 한다. ([00:20] · B · 롤백 owner는 아직 없습니다.)"))
         #expect(markdown.contains("## 현재 논점"))
         #expect(!markdown.contains("## 현재 이슈"))
+        #expect(markdown.contains("## 관점 정렬"))
+        #expect(markdown.contains("### 실험 기능 릴리즈 범위"))
+        #expect(markdown.contains("- 축: 속도와 안정성의 균형"))
+        #expect(markdown.contains("- 공통 전제: 이번 주 안에 범위를 정해야 한다."))
+        #expect(markdown.contains("- A: 이번 릴리즈에 포함해야 한다. / 근거: 피드백을 빨리 받아야 한다. ([00:30] · A · 이번에 넣죠.)"))
+        #expect(markdown.contains("- 정렬 질문: 오늘 결정할 최소 릴리즈 범위는 어디까지인가?"))
+        let currentIssueRange = markdown.range(of: "## 현재 논점")
+        let alignmentRange = markdown.range(of: "## 관점 정렬")
+        let flowRange = markdown.range(of: "## 흐름")
+        #expect(currentIssueRange != nil)
+        #expect(alignmentRange != nil)
+        #expect(flowRange != nil)
+        if let currentIssueRange, let alignmentRange, let flowRange {
+            #expect(currentIssueRange.lowerBound < alignmentRange.lowerBound)
+            #expect(alignmentRange.lowerBound < flowRange.lowerBound)
+        }
         #expect(markdown.contains("[04:13]"))
         #expect(markdown.contains("수정된 결정"))
         #expect(markdown.contains("@B 수정된 액션 / deadline: 월요일"))

@@ -185,6 +185,45 @@ struct AnalysisPromptBuilderTests {
         #expect(prompt.contains("meetingType이 incident이면 증상, 영향, 원인 가설, mitigation"))
     }
 
+    @Test("full snapshot prompt asks for evidence-backed perspective alignments")
+    func fullSnapshotPromptIncludesPerspectiveAlignmentRules() throws {
+        let request = AnalysisRequest(
+            meetingID: "meeting-1",
+            metadata: MeetingMetadata(room: "Room"),
+            rawTranscript: "[00:10] Alex: 이번에 넣죠.\n[00:20] Blair: QA가 부족해요.",
+            reason: "final"
+        )
+
+        let prompt = try AnalysisPromptBuilder.buildPrompt(for: request)
+
+        #expect(prompt.contains("perspectiveAlignments"))
+        #expect(prompt.contains("관점 정렬"))
+        #expect(prompt.contains("서로 다른 speaker"))
+        #expect(prompt.contains("currentIssue에 speaker별 관점 차이가 드러날 정도로 명확하면"))
+        #expect(prompt.contains("수렴을 완전히 막고 있지 않아도"))
+        #expect(prompt.contains("직접 evidence"))
+        #expect(prompt.contains("갈등이나 대립으로 과장하지 마세요"))
+    }
+
+    @Test("live patch prompt explains null versus empty perspective alignment semantics")
+    func livePatchPromptIncludesPerspectiveAlignmentPatchRules() throws {
+        let request = AnalysisRequest(
+            meetingID: "meeting-1",
+            metadata: MeetingMetadata(room: "Room"),
+            rawTranscript: "[00:10] Alex: 새 내용",
+            previousSnapshot: AnalysisSnapshot(currentIssue: CurrentIssue(summary: "기존 요약")),
+            reason: "automatic-min-dialogue-lines",
+            lastAnalyzedTranscriptCharacterCount: 0
+        )
+
+        let prompt = try AnalysisPromptBuilder.buildPrompt(for: request)
+
+        #expect(prompt.contains("perspectiveAlignments는 변화가 없으면 null"))
+        #expect(prompt.contains("previousAnalysisSnapshot.perspectiveAlignments가 비어 있고 currentIssue에 speaker별 관점 차이가 드러나면"))
+        #expect(prompt.contains("null 대신 perspectiveAlignments 배열"))
+        #expect(prompt.contains("해소되었으면 빈 배열"))
+    }
+
     @Test("prompt metadata participants는 실제 발화자 중심으로 줄인다")
     func promptMetadataKeepsOnlySpeakingParticipants() throws {
         let request = AnalysisRequest(
@@ -262,7 +301,9 @@ struct AnalysisPromptBuilderTests {
 
     @Test("retrieved chunk text는 prompt에서 짧게 제한된다")
     func capsRetrievedChunkText() throws {
-        let longChunk = String(repeating: "[00:01] Alex: 오래된 지도 논의입니다.\n", count: 80)
+        let longChunk = "[00:01] Alex: very old prefix that should be omitted.\n"
+            + String(repeating: "[00:01] Alex: 오래된 지도 논의입니다.\n", count: 80)
+            + "[03:00] Alex: recent tail that should remain.\n"
         let plan = AnalysisContextPlan(
             retrievalMode: .memoryLiveIndex,
             retrievalTopK: 1,
@@ -280,9 +321,11 @@ struct AnalysisPromptBuilderTests {
         )
 
         let prompt = try AnalysisPromptBuilder.buildPrompt(for: request)
+        let relatedChunkPayload = prompt.components(separatedBy: #""relatedTranscriptChunks""#).last ?? ""
 
-        #expect(prompt.contains("앞부분은 길이 제한으로 생략됨"))
-        #expect(prompt.count < longChunk.count + 3_400)
+        #expect(relatedChunkPayload.contains("앞부분은 길이 제한으로 생략됨"))
+        #expect(!relatedChunkPayload.contains("very old prefix that should be omitted"))
+        #expect(relatedChunkPayload.contains("recent tail that should remain"))
     }
 
     @Test("prompt includes supplemental context with transcript priority warning")

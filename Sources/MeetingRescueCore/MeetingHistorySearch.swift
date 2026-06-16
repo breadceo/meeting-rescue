@@ -8,6 +8,7 @@ public enum MeetingHistorySearchField: String, Equatable, Sendable {
     case participant
     case room
     case currentIssue
+    case perspectiveAlignment
     case confirmedDecision
     case decision
     case confirmedAction
@@ -31,6 +32,8 @@ public enum MeetingHistorySearchField: String, Equatable, Sendable {
             return "room"
         case .currentIssue:
             return "현재 논점"
+        case .perspectiveAlignment:
+            return "관점 정렬"
         case .confirmedDecision:
             return "확정 결정"
         case .decision:
@@ -81,6 +84,34 @@ public struct MeetingHistorySearchSection: Equatable, Sendable {
         self.tokenization = tokenization
         self.weight = weight
         self.timestamp = timestamp
+    }
+
+    public static func perspectiveAlignment(
+        _ alignment: PerspectiveAlignment,
+        weight: Int = 76
+    ) -> MeetingHistorySearchSection {
+        let perspectiveText = alignment.perspectives
+            .map { perspective in
+                [perspective.speaker, perspective.summary, perspective.reasoning]
+                    .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+                    .joined(separator: " ")
+            }
+            .joined(separator: " ")
+        let text = [
+            alignment.topic,
+            alignment.axis,
+            alignment.sharedGround,
+            alignment.nextQuestion,
+            perspectiveText
+        ]
+            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            .joined(separator: " ")
+        return MeetingHistorySearchSection(
+            field: .perspectiveAlignment,
+            text: text,
+            weight: weight,
+            timestamp: alignment.perspectives.flatMap(\.evidence).first?.timestamp
+        )
     }
 }
 

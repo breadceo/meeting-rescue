@@ -9,6 +9,10 @@ public enum CandidateIDGenerator {
         stableID(prefix: "action", text: task, evidenceTimestamp: evidenceTimestamp)
     }
 
+    public static func perspectiveAlignmentID(topic: String, axis: String, evidenceTimestamp: String) -> String {
+        stableID(prefix: "alignment", text: "\(topic)|\(axis)", evidenceTimestamp: evidenceTimestamp)
+    }
+
     public static func stableID(prefix: String, text: String, evidenceTimestamp: String) -> String {
         let normalized = "\(prefix)|\(evidenceTimestamp)|\(normalize(text))"
         return "\(prefix)-\(fnv1a64(normalized))"

@@ -4,6 +4,10 @@ Meeting Rescue의 사용자-facing 변경사항을 기록합니다.
 
 ## [Unreleased]
 
+## [0.1.22] - 2026-06-16
+
+- Meeting Intelligence 요약 탭에 `관점 정렬` 카드를 추가해 현재 논점에서 참석자 관점 차이와 다음 정렬 질문을 evidence와 함께 볼 수 있게 했습니다.
+
 ## [0.1.21] - 2026-06-16
 
 - Live Watch에서 transcript 파일이 header 재작성이나 byte shift로 바뀐 경우 append tail로 오독하지 않고 전체 reload하도록 보강했습니다.

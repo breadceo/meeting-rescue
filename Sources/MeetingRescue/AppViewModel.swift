@@ -616,6 +616,10 @@ private struct MeetingHistoryBuilder: Sendable {
                 sections.append(.init(field: .currentIssue, text: snapshot.currentIssue.openQuestions.joined(separator: " "), weight: 70))
             }
 
+            for alignment in snapshot.activePerspectiveAlignments {
+                sections.append(.perspectiveAlignment(alignment))
+            }
+
             for topic in snapshot.topicTimeline {
                 sections.append(
                     .init(
@@ -3056,6 +3060,10 @@ final class AppViewModel: ObservableObject {
             sections.append(.init(field: .currentIssue, text: snapshot.currentIssue.summary, weight: 80))
             if !snapshot.currentIssue.openQuestions.isEmpty {
                 sections.append(.init(field: .currentIssue, text: snapshot.currentIssue.openQuestions.joined(separator: " "), weight: 70))
+            }
+
+            for alignment in snapshot.activePerspectiveAlignments {
+                sections.append(.perspectiveAlignment(alignment))
             }
 
             for topic in snapshot.topicTimeline {

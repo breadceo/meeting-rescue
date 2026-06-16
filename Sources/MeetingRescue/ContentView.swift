@@ -1259,6 +1259,7 @@ struct ContentView: View {
     private func overview(_ snapshot: AnalysisSnapshot) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             currentIssue(snapshot.currentIssue)
+            perspectiveAlignments(snapshot.activePerspectiveAlignments)
             meetingSummary(snapshot.meetingSummary, meetingType: snapshot.meetingType)
             if !viewModel.analysisState.bookmarks.isEmpty {
                 importantMoments(viewModel.analysisState.bookmarks)
@@ -1844,6 +1845,97 @@ struct ContentView: View {
         .compactMap { $0 }
         .filter { !$0.isEmpty }
         .joined(separator: " · ")
+    }
+
+    @ViewBuilder
+    private func perspectiveAlignments(_ alignments: [PerspectiveAlignment]) -> some View {
+        if !alignments.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Label("관점 정렬", systemImage: "arrow.left.and.right")
+                        .font(.headline)
+                    Spacer()
+                    Text("\(alignments.count)")
+                        .font(.caption.weight(.semibold))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 5)
+                        .background(Color.smoothMint.opacity(0.14), in: Capsule())
+                        .foregroundStyle(Color.smoothMint)
+                }
+
+                ForEach(alignments) { alignment in
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(alignment.topic)
+                            .font(.callout.weight(.semibold))
+                            .foregroundStyle(Color.smoothInk)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        if !alignment.axis.isEmpty {
+                            Text(alignment.axis)
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(Color.smoothMuted)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+
+                        VStack(alignment: .leading, spacing: 6) {
+                            ForEach(alignment.perspectives.prefix(2)) { perspective in
+                                Label {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text("\(perspective.speaker): \(perspective.summary)")
+                                            .fixedSize(horizontal: false, vertical: true)
+
+                                        if !perspective.reasoning.isEmpty {
+                                            Text(perspective.reasoning)
+                                                .font(.caption)
+                                                .foregroundStyle(Color.smoothMuted)
+                                                .fixedSize(horizontal: false, vertical: true)
+                                        }
+
+                                        if let evidence = perspective.evidence.first {
+                                            Text(summaryEvidenceText(evidence))
+                                                .font(.caption)
+                                                .foregroundStyle(Color.smoothMuted)
+                                                .fixedSize(horizontal: false, vertical: true)
+                                        }
+                                    }
+                                } icon: {
+                                    Image(systemName: "person.crop.circle")
+                                }
+                                .font(.callout)
+                                .foregroundStyle(Color.smoothInk)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                        }
+
+                        if !alignment.sharedGround.isEmpty {
+                            Label {
+                                Text(alignment.sharedGround)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            } icon: {
+                                Image(systemName: "equal.circle")
+                            }
+                            .font(.caption)
+                            .foregroundStyle(Color.smoothMuted)
+                        }
+
+                        Label {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("정렬 질문")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(Color.smoothMuted)
+                                Text(alignment.nextQuestion)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        } icon: {
+                            Image(systemName: "questionmark.bubble")
+                        }
+                        .font(.callout.weight(.semibold))
+                        .foregroundStyle(Color.smoothInk)
+                    }
+                }
+            }
+            .smoothCard(tint: Color.smoothMint)
+        }
     }
 
     private func currentIssue(_ issue: CurrentIssue) -> some View {

@@ -1120,6 +1120,7 @@ private func decodeSnapshot(from output: String, provider: LLMProviderKind) thro
     }
     snapshot.provider = provider
     snapshot.generatedAt = Date()
+    snapshot.perspectiveAlignments = normalizedPerspectiveAlignments(snapshot.perspectiveAlignments)
     snapshot.decisionCandidates = snapshot.decisionCandidates.map { candidate in
         var candidate = candidate
         if candidate.id.isEmpty {
@@ -1135,6 +1136,24 @@ private func decodeSnapshot(from output: String, provider: LLMProviderKind) thro
         return candidate
     }
     return snapshot
+}
+
+private func normalizedPerspectiveAlignments(_ alignments: [PerspectiveAlignment]) -> [PerspectiveAlignment] {
+    alignments.map { alignment in
+        var alignment = alignment
+        if alignment.id.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let timestamp = alignment.perspectives
+                .flatMap(\.evidence)
+                .first?
+                .timestamp ?? ""
+            alignment.id = CandidateIDGenerator.perspectiveAlignmentID(
+                topic: alignment.topic,
+                axis: alignment.axis,
+                evidenceTimestamp: timestamp
+            )
+        }
+        return alignment
+    }
 }
 
 func decodeProviderOutput(
@@ -1176,6 +1195,9 @@ private func decodePatch(from output: String, request: AnalysisRequest) throws -
             item.endTimestamp = fallbackEndTimestamp(for: request, startTimestamp: item.startTimestamp)
         }
         return item
+    }
+    if let perspectiveAlignments = patch.perspectiveAlignments {
+        patch.perspectiveAlignments = normalizedPerspectiveAlignments(perspectiveAlignments)
     }
     patch.decisionCandidateUpserts = patch.decisionCandidateUpserts.map { candidate in
         var candidate = candidate

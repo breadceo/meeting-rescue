@@ -3,6 +3,64 @@ import Testing
 
 @Suite("Meeting history search")
 struct MeetingHistorySearchTests {
+    @Test("perspective alignment field has display name")
+    func perspectiveAlignmentFieldDisplayName() {
+        #expect(MeetingHistorySearchField.perspectiveAlignment.displayName == "관점 정렬")
+    }
+
+    @Test("perspective alignment search section includes context and first evidence timestamp")
+    func perspectiveAlignmentSearchSectionIncludesContext() {
+        let alignment = PerspectiveAlignment(
+            id: "alignment-release-scope",
+            topic: "실험 기능 릴리즈 범위",
+            axis: "속도와 안정성의 균형",
+            sharedGround: "이번 주 안에 범위를 정해야 한다.",
+            nextQuestion: "오늘 결정할 최소 릴리즈 범위는 어디까지인가?",
+            perspectives: [
+                PerspectivePosition(
+                    speaker: "Alex",
+                    summary: "이번 릴리즈에 포함해야 한다.",
+                    reasoning: "피드백을 빨리 받아야 한다.",
+                    evidence: [
+                        EvidenceReference(
+                            timestamp: "00:30",
+                            speaker: "Alex",
+                            excerpt: "이번에 넣죠."
+                        )
+                    ]
+                ),
+                PerspectivePosition(
+                    speaker: "Blair",
+                    summary: "다음 릴리즈로 미뤄야 한다.",
+                    reasoning: "QA 시간이 부족하다.",
+                    evidence: [
+                        EvidenceReference(
+                            timestamp: "00:40",
+                            speaker: "Blair",
+                            excerpt: "QA가 부족해요."
+                        )
+                    ]
+                )
+            ]
+        )
+
+        let section = MeetingHistorySearchSection.perspectiveAlignment(alignment)
+
+        #expect(section.field == .perspectiveAlignment)
+        #expect(section.weight == 76)
+        #expect(section.timestamp == "00:30")
+        #expect(section.text.contains("실험 기능 릴리즈 범위"))
+        #expect(section.text.contains("속도와 안정성의 균형"))
+        #expect(section.text.contains("이번 주 안에 범위를 정해야 한다."))
+        #expect(section.text.contains("오늘 결정할 최소 릴리즈 범위는 어디까지인가?"))
+        #expect(section.text.contains("Alex"))
+        #expect(section.text.contains("이번 릴리즈에 포함해야 한다."))
+        #expect(section.text.contains("피드백을 빨리 받아야 한다."))
+        #expect(section.text.contains("Blair"))
+        #expect(section.text.contains("다음 릴리즈로 미뤄야 한다."))
+        #expect(section.text.contains("QA 시간이 부족하다."))
+    }
+
     @Test("confirmed decision matches outrank raw transcript matches")
     func confirmedDecisionOutranksRawTranscript() {
         let decisionSections = [

@@ -76,6 +76,7 @@ struct AnalysisStateTests {
 
         #expect(snapshot.meetingType == .automatic)
         #expect(snapshot.meetingSummary.isEmpty)
+        #expect(snapshot.perspectiveAlignments.isEmpty)
     }
 
     @Test("partial meeting summary JSON preserves available summary text")
@@ -109,6 +110,174 @@ struct AnalysisStateTests {
         #expect(snapshot.meetingSummary.keyPoints.first?.text == "마일스톤을 다음 주로 잡았다.")
         #expect(snapshot.meetingSummary.keyPoints.first?.evidence.isEmpty == true)
         #expect(snapshot.meetingSummary.openQuestions.isEmpty)
+    }
+
+    @Test("snapshot decodes evidence-backed perspective alignments")
+    func decodesPerspectiveAlignments() throws {
+        let json = """
+        {
+          "meetingType": "decision",
+          "meetingSummary": {
+            "overview": "릴리즈 범위를 논의했다.",
+            "keyPoints": [],
+            "openQuestions": []
+          },
+          "currentIssue": {
+            "summary": "이번 릴리즈에 실험 기능을 포함할지 논의 중이다.",
+            "openQuestions": []
+          },
+          "perspectiveAlignments": [
+            {
+              "id": "alignment-release-scope",
+              "topic": "실험 기능 릴리즈 범위",
+              "axis": "속도와 안정성의 균형",
+              "sharedGround": "이번 주 안에 릴리즈 범위를 정해야 한다.",
+              "nextQuestion": "오늘 결정할 최소 릴리즈 범위는 어디까지인가?",
+              "perspectives": [
+                {
+                  "speaker": "Alex",
+                  "summary": "이번 릴리즈에 포함해야 한다.",
+                  "reasoning": "사용자 피드백을 빨리 받아야 한다.",
+                  "evidence": [
+                    {
+                      "timestamp": "02:10",
+                      "speaker": "Alex",
+                      "excerpt": "이번에 넣어야 피드백을 받을 수 있어요."
+                    }
+                  ]
+                },
+                {
+                  "speaker": "Blair",
+                  "summary": "다음 릴리즈로 미뤄야 한다.",
+                  "reasoning": "QA 시간이 부족하다.",
+                  "evidence": [
+                    {
+                      "timestamp": "02:40",
+                      "speaker": "Blair",
+                      "excerpt": "QA 시간이 부족해서 다음으로 미루는 게 안전해요."
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "topicTimeline": [],
+          "decisionCandidates": [],
+          "actionItemCandidates": [],
+          "risksOrNotes": []
+        }
+        """
+
+        let snapshot = try JSONDecoder().decode(AnalysisSnapshot.self, from: Data(json.utf8))
+
+        #expect(snapshot.perspectiveAlignments.first?.topic == "실험 기능 릴리즈 범위")
+        #expect(snapshot.activePerspectiveAlignments.count == 1)
+        #expect(snapshot.activePerspectiveAlignments.first?.perspectives.map(\.speaker) == ["Alex", "Blair"])
+    }
+
+    @Test("live patch keeps, replaces, and clears perspective alignments")
+    func livePatchMergesPerspectiveAlignments() {
+        let alignment = PerspectiveAlignment(
+            id: "alignment-release-scope",
+            topic: "실험 기능 릴리즈 범위",
+            axis: "속도와 안정성의 균형",
+            sharedGround: "이번 주 안에 범위를 정해야 한다.",
+            nextQuestion: "최소 릴리즈 범위는 어디까지인가?",
+            perspectives: [
+                PerspectivePosition(
+                    speaker: "Alex",
+                    summary: "이번 릴리즈에 포함해야 한다.",
+                    reasoning: "피드백을 빨리 받아야 한다.",
+                    evidence: [
+                        EvidenceReference(
+                            timestamp: "02:10",
+                            speaker: "Alex",
+                            excerpt: "이번에 넣어야 피드백을 받을 수 있어요."
+                        )
+                    ]
+                ),
+                PerspectivePosition(
+                    speaker: "Blair",
+                    summary: "다음 릴리즈로 미뤄야 한다.",
+                    reasoning: "QA 시간이 부족하다.",
+                    evidence: [
+                        EvidenceReference(
+                            timestamp: "02:40",
+                            speaker: "Blair",
+                            excerpt: "QA 시간이 부족해요."
+                        )
+                    ]
+                )
+            ]
+        )
+        let replacement = PerspectiveAlignment(
+            id: "alignment-priority",
+            topic: "우선순위",
+            axis: "고객 영향과 일정",
+            sharedGround: "출시 전에 우선순위를 정해야 한다.",
+            nextQuestion: "고객 영향 기준으로 먼저 할 일은 무엇인가?",
+            perspectives: [
+                PerspectivePosition(
+                    speaker: "Casey",
+                    summary: "고객 영향이 큰 항목부터 해야 한다.",
+                    evidence: [
+                        EvidenceReference(timestamp: "03:10", speaker: "Casey", excerpt: "고객 영향이 큰 것부터 하죠.")
+                    ]
+                ),
+                PerspectivePosition(
+                    speaker: "Devon",
+                    summary: "일정 리스크가 낮은 항목부터 해야 한다.",
+                    evidence: [
+                        EvidenceReference(timestamp: "03:40", speaker: "Devon", excerpt: "일정 리스크 낮은 것부터가 안전합니다.")
+                    ]
+                )
+            ]
+        )
+        let third = PerspectiveAlignment(
+            id: "alignment-cost",
+            topic: "비용 기준",
+            axis: "비용과 속도",
+            sharedGround: "비용 기준이 필요하다.",
+            nextQuestion: "비용 상한은 얼마인가?",
+            perspectives: [
+                PerspectivePosition(
+                    speaker: "Elliot",
+                    summary: "비용을 줄여야 한다.",
+                    evidence: [
+                        EvidenceReference(timestamp: "04:10", speaker: "Elliot", excerpt: "비용을 줄여야 합니다.")
+                    ]
+                ),
+                PerspectivePosition(
+                    speaker: "Finley",
+                    summary: "속도를 우선해야 한다.",
+                    evidence: [
+                        EvidenceReference(timestamp: "04:40", speaker: "Finley", excerpt: "속도가 더 중요합니다.")
+                    ]
+                )
+            ]
+        )
+        let weak = PerspectiveAlignment(
+            id: "alignment-weak",
+            topic: "근거 부족",
+            axis: "불명확",
+            nextQuestion: "무엇을 정해야 하는가?",
+            perspectives: [
+                PerspectivePosition(speaker: "Gray", summary: "근거가 없다.")
+            ]
+        )
+        let previous = AnalysisSnapshot(perspectiveAlignments: [alignment])
+
+        let kept = previous.applyingPatch(AnalysisSnapshotPatch(perspectiveAlignments: nil), provider: .codexExec)
+        #expect(kept.perspectiveAlignments.map(\.id) == ["alignment-release-scope"])
+
+        let replaced = previous.applyingPatch(
+            AnalysisSnapshotPatch(perspectiveAlignments: [replacement, weak, third]),
+            provider: .codexExec
+        )
+        #expect(replaced.perspectiveAlignments.map(\.id) == ["alignment-priority", "alignment-cost"])
+
+        let cleared = previous.applyingPatch(AnalysisSnapshotPatch(perspectiveAlignments: []), provider: .codexExec)
+        #expect(cleared.perspectiveAlignments.isEmpty)
     }
 
     @Test("AppSettings stores meeting type preset with automatic legacy default")

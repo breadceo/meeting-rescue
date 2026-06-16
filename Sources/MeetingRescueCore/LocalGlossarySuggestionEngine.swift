@@ -371,7 +371,7 @@ public enum LocalGlossarySuggestionEngine {
 
     private static func shouldScanLatinSection(_ field: MeetingHistorySearchField) -> Bool {
         switch field {
-        case .rawTranscript, .currentIssue, .confirmedDecision, .decision, .confirmedAction, .action, .topic, .note:
+        case .rawTranscript, .currentIssue, .perspectiveAlignment, .confirmedDecision, .decision, .confirmedAction, .action, .topic, .note:
             return true
         case .title, .file, .date, .participant, .room, .glossary:
             return false

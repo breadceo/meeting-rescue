@@ -15,7 +15,7 @@ Meeting Rescue는 로컬 transcript 폴더를 감시하면서 회의 원문, 검
 - Test Run replay
 - timestamp 기반 replay와 배속 조절
 - LLM 기반 Meeting Intelligence
-- current issue, topic timeline, decision/action 후보 표시
+- current issue, 관점 정렬, topic timeline, decision/action 후보 표시
 - decision/action 후보 confirm, delete, inline edit, 원문 복원
 - Meeting Intelligence markdown export
 - LLM usage/token/cost estimate
@@ -303,6 +303,7 @@ Test Run은 과거 transcript 파일을 선택해 시간순으로 replay하는 �
 
 - meeting metadata
 - current issue
+- perspective alignment / 관점 정렬
 - topic timeline
 - confirmed/candidate decisions
 - confirmed/candidate action items

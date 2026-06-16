@@ -62,6 +62,10 @@ public enum AnalysisPromptBuilder {
         evidence.excerpt는 payload 원문에서 근거가 되는 짧은 발화 일부를 그대로 옮기세요.
         bookmarks가 있으면 중요 시점 주변 발화를 summary evidence로 우선 고려하세요.
         currentIssue는 현재 논점 또는 Live Focus입니다. meetingSummary와 중복되는 전체 요약을 쓰지 마세요.
+        perspectiveAlignments는 관점 정렬 카드입니다. 하나의 사안에서 서로 다른 speaker가 다른 판단 기준, 선호, 우려, 제약을 말했으면 채우세요. currentIssue에 speaker별 관점 차이가 드러날 정도로 명확하면, 수렴을 완전히 막고 있지 않아도 진행자가 정렬 질문을 던질 수 있게 포함하세요.
+        갈등이나 대립으로 과장하지 마세요. 사람을 평가하지 말고 "속도와 안정성", "범위와 일정", "사용자 영향 판단"처럼 정렬해야 할 기준을 axis로 쓰세요.
+        각 perspective는 서로 다른 speaker의 직접 evidence를 1개 이상 가져야 합니다. 직접 evidence가 부족하거나 단순 보충 의견이면 perspectiveAlignments는 빈 배열로 두세요.
+        nextQuestion은 회의 진행자가 바로 물을 수 있는 한 문장 질문이어야 합니다.
         timestamp는 원문 회의 경과 시간만 사용하세요. 예: "04:13" 또는 "[04:13]". ISO 날짜를 만들지 마세요.
         topicTimeline은 시간순이며 agenda/논점/대상/실행 방향이 바뀌면 나누세요. 전체 6개 이하를 권장합니다.
         currentIssue.summary는 2-4문장, decision/action 후보는 각각 6개 이하로 간결하게 유지하세요.
@@ -83,6 +87,8 @@ public enum AnalysisPromptBuilder {
         meetingSummary에는 evidence.timestamp/speaker/excerpt를 채우세요.
         currentIssue는 현재 논점 또는 Live Focus입니다. 변화가 작으면 null로 두세요.
         단, previousAnalysisSnapshot.currentIssue.summary가 비어 있으면 currentIssue를 반드시 채우세요.
+        perspectiveAlignments는 변화가 없으면 null로 두세요. 새 관점 차이가 생겼거나 기존 관점 차이가 해소되어 목록을 바꿔야 할 때만 배열로 채우세요. previousAnalysisSnapshot.perspectiveAlignments가 비어 있고 currentIssue에 speaker별 관점 차이가 드러나면 null 대신 perspectiveAlignments 배열을 반환하세요. 해소되었으면 빈 배열로 명시하세요.
+        관점 차이는 서로 다른 speaker의 직접 evidence가 각각 1개 이상 있을 때만 포함하세요. 약한 뉘앙스를 갈등이나 대립으로 과장하지 마세요.
         Supplemental context는 transcript보다 낮은 우선순위의 보조 근거입니다. transcript가 supplemental context와 충돌하면 transcript를 우선하고, confirmed local artifact가 있으면 calendar metadata보다 우선하세요. calendar metadata로 meetingMetadata를 덮어쓰지 마세요. Calendar linked source candidate는 자동으로 읽은 문서가 아니라 사용자가 확인해야 할 후보로만 취급하세요. Domain glossary는 low-priority hint입니다. raw transcript를 수정하지 말고 원문 evidence를 유지하세요. 문맥이 맞을 때만 canonical term으로 해석하고, glossary만 보고 decision/action을 만들지 마세요.
         topicTimelineUpserts/decisionCandidateUpserts/actionItemCandidateUpserts/risksOrNotesAppend는 보통 0-2개, 최대 3개입니다.
         기존 후보/노트/토픽을 반복하지 말고, confirmed/deleted 상태를 되돌리지 마세요.

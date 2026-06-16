@@ -35,6 +35,12 @@ public enum MeetingIntelligenceMarkdownExporter {
         }
         lines.append("")
 
+        let activePerspectiveAlignments = snapshot.activePerspectiveAlignments
+        if !activePerspectiveAlignments.isEmpty {
+            appendPerspectiveAlignments(activePerspectiveAlignments, to: &lines, metadata: metadata)
+            lines.append("")
+        }
+
         lines.append("## 흐름")
         if snapshot.topicTimeline.isEmpty {
             lines.append("")
@@ -96,6 +102,34 @@ public enum MeetingIntelligenceMarkdownExporter {
             for item in summary.openQuestions {
                 lines.append("- \(item.text) \(summaryEvidenceText(item.evidence, metadata: metadata))")
             }
+        }
+    }
+
+    private static func appendPerspectiveAlignments(
+        _ alignments: [PerspectiveAlignment],
+        to lines: inout [String],
+        metadata: MeetingMetadata
+    ) {
+        guard !alignments.isEmpty else {
+            return
+        }
+
+        lines.append("## 관점 정렬")
+        for alignment in alignments {
+            lines.append("")
+            lines.append("### \(alignment.topic)")
+            if !alignment.axis.isEmpty {
+                lines.append("- 축: \(alignment.axis)")
+            }
+            if !alignment.sharedGround.isEmpty {
+                lines.append("- 공통 전제: \(alignment.sharedGround)")
+            }
+            for perspective in alignment.perspectives.prefix(2) {
+                let evidence = summaryEvidenceText(perspective.evidence, metadata: metadata)
+                let reasoning = perspective.reasoning.isEmpty ? "" : " / 근거: \(perspective.reasoning)"
+                lines.append("- \(perspective.speaker): \(perspective.summary)\(reasoning) \(evidence)")
+            }
+            lines.append("- 정렬 질문: \(alignment.nextQuestion)")
         }
     }
 

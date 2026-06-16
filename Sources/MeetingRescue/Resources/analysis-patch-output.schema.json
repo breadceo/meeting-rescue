@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "additionalProperties": false,
-  "required": ["meetingType", "meetingSummary", "currentIssue", "topicTimelineUpserts", "closeTopicIDs", "decisionCandidateUpserts", "actionItemCandidateUpserts", "risksOrNotesAppend"],
+  "required": ["meetingType", "meetingSummary", "currentIssue", "perspectiveAlignments", "topicTimelineUpserts", "closeTopicIDs", "decisionCandidateUpserts", "actionItemCandidateUpserts", "risksOrNotesAppend"],
   "properties": {
     "meetingType": {
       "anyOf": [
@@ -91,6 +91,57 @@
               "type": "array",
               "maxItems": 3,
               "items": { "type": "string", "maxLength": 180 }
+            }
+          }
+        },
+        { "type": "null" }
+      ]
+    },
+    "perspectiveAlignments": {
+      "anyOf": [
+        {
+          "type": "array",
+          "maxItems": 2,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "topic", "axis", "sharedGround", "nextQuestion", "perspectives"],
+            "properties": {
+              "id": { "type": "string" },
+              "topic": { "type": "string", "maxLength": 120 },
+              "axis": { "type": "string", "maxLength": 120 },
+              "sharedGround": { "type": "string", "maxLength": 220 },
+              "nextQuestion": { "type": "string", "maxLength": 180 },
+              "perspectives": {
+                "type": "array",
+                "minItems": 2,
+                "maxItems": 2,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["speaker", "summary", "reasoning", "evidence"],
+                  "properties": {
+                    "speaker": { "type": "string", "maxLength": 80 },
+                    "summary": { "type": "string", "maxLength": 220 },
+                    "reasoning": { "type": "string", "maxLength": 220 },
+                    "evidence": {
+                      "type": "array",
+                      "minItems": 1,
+                      "maxItems": 2,
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": ["timestamp", "speaker", "excerpt"],
+                        "properties": {
+                          "timestamp": { "type": "string" },
+                          "speaker": { "type": ["string", "null"] },
+                          "excerpt": { "type": "string", "maxLength": 220 }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
             }
           }
         },

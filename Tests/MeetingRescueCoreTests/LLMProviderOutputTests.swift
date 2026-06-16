@@ -50,6 +50,74 @@ struct LLMProviderOutputTests {
         #expect(snapshot.provider == .codexExec)
     }
 
+    @Test("full snapshot provider output decodes perspective alignments")
+    func fullSnapshotDecodesPerspectiveAlignments() throws {
+        let output = """
+        {
+          "meetingType": "decision",
+          "meetingSummary": {
+            "overview": "릴리즈 범위를 논의했다.",
+            "keyPoints": [],
+            "openQuestions": []
+          },
+          "currentIssue": {
+            "summary": "이번 릴리즈에 실험 기능을 포함할지 논의 중이다.",
+            "openQuestions": []
+          },
+          "perspectiveAlignments": [
+            {
+              "id": "",
+              "topic": "실험 기능 릴리즈 범위",
+              "axis": "속도와 안정성의 균형",
+              "sharedGround": "이번 주 안에 범위를 정해야 한다.",
+              "nextQuestion": "오늘 결정할 최소 릴리즈 범위는 어디까지인가?",
+              "perspectives": [
+                {
+                  "speaker": "Alex",
+                  "summary": "이번 릴리즈에 포함해야 한다.",
+                  "reasoning": "사용자 피드백을 빨리 받아야 한다.",
+                  "evidence": [
+                    {
+                      "timestamp": "02:10",
+                      "speaker": "Alex",
+                      "excerpt": "이번에 넣어야 피드백을 받을 수 있어요."
+                    }
+                  ]
+                },
+                {
+                  "speaker": "Blair",
+                  "summary": "다음 릴리즈로 미뤄야 한다.",
+                  "reasoning": "QA 시간이 부족하다.",
+                  "evidence": [
+                    {
+                      "timestamp": "02:40",
+                      "speaker": "Blair",
+                      "excerpt": "QA 시간이 부족해요."
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "topicTimeline": [],
+          "decisionCandidates": [],
+          "actionItemCandidates": [],
+          "risksOrNotes": []
+        }
+        """
+        let request = AnalysisRequest(
+            meetingID: "meeting-1",
+            metadata: MeetingMetadata(room: "Room"),
+            rawTranscript: "[02:10] Alex: 이번에 넣어야 피드백을 받을 수 있어요.\n[02:40] Blair: QA 시간이 부족해요.",
+            reason: "final"
+        )
+
+        let snapshot = try decodeProviderOutput(from: output, request: request, provider: .codexExec)
+
+        #expect(snapshot.activePerspectiveAlignments.count == 1)
+        #expect(snapshot.activePerspectiveAlignments.first?.id.hasPrefix("alignment-") == true)
+    }
+
     @Test("live patch provider output은 nullable D0 fields를 merge한다")
     func livePatchMergesNullableD0Fields() throws {
         let output = """
@@ -212,6 +280,70 @@ struct LLMProviderOutputTests {
         let snapshot = try decodeProviderOutput(from: patchOutput, request: request, provider: .codexExec)
 
         #expect(snapshot.currentIssue.summary == "새 이슈")
+    }
+
+    @Test("live patch provider output backfills perspective alignment ids")
+    func livePatchBackfillsPerspectiveAlignmentIDs() throws {
+        let patchOutput = """
+        {
+          "meetingType": null,
+          "meetingSummary": null,
+          "currentIssue": null,
+          "perspectiveAlignments": [
+            {
+              "id": "",
+              "topic": "실험 기능 릴리즈 범위",
+              "axis": "속도와 안정성의 균형",
+              "sharedGround": "이번 주 안에 범위를 정해야 한다.",
+              "nextQuestion": "오늘 결정할 최소 릴리즈 범위는 어디까지인가?",
+              "perspectives": [
+                {
+                  "speaker": "Alex",
+                  "summary": "이번 릴리즈에 포함해야 한다.",
+                  "reasoning": "피드백을 빨리 받아야 한다.",
+                  "evidence": [
+                    {
+                      "timestamp": "02:10",
+                      "speaker": "Alex",
+                      "excerpt": "이번에 넣죠."
+                    }
+                  ]
+                },
+                {
+                  "speaker": "Blair",
+                  "summary": "다음 릴리즈로 미뤄야 한다.",
+                  "reasoning": "QA 시간이 부족하다.",
+                  "evidence": [
+                    {
+                      "timestamp": "02:40",
+                      "speaker": "Blair",
+                      "excerpt": "QA가 부족해요."
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "topicTimelineUpserts": [],
+          "closeTopicIDs": [],
+          "decisionCandidateUpserts": [],
+          "actionItemCandidateUpserts": [],
+          "risksOrNotesAppend": []
+        }
+        """
+        let request = AnalysisRequest(
+            meetingID: "meeting-1",
+            metadata: MeetingMetadata(room: "Room"),
+            rawTranscript: "[02:10] Alex: 이번에 넣죠.\n[02:40] Blair: QA가 부족해요.",
+            previousSnapshot: AnalysisSnapshot(currentIssue: CurrentIssue(summary: "기존 요약")),
+            reason: "automatic-min-dialogue-lines",
+            lastAnalyzedTranscriptCharacterCount: 0
+        )
+
+        let snapshot = try decodeProviderOutput(from: patchOutput, request: request, provider: .codexExec)
+
+        #expect(snapshot.activePerspectiveAlignments.count == 1)
+        #expect(snapshot.activePerspectiveAlignments.first?.id.hasPrefix("alignment-") == true)
     }
 
     @Test("빈 baseline currentIssue에 null patch가 오면 patch 근거로 현재 이슈를 보강한다")

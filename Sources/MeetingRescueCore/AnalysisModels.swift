@@ -457,6 +457,103 @@ public struct CurrentIssue: Codable, Equatable, Sendable {
     }
 }
 
+public struct PerspectivePosition: Codable, Equatable, Sendable, Identifiable {
+    public var speaker: String
+    public var summary: String
+    public var reasoning: String
+    public var evidence: [EvidenceReference]
+
+    public var id: String {
+        [speaker, summary].joined(separator: "|")
+    }
+
+    public init(
+        speaker: String,
+        summary: String,
+        reasoning: String = "",
+        evidence: [EvidenceReference] = []
+    ) {
+        self.speaker = speaker
+        self.summary = summary
+        self.reasoning = reasoning
+        self.evidence = evidence
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case speaker
+        case summary
+        case reasoning
+        case evidence
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            speaker: (try? container.decode(String.self, forKey: .speaker)) ?? "",
+            summary: (try? container.decode(String.self, forKey: .summary)) ?? "",
+            reasoning: (try? container.decode(String.self, forKey: .reasoning)) ?? "",
+            evidence: (try? container.decode([EvidenceReference].self, forKey: .evidence)) ?? []
+        )
+    }
+}
+
+public struct PerspectiveAlignment: Codable, Equatable, Sendable, Identifiable {
+    public var id: String
+    public var topic: String
+    public var axis: String
+    public var sharedGround: String
+    public var nextQuestion: String
+    public var perspectives: [PerspectivePosition]
+
+    public init(
+        id: String,
+        topic: String,
+        axis: String,
+        sharedGround: String = "",
+        nextQuestion: String,
+        perspectives: [PerspectivePosition] = []
+    ) {
+        self.id = id
+        self.topic = topic
+        self.axis = axis
+        self.sharedGround = sharedGround
+        self.nextQuestion = nextQuestion
+        self.perspectives = perspectives
+    }
+
+    public var isDisplayable: Bool {
+        let trimmedTopic = topic.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedQuestion = nextQuestion.trimmingCharacters(in: .whitespacesAndNewlines)
+        let evidenceBacked = perspectives.filter { perspective in
+            !perspective.speaker.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                && !perspective.summary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                && !perspective.evidence.isEmpty
+        }
+        return !trimmedTopic.isEmpty && !trimmedQuestion.isEmpty && evidenceBacked.count >= 2
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case topic
+        case axis
+        case sharedGround
+        case nextQuestion
+        case perspectives
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            id: (try? container.decode(String.self, forKey: .id)) ?? "",
+            topic: (try? container.decode(String.self, forKey: .topic)) ?? "",
+            axis: (try? container.decode(String.self, forKey: .axis)) ?? "",
+            sharedGround: (try? container.decode(String.self, forKey: .sharedGround)) ?? "",
+            nextQuestion: (try? container.decode(String.self, forKey: .nextQuestion)) ?? "",
+            perspectives: (try? container.decode([PerspectivePosition].self, forKey: .perspectives)) ?? []
+        )
+    }
+}
+
 public struct TopicTimelineItem: Codable, Equatable, Identifiable, Sendable {
     public var id: String
     public var startTimestamp: String
@@ -562,6 +659,7 @@ public struct AnalysisSnapshot: Codable, Equatable, Sendable {
     public var meetingType: MeetingTypePreset
     public var meetingSummary: MeetingSummary
     public var currentIssue: CurrentIssue
+    public var perspectiveAlignments: [PerspectiveAlignment]
     public var topicTimeline: [TopicTimelineItem]
     public var decisionCandidates: [DecisionCandidate]
     public var actionItemCandidates: [ActionItemCandidate]
@@ -573,6 +671,7 @@ public struct AnalysisSnapshot: Codable, Equatable, Sendable {
         meetingType: MeetingTypePreset = .automatic,
         meetingSummary: MeetingSummary = MeetingSummary(),
         currentIssue: CurrentIssue = CurrentIssue(),
+        perspectiveAlignments: [PerspectiveAlignment] = [],
         topicTimeline: [TopicTimelineItem] = [],
         decisionCandidates: [DecisionCandidate] = [],
         actionItemCandidates: [ActionItemCandidate] = [],
@@ -583,6 +682,7 @@ public struct AnalysisSnapshot: Codable, Equatable, Sendable {
         self.meetingType = meetingType
         self.meetingSummary = meetingSummary
         self.currentIssue = currentIssue
+        self.perspectiveAlignments = perspectiveAlignments
         self.topicTimeline = topicTimeline
         self.decisionCandidates = decisionCandidates
         self.actionItemCandidates = actionItemCandidates
@@ -595,6 +695,7 @@ public struct AnalysisSnapshot: Codable, Equatable, Sendable {
         case meetingType
         case meetingSummary
         case currentIssue
+        case perspectiveAlignments
         case topicTimeline
         case decisionCandidates
         case actionItemCandidates
@@ -608,12 +709,17 @@ public struct AnalysisSnapshot: Codable, Equatable, Sendable {
         self.meetingType = (try? container.decode(MeetingTypePreset.self, forKey: .meetingType)) ?? .automatic
         self.meetingSummary = (try? container.decode(MeetingSummary.self, forKey: .meetingSummary)) ?? MeetingSummary()
         self.currentIssue = try container.decode(CurrentIssue.self, forKey: .currentIssue)
+        self.perspectiveAlignments = (try? container.decode([PerspectiveAlignment].self, forKey: .perspectiveAlignments)) ?? []
         self.topicTimeline = try container.decode([TopicTimelineItem].self, forKey: .topicTimeline)
         self.decisionCandidates = try container.decode([DecisionCandidate].self, forKey: .decisionCandidates)
         self.actionItemCandidates = try container.decode([ActionItemCandidate].self, forKey: .actionItemCandidates)
         self.risksOrNotes = try container.decode([String].self, forKey: .risksOrNotes)
         self.generatedAt = (try? container.decode(Date.self, forKey: .generatedAt)) ?? Date()
         self.provider = (try? container.decode(LLMProviderKind.self, forKey: .provider)) ?? .codexExec
+    }
+
+    public var activePerspectiveAlignments: [PerspectiveAlignment] {
+        Array(perspectiveAlignments.filter(\.isDisplayable).prefix(2))
     }
 
     public func applyingPatch(_ patch: AnalysisSnapshotPatch, provider: LLMProviderKind) -> AnalysisSnapshot {
@@ -629,6 +735,9 @@ public struct AnalysisSnapshot: Codable, Equatable, Sendable {
         } else if copy.currentIssue.summary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                   let fallbackIssue = Self.currentIssueFallback(from: patch) {
             copy.currentIssue = fallbackIssue
+        }
+        if let perspectiveAlignments = patch.perspectiveAlignments {
+            copy.perspectiveAlignments = Array(perspectiveAlignments.filter(\.isDisplayable).prefix(2))
         }
         copy.topicTimeline = Self.upsertTimeline(copy.topicTimeline, with: patch.topicTimelineUpserts)
         copy.decisionCandidates = Self.upsertDecisions(copy.decisionCandidates, with: patch.decisionCandidateUpserts)
@@ -771,6 +880,7 @@ public struct AnalysisSnapshotPatch: Codable, Equatable, Sendable {
     public var meetingType: MeetingTypePreset?
     public var meetingSummary: MeetingSummary?
     public var currentIssue: CurrentIssue?
+    public var perspectiveAlignments: [PerspectiveAlignment]?
     public var topicTimelineUpserts: [TopicTimelineItem]
     public var closeTopicIDs: [String]
     public var decisionCandidateUpserts: [DecisionCandidate]
@@ -781,6 +891,7 @@ public struct AnalysisSnapshotPatch: Codable, Equatable, Sendable {
         meetingType: MeetingTypePreset? = nil,
         meetingSummary: MeetingSummary? = nil,
         currentIssue: CurrentIssue? = nil,
+        perspectiveAlignments: [PerspectiveAlignment]? = nil,
         topicTimelineUpserts: [TopicTimelineItem] = [],
         closeTopicIDs: [String] = [],
         decisionCandidateUpserts: [DecisionCandidate] = [],
@@ -790,6 +901,7 @@ public struct AnalysisSnapshotPatch: Codable, Equatable, Sendable {
         self.meetingType = meetingType
         self.meetingSummary = meetingSummary
         self.currentIssue = currentIssue
+        self.perspectiveAlignments = perspectiveAlignments
         self.topicTimelineUpserts = topicTimelineUpserts
         self.closeTopicIDs = closeTopicIDs
         self.decisionCandidateUpserts = decisionCandidateUpserts
@@ -801,6 +913,7 @@ public struct AnalysisSnapshotPatch: Codable, Equatable, Sendable {
         case meetingType
         case meetingSummary
         case currentIssue
+        case perspectiveAlignments
         case topicTimelineUpserts
         case closeTopicIDs
         case decisionCandidateUpserts
@@ -814,6 +927,7 @@ public struct AnalysisSnapshotPatch: Codable, Equatable, Sendable {
             meetingType: try container.decodeIfPresent(MeetingTypePreset.self, forKey: .meetingType),
             meetingSummary: try container.decodeIfPresent(MeetingSummary.self, forKey: .meetingSummary),
             currentIssue: try container.decodeIfPresent(CurrentIssue.self, forKey: .currentIssue),
+            perspectiveAlignments: try container.decodeIfPresent([PerspectiveAlignment].self, forKey: .perspectiveAlignments),
             topicTimelineUpserts: try container.decode([TopicTimelineItem].self, forKey: .topicTimelineUpserts),
             closeTopicIDs: try container.decode([String].self, forKey: .closeTopicIDs),
             decisionCandidateUpserts: try container.decode([DecisionCandidate].self, forKey: .decisionCandidateUpserts),
