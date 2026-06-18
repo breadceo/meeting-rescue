@@ -88,7 +88,8 @@ public struct MeetingHistorySearchSection: Equatable, Sendable {
 
     public static func perspectiveAlignment(
         _ alignment: PerspectiveAlignment,
-        weight: Int = 76
+        weight: Int = 76,
+        tokenization: MeetingHistorySearchTokenization = .full
     ) -> MeetingHistorySearchSection {
         let perspectiveText = alignment.perspectives
             .map { perspective in
@@ -110,7 +111,8 @@ public struct MeetingHistorySearchSection: Equatable, Sendable {
             field: .perspectiveAlignment,
             text: text,
             weight: weight,
-            timestamp: alignment.perspectives.flatMap(\.evidence).first?.timestamp
+            timestamp: alignment.perspectives.flatMap(\.evidence).first?.timestamp,
+            tokenization: tokenization
         )
     }
 }

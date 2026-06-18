@@ -131,6 +131,19 @@ struct SelectableTranscriptTextView: NSViewRepresentable {
     var onSelectionChange: @MainActor @Sendable (String) -> Void
     var onAutoFollowChange: @MainActor @Sendable (Bool) -> Void
 
+    @MainActor
+    static func configureTextChecking(_ textView: NSTextView) {
+        textView.enabledTextCheckingTypes = 0
+        textView.isContinuousSpellCheckingEnabled = false
+        textView.isGrammarCheckingEnabled = false
+        textView.isAutomaticSpellingCorrectionEnabled = false
+        textView.isAutomaticDataDetectionEnabled = false
+        textView.isAutomaticLinkDetectionEnabled = false
+        textView.isAutomaticTextReplacementEnabled = false
+        textView.isAutomaticQuoteSubstitutionEnabled = false
+        textView.isAutomaticDashSubstitutionEnabled = false
+    }
+
     func makeCoordinator() -> Coordinator {
         Coordinator(
             onSelectionChange: onSelectionChange,
@@ -149,6 +162,7 @@ struct SelectableTranscriptTextView: NSViewRepresentable {
         textView.isSelectable = true
         textView.isRichText = false
         textView.usesFindPanel = true
+        Self.configureTextChecking(textView)
         textView.drawsBackground = true
         textView.backgroundColor = .textBackgroundColor
         textView.textColor = .labelColor

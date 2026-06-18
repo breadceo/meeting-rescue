@@ -470,6 +470,7 @@ private struct MeetingHistoryBuilder: Sendable {
     let localGlossaryState: LocalGlossaryState
     let localGlossaryEnabled: Bool
     private let eagerMetadataPreviewLimit = 120
+    private let historySearchTokenization: MeetingHistorySearchTokenization = .fast
 
     func build(folderURL: URL) -> MeetingHistoryBuildResult {
         buildIfChanged(folderURL: folderURL, previousSignature: nil)!
@@ -596,28 +597,28 @@ private struct MeetingHistoryBuilder: Sendable {
         preparedGlossaryState: LocalGlossaryMatcher.PreparedState
     ) -> [MeetingHistorySearchSection] {
         var sections: [MeetingHistorySearchSection] = [
-            .init(field: .title, text: metadata.displayTitle, weight: 92),
-            .init(field: .file, text: url.deletingPathExtension().lastPathComponent, weight: 60)
+            .init(field: .title, text: metadata.displayTitle, weight: 92, tokenization: historySearchTokenization),
+            .init(field: .file, text: url.deletingPathExtension().lastPathComponent, weight: 60, tokenization: historySearchTokenization)
         ]
 
         if let room = metadata.room, !room.isEmpty {
-            sections.append(.init(field: .room, text: room, weight: 78))
+            sections.append(.init(field: .room, text: room, weight: 78, tokenization: historySearchTokenization))
         }
         if let dateTime = metadata.dateTime, !dateTime.isEmpty {
-            sections.append(.init(field: .date, text: dateTime, weight: 52))
+            sections.append(.init(field: .date, text: dateTime, weight: 52, tokenization: historySearchTokenization))
         }
         if !metadata.participants.isEmpty {
-            sections.append(.init(field: .participant, text: metadata.participants.joined(separator: " "), weight: 84))
+            sections.append(.init(field: .participant, text: metadata.participants.joined(separator: " "), weight: 84, tokenization: historySearchTokenization))
         }
 
         if let snapshot {
-            sections.append(.init(field: .currentIssue, text: snapshot.currentIssue.summary, weight: 80))
+            sections.append(.init(field: .currentIssue, text: snapshot.currentIssue.summary, weight: 80, tokenization: historySearchTokenization))
             if !snapshot.currentIssue.openQuestions.isEmpty {
-                sections.append(.init(field: .currentIssue, text: snapshot.currentIssue.openQuestions.joined(separator: " "), weight: 70))
+                sections.append(.init(field: .currentIssue, text: snapshot.currentIssue.openQuestions.joined(separator: " "), weight: 70, tokenization: historySearchTokenization))
             }
 
             for alignment in snapshot.activePerspectiveAlignments {
-                sections.append(.perspectiveAlignment(alignment))
+                sections.append(MeetingHistorySearchSection.perspectiveAlignment(alignment, tokenization: historySearchTokenization))
             }
 
             for topic in snapshot.topicTimeline {
@@ -626,7 +627,8 @@ private struct MeetingHistoryBuilder: Sendable {
                         field: .topic,
                         text: "\(topic.title) \(topic.summary)",
                         weight: 58,
-                        timestamp: topic.startTimestamp
+                        timestamp: topic.startTimestamp,
+                        tokenization: historySearchTokenization
                     )
                 )
             }
@@ -637,7 +639,8 @@ private struct MeetingHistoryBuilder: Sendable {
                         field: decision.status == .confirmed ? .confirmedDecision : .decision,
                         text: [decision.text, decision.speaker].compactMap { $0 }.joined(separator: " "),
                         weight: decision.status == .confirmed ? 96 : 68,
-                        timestamp: decision.evidenceTimestamp
+                        timestamp: decision.evidenceTimestamp,
+                        tokenization: historySearchTokenization
                     )
                 )
             }
@@ -648,13 +651,14 @@ private struct MeetingHistoryBuilder: Sendable {
                         field: action.status == .confirmed ? .confirmedAction : .action,
                         text: [action.assignee, action.task, action.deadline, action.speaker].compactMap { $0 }.joined(separator: " "),
                         weight: action.status == .confirmed ? 96 : 68,
-                        timestamp: action.evidenceTimestamp
+                        timestamp: action.evidenceTimestamp,
+                        tokenization: historySearchTokenization
                     )
                 )
             }
 
             if !snapshot.risksOrNotes.isEmpty {
-                sections.append(.init(field: .note, text: snapshot.risksOrNotes.joined(separator: " "), weight: 42))
+                sections.append(.init(field: .note, text: snapshot.risksOrNotes.joined(separator: " "), weight: 42, tokenization: historySearchTokenization))
             }
         }
 
@@ -747,7 +751,8 @@ private func localGlossarySearchSections(
         return MeetingHistorySearchSection(
             field: .glossary,
             text: values.joined(separator: " "),
-            weight: 66
+            weight: 66,
+            tokenization: .fast
         )
     }
 }

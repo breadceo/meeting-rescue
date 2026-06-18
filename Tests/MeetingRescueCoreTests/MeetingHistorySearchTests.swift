@@ -61,6 +61,30 @@ struct MeetingHistorySearchTests {
         #expect(section.text.contains("QA 시간이 부족하다."))
     }
 
+    @Test("perspective alignment search section can use fast tokenization")
+    func perspectiveAlignmentSearchSectionCanUseFastTokenization() {
+        let alignment = PerspectiveAlignment(
+            id: "alignment-marketing",
+            topic: "마케팅팀이랑 계정 확인",
+            axis: "속도와 정확도",
+            sharedGround: "계정 소유자를 확인해야 한다.",
+            nextQuestion: "누가 오늘 확인할 것인가?",
+            perspectives: [
+                PerspectivePosition(
+                    speaker: "Alex",
+                    summary: "오늘 확인해야 한다.",
+                    reasoning: "릴리즈가 막혀 있다."
+                )
+            ]
+        )
+
+        let section = MeetingHistorySearchSection.perspectiveAlignment(alignment, tokenization: .fast)
+
+        #expect(section.tokenization == .fast)
+        #expect(section.searchTokens.contains("마케팅팀이랑"))
+        #expect(section.searchTokens.contains("마케"))
+    }
+
     @Test("confirmed decision matches outrank raw transcript matches")
     func confirmedDecisionOutranksRawTranscript() {
         let decisionSections = [

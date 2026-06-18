@@ -67,4 +67,22 @@ struct SelectableTranscriptTextViewTests {
         #expect(mutation == .replaced)
         #expect(textView.string == "원문 alias\ncanonical 적용\n")
     }
+
+    @Test("transcript text view disables AppKit text checking work")
+    @MainActor
+    func transcriptTextViewDisablesAppKitTextCheckingWork() {
+        let textView = NSTextView()
+
+        SelectableTranscriptTextView.configureTextChecking(textView)
+
+        #expect(textView.enabledTextCheckingTypes == 0)
+        #expect(textView.isContinuousSpellCheckingEnabled == false)
+        #expect(textView.isGrammarCheckingEnabled == false)
+        #expect(textView.isAutomaticSpellingCorrectionEnabled == false)
+        #expect(textView.isAutomaticDataDetectionEnabled == false)
+        #expect(textView.isAutomaticLinkDetectionEnabled == false)
+        #expect(textView.isAutomaticTextReplacementEnabled == false)
+        #expect(textView.isAutomaticQuoteSubstitutionEnabled == false)
+        #expect(textView.isAutomaticDashSubstitutionEnabled == false)
+    }
 }
