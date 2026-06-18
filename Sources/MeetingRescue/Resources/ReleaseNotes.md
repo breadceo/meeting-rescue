@@ -1,4 +1,4 @@
-# Meeting Rescue v0.1.22
+# Meeting Rescue v0.1.23
 
 
-- Meeting Intelligence 요약 탭에 `관점 정렬` 카드를 추가해 현재 논점에서 참석자 관점 차이와 다음 정렬 질문을 evidence와 함께 볼 수 있게 했습니다.
+- Live Watch 중 transcript 표시와 history refresh에서 남아 있던 CPU hotspot을 줄였습니다.
