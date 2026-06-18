@@ -4,6 +4,10 @@ Meeting Rescue의 사용자-facing 변경사항을 기록합니다.
 
 ## [Unreleased]
 
+## [0.1.23] - 2026-06-18
+
+- Live Watch 중 transcript 표시와 history refresh에서 남아 있던 CPU hotspot을 줄였습니다.
+
 ## [0.1.22] - 2026-06-16
 
 - Meeting Intelligence 요약 탭에 `관점 정렬` 카드를 추가해 현재 논점에서 참석자 관점 차이와 다음 정렬 질문을 evidence와 함께 볼 수 있게 했습니다.
