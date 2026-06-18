@@ -1,0 +1,25 @@
+Sources/MeetingRescue/AppViewModel.swift
+  h_d82ccb34241a0d 473,600-601,605,608,611,615,617,621,630-631,642-643,654-655,661,754-755
+Sources/MeetingRescue/SelectableTranscriptTextView.swift
+  h_d82ccb34241a0d 134-146,165
+Sources/MeetingRescueCore/MeetingHistorySearch.swift
+  h_d82ccb34241a0d 91-92,114-115
+Tests/MeetingRescueCoreTests/MeetingHistorySearchTests.swift
+  h_d82ccb34241a0d 64-87
+Tests/MeetingRescueTests/AppViewModelTestRunContextTests.swift
+  h_d82ccb34241a0d 370-372
+Tests/MeetingRescueTests/SelectableTranscriptTextViewTests.swift
+  h_d82ccb34241a0d 70-87
+docs/superpowers/plans/2026-06-18-live-watch-cpu-hotspots.md
+  h_d82ccb34241a0d 1-339
+---
+{
+  "schema_version": "zax-attestation/1.1.0",
+  "base_commit_sha": "fa386b34fc4a971d3af574b161667d99b362e9bf",
+  "prompts": {},
+  "humans": {
+    "h_d82ccb34241a0d": {
+      "author": "ethan@zigbang.com"
+    }
+  }
+}
