@@ -1,0 +1,19 @@
+Sources/MeetingRescue/Resources/ReleaseNotes.md
+  h_d82ccb34241a0d 1,4
+docs/appcast.xml
+  h_d82ccb34241a0d 11,13,15,17,19-21,24-25,31-32
+docs/releases/latest.md
+  h_d82ccb34241a0d 1,4
+docs/releases/v0.1.23.md
+  h_d82ccb34241a0d 1-4
+---
+{
+  "schema_version": "zax-attestation/1.1.0",
+  "base_commit_sha": "b3d77c8d0d4040d05306228c1f6437909713d5c2",
+  "prompts": {},
+  "humans": {
+    "h_d82ccb34241a0d": {
+      "author": "ethan@zigbang.com"
+    }
+  }
+}
