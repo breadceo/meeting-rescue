@@ -8,26 +8,27 @@
     <description>Meeting Rescue release updates.</description>
     <language>ko</language>
     <item>
-      <title>Meeting Rescue 0.1.23</title>
+      <title>Meeting Rescue 0.1.24</title>
       <description><![CDATA[
-        <h2>Meeting Rescue v0.1.23</h2>
+        <h2>Meeting Rescue v0.1.24</h2>
         <ul>
-        <li>Live Watch 중 transcript 표시와 history refresh에서 남아 있던 CPU hotspot을 줄였습니다.</li>
+        <li>Live Watch에서 transcript 변경이 없을 때 SwiftUI 상태를 반복 publish하지 않도록 해 idle CPU 재계산을 줄였습니다.</li>
+        <li>Automatic analysis skip 로그가 동일 조건에서 매초 반복 저장되지 않도록 했습니다.</li>
         </ul>
-        <p><a href="https://github.com/breadceo/meeting-rescue/releases/tag/v0.1.23">Release notes</a></p>
+        <p><a href="https://github.com/breadceo/meeting-rescue/releases/tag/v0.1.24">Release notes</a></p>
       ]]></description>
-      <pubDate>Thu, 18 Jun 2026 14:57:19 +0900</pubDate>
-      <sparkle:version>125</sparkle:version>
-      <sparkle:shortVersionString>0.1.23</sparkle:shortVersionString>
+      <pubDate>Mon, 22 Jun 2026 10:28:55 +0900</pubDate>
+      <sparkle:version>127</sparkle:version>
+      <sparkle:shortVersionString>0.1.24</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
       <enclosure
-        url="https://github.com/breadceo/meeting-rescue/releases/download/v0.1.23/Meeting-Rescue-v0.1.23-notarized.dmg"
-        sparkle:edSignature="xmfNcpd2BFXFOVKmxgPa6pihBAdmaVs7w5wGzsMpk2jwS9pvgG9Ma7zBeZomEaVGKq/ZCDZ/QLvT31rK2PfsDA==" length="7890211"
+        url="https://github.com/breadceo/meeting-rescue/releases/download/v0.1.24/Meeting-Rescue-v0.1.24-notarized.dmg"
+        sparkle:edSignature="X6vyRNUNREK5vU07kknIlMEOSRolo2+WM7VfM89NocLdJEanERErFylQZbAaP4BGSpdGapa5BxXeYi5+dJQyBQ==" length="7891807"
         type="application/x-apple-diskimage" />
     </item>
   </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: 3li8Psge7U93K7vhVyOn7hEwPRCgEtM5Q3BIiirTZLspUx/XSmDa6yUKqEcJxunpXF5Lb5RYGC3hhLJh//PCDA==
-length: 1390
+edSignature: ruQtHwFlw4N5SyVmSKJM16UEkgU4XUESTqWaCiwSdWAowvqkjzjFdCjYENxgbIV8AWrXgce8LJ0BAwE0LsI3Ag==
+length: 1549
 -->
