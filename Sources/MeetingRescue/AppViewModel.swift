@@ -968,6 +968,7 @@ final class AppViewModel: ObservableObject {
     private var transcriptSpeakerKeys: Set<String> = []
     private var securityScopeActive = false
     private var lastAutomaticAnalysisAt: Date?
+    private var lastSkippedAutomaticAttemptSignature: String?
     private var finalAnalysisTriggeredForMeetingID: String?
     private var finalAnalysisRetryCounts: [String: Int] = [:]
     private var lastHistoryRefreshAt: Date?
@@ -999,6 +1000,7 @@ final class AppViewModel: ObservableObject {
     private var activeLocalGlossaryMatchedTermIDs: Set<String> = []
     private var pendingActiveLocalGlossaryMatchText = ""
     private var activeLocalGlossaryMatchBaselineCoversCurrentTranscript = true
+    private var liveWatchMissingTranscriptStateIsPublished = false
     private var testRunFallbackRefreshTask: Task<Void, Never>?
     private let testRunFallbackMinimumIntervalNanoseconds: UInt64 = 1_000_000_000
     private var automaticAnalysisTranscriptStatsCache: (signature: String, stats: AnalysisTriggerPolicy.TranscriptStats)?
@@ -1009,6 +1011,7 @@ final class AppViewModel: ObservableObject {
     private let finalAnalysisRetryDelaySeconds = 6
     private let automaticCatchUpChunkCharacters = 5_000
     private let minimumAutomaticAnalysisElapsedSeconds = 60
+    private static let waitingForTranscriptStatusMessage = "선택한 폴더에서 `.txt` transcript를 기다리는 중입니다."
 
     init(stateStore: ApplicationStateStore = ApplicationStateStore()) {
         self.stateStore = stateStore
@@ -3211,9 +3214,13 @@ final class AppViewModel: ObservableObject {
     private func captureHistoryLiveBaseline() {
         historyLiveBaselineCandidate = currentLatestTranscriptCandidate(force: true)
         if let historyLiveBaselineCandidate {
-            liveActiveTranscriptURL = historyLiveBaselineCandidate.url
+            if liveActiveTranscriptURL != historyLiveBaselineCandidate.url {
+                liveActiveTranscriptURL = historyLiveBaselineCandidate.url
+            }
         }
-        liveMeetingUpdated = false
+        if liveMeetingUpdated {
+            liveMeetingUpdated = false
+        }
     }
 
     private func scanFolder() {
@@ -3223,38 +3230,33 @@ final class AppViewModel: ObservableObject {
 
         guard let latestCandidate = currentLatestTranscriptCandidate() else {
             refreshMeetingHistory()
-            liveActiveTranscriptURL = nil
+            if liveActiveTranscriptURL != nil {
+                liveActiveTranscriptURL = nil
+            }
             if transcriptRunMode == .history {
-                liveMeetingUpdated = false
+                if liveMeetingUpdated {
+                    liveMeetingUpdated = false
+                }
             }
             if transcriptRunMode == .liveWatch {
-                activeTranscriptURL = nil
-                rawTranscript = ""
-                publishRawTranscriptDisplayReload()
-                rawTranscriptPreviewLines = []
-                resetTranscriptSpeakers()
-                resetActiveLocalGlossaryMatchCount()
-                transcriptFocusRequest = nil
-                highlightedTranscriptLineID = nil
-                rawTranscriptLineCount = 0
-                metadata = MeetingMetadata()
-                analysisState = MeetingAnalysisState()
-                analysisStatus = .idle
-                resetTranscriptReadTracking()
-                liveTranscriptIndex.reset()
-                transcriptUpdatedAt = nil
-                statusMessage = "선택한 폴더에서 `.txt` transcript를 기다리는 중입니다."
+                publishMissingTranscriptStateIfNeeded()
             }
             return
         }
 
         let latestURL = latestCandidate.url
-        liveActiveTranscriptURL = latestURL
+        liveWatchMissingTranscriptStateIsPublished = false
+        if liveActiveTranscriptURL != latestURL {
+            liveActiveTranscriptURL = latestURL
+        }
         if transcriptRunMode == .history {
-            liveMeetingUpdated = LiveTranscriptUpdateDetector.isUpdated(
+            let updated = LiveTranscriptUpdateDetector.isUpdated(
                 latest: latestCandidate,
                 baseline: historyLiveBaselineCandidate
             )
+            if liveMeetingUpdated != updated {
+                liveMeetingUpdated = updated
+            }
         }
 
         guard transcriptRunMode == .liveWatch else {
@@ -3271,6 +3273,30 @@ final class AppViewModel: ObservableObject {
                 refreshMeetingHistory()
             }
         }
+    }
+
+    private func publishMissingTranscriptStateIfNeeded() {
+        guard !liveWatchMissingTranscriptStateIsPublished else {
+            return
+        }
+        liveWatchMissingTranscriptStateIsPublished = true
+        lastSkippedAutomaticAttemptSignature = nil
+        activeTranscriptURL = nil
+        rawTranscript = ""
+        publishRawTranscriptDisplayReload()
+        rawTranscriptPreviewLines = []
+        resetTranscriptSpeakers()
+        resetActiveLocalGlossaryMatchCount()
+        transcriptFocusRequest = nil
+        highlightedTranscriptLineID = nil
+        rawTranscriptLineCount = 0
+        metadata = MeetingMetadata()
+        analysisState = MeetingAnalysisState()
+        analysisStatus = .idle
+        resetTranscriptReadTracking()
+        liveTranscriptIndex.reset()
+        transcriptUpdatedAt = nil
+        statusMessage = Self.waitingForTranscriptStatusMessage
     }
 
     private func switchActiveTranscript(to url: URL) {
@@ -3552,6 +3578,7 @@ final class AppViewModel: ObservableObject {
 
         switch decision {
         case .run(let reason):
+            lastSkippedAutomaticAttemptSignature = nil
             lastAutomaticAnalysisAt = triggerNow
             triggerAnalysis(reason: "automatic-\(reason)")
         case .skip(let reason):
@@ -4119,6 +4146,17 @@ final class AppViewModel: ObservableObject {
             reason: "automatic-\(reason)",
             maxAutomaticCatchUpCharacters: automaticCatchUpChunkCharacters
         )
+        let signature = [
+            sourceURL.path,
+            reason,
+            String(window.lastAnalyzedTranscriptCharacterCount),
+            String(window.targetTranscriptCharacterCount),
+            String(window.sourceTranscriptCharacterCount)
+        ].joined(separator: "|")
+        guard lastSkippedAutomaticAttemptSignature != signature else {
+            return
+        }
+        lastSkippedAutomaticAttemptSignature = signature
         let now = Date()
         let attempt = AnalysisAttemptLog(
             reason: "automatic-\(reason)",

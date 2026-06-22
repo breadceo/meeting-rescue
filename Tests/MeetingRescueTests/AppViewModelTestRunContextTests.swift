@@ -275,6 +275,25 @@ struct AppViewModelTestRunContextTests {
         #expect(readAppend.contains("return false"))
     }
 
+    @Test("Live Watch timer avoids no-op published updates")
+    func liveWatchTimerAvoidsNoOpPublishedUpdates() throws {
+        let sourceURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent("Sources/MeetingRescue/AppViewModel.swift")
+        let source = try String(contentsOf: sourceURL, encoding: .utf8)
+        let scanFolder = try #require(source.slice(from: "private func scanFolder()", to: "private func switchActiveTranscript"))
+        let missingTranscript = try #require(source.slice(from: "private func publishMissingTranscriptStateIfNeeded()", to: "private func switchActiveTranscript"))
+        let skippedAttempt = try #require(source.slice(from: "private func appendSkippedAutomaticAttempt", to: "private func updateCandidate"))
+
+        #expect(source.contains("private var liveWatchMissingTranscriptStateIsPublished = false"))
+        #expect(source.contains("private var lastSkippedAutomaticAttemptSignature: String?"))
+        #expect(scanFolder.contains("if liveActiveTranscriptURL != latestURL"))
+        #expect(scanFolder.contains("if liveMeetingUpdated != updated"))
+        #expect(scanFolder.contains("publishMissingTranscriptStateIfNeeded()"))
+        #expect(missingTranscript.contains("guard !liveWatchMissingTranscriptStateIsPublished else"))
+        #expect(missingTranscript.contains("publishRawTranscriptDisplayReload()"))
+        #expect(skippedAttempt.contains("guard lastSkippedAutomaticAttemptSignature != signature else"))
+    }
+
     @Test("Live Watch reloads rewritten transcript files instead of tailing shifted bytes")
     func liveWatchReloadsRewrittenTranscriptFilesInsteadOfTailingShiftedBytes() throws {
         let sourceURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)

@@ -1,4 +1,5 @@
-# Meeting Rescue v0.1.23
+# Meeting Rescue v0.1.24
 
 
-- Live Watch 중 transcript 표시와 history refresh에서 남아 있던 CPU hotspot을 줄였습니다.
+- Live Watch에서 transcript 변경이 없을 때 SwiftUI 상태를 반복 publish하지 않도록 해 idle CPU 재계산을 줄였습니다.
+- Automatic analysis skip 로그가 동일 조건에서 매초 반복 저장되지 않도록 했습니다.
