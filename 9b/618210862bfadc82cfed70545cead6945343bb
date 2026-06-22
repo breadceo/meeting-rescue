@@ -1,0 +1,19 @@
+CHANGELOG.md
+  h_d82ccb34241a0d 7-11
+Sources/MeetingRescue/AppViewModel.swift
+  h_d82ccb34241a0d 971,1003,1014,3217-3222,3233-3235,3237-3239,3242,3248-3251,3253,3257-3259,3278-3301,3581,4149-4159
+Tests/MeetingRescueTests/AppViewModelTestRunContextTests.swift
+  h_d82ccb34241a0d 278-296
+VERSION
+  h_d82ccb34241a0d 1
+---
+{
+  "schema_version": "zax-attestation/1.1.0",
+  "base_commit_sha": "9b618210862bfadc82cfed70545cead6945343bb",
+  "prompts": {},
+  "humans": {
+    "h_d82ccb34241a0d": {
+      "author": "ethan@zigbang.com"
+    }
+  }
+}
