@@ -75,7 +75,8 @@ public struct CodexExecProvider: LLMProvider {
             workingDirectoryURL: workingDirectoryURL
         )
         var runTrace = processOutput.trace
-        let output = processOutput.output
+        let parsed = try ParsedProviderResponse.codexEvents(processOutput.output)
+        let output = parsed.output
         let snapshot = try decodeProviderOutput(from: output, request: request, provider: kind)
         runTrace.events.append(.instant("decode provider output", since: runTraceStart(runTrace), detail: request.outputMode.rawValue))
         let usage = LLMUsagePricing.usageSample(
@@ -83,7 +84,8 @@ public struct CodexExecProvider: LLMProvider {
             modelPreset: modelPreset,
             reason: request.reason,
             inputText: prompt,
-            outputText: output
+            outputText: output,
+            reportedUsage: parsed.reportedUsage
         )
         return AnalysisProviderResult(snapshot: snapshot, usage: usage, rawOutput: output, runTrace: runTrace)
     }
@@ -100,7 +102,11 @@ public struct CodexExecProvider: LLMProvider {
         if let modelName = modelPreset.codexModelName {
             arguments.append(contentsOf: ["--model", modelName])
         }
+        if let effort = modelPreset.codexReasoningEffort {
+            arguments.append(contentsOf: ["-c", "model_reasoning_effort=\"\(effort)\""])
+        }
         arguments.append(contentsOf: [
+            "--json",
             "--ignore-user-config",
             "--ignore-rules",
             "--disable",
@@ -1088,16 +1094,19 @@ public struct CustomCommandProvider: LLMProvider {
             throw LLMProviderError.missingCustomCommand
         }
         let prompt = try AnalysisPromptBuilder.buildPrompt(for: request)
+        var environment = CodexExecProvider.environment(for: modelPreset)
+        environment["MEETING_RESCUE_RESULT_FORMAT"] = "json-v1"
         let processOutput = try await ProcessRunner.runWithTrace(
             executableURL: URL(fileURLWithPath: "/bin/zsh"),
             arguments: ["-lc", command],
-            environment: CodexExecProvider.environment(for: modelPreset),
+            environment: environment,
             standardInput: prompt,
             timeoutSeconds: timeoutSeconds,
             workingDirectoryURL: workingDirectoryURL
         )
         var runTrace = processOutput.trace
-        let output = processOutput.output
+        let parsed = try ParsedProviderResponse.customCommand(processOutput.output)
+        let output = parsed.output
         let snapshot = try decodeProviderOutput(from: output, request: request, provider: kind)
         runTrace.events.append(.instant("decode provider output", since: runTraceStart(runTrace), detail: request.outputMode.rawValue))
         let usage = LLMUsagePricing.usageSample(
@@ -1105,7 +1114,8 @@ public struct CustomCommandProvider: LLMProvider {
             modelPreset: modelPreset,
             reason: request.reason,
             inputText: prompt,
-            outputText: output
+            outputText: output,
+            reportedUsage: parsed.reportedUsage
         )
         return AnalysisProviderResult(snapshot: snapshot, usage: usage, rawOutput: output, runTrace: runTrace)
     }

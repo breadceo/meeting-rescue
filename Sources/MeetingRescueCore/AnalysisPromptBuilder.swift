@@ -1,8 +1,6 @@
 import Foundation
 
 public enum AnalysisPromptBuilder {
-    private static let maxInitialTranscriptCharacters = 6_000
-    private static let maxNewTranscriptCharacters = 3_200
     private static let recentTranscriptContextCharacters = 500
     private static let maxRelatedTranscriptChunkCharacters = 700
     private static let compactTimelineLimit = 3
@@ -143,36 +141,30 @@ public enum AnalysisPromptBuilder {
         guard clampedAnalyzedCount > 0 else {
             if request.outputMode == .livePatch {
                 let newTranscriptChunk = promptDialogueText(
-                    from: cappedSuffix(rawTranscript, limit: maxNewTranscriptCharacters)
+                    from: rawTranscript
                 )
-                let omitted = rawCount > maxNewTranscriptCharacters
-                    ? "첫 live patch 입력은 마지막 \(maxNewTranscriptCharacters)자만 newTranscriptChunk로 포함했습니다."
-                    : nil
                 return TranscriptContext(
                     mode: "initial_live_patch",
                     fullTranscript: nil,
                     newTranscriptChunk: newTranscriptChunk.isEmpty ? nil : newTranscriptChunk,
                     recentTranscriptContext: nil,
                     relatedTranscriptChunks: relatedTranscriptChunks(for: request),
-                    omittedTranscriptNote: omitted,
+                    omittedTranscriptNote: nil,
                     rawTranscriptCharacterCount: rawCount,
                     lastAnalyzedTranscriptCharacterCount: 0
                 )
             }
 
             let fullTranscript = promptDialogueText(
-                from: cappedSuffix(rawTranscript, limit: maxInitialTranscriptCharacters)
+                from: rawTranscript
             )
-            let omitted = rawCount > maxInitialTranscriptCharacters
-                ? "초기 분석 입력은 마지막 \(maxInitialTranscriptCharacters)자만 포함했습니다."
-                : nil
             return TranscriptContext(
                 mode: "initial",
                 fullTranscript: fullTranscript,
                 newTranscriptChunk: nil,
                 recentTranscriptContext: nil,
                 relatedTranscriptChunks: relatedTranscriptChunks(for: request),
-                omittedTranscriptNote: omitted,
+                omittedTranscriptNote: nil,
                 rawTranscriptCharacterCount: rawCount,
                 lastAnalyzedTranscriptCharacterCount: 0
             )
@@ -181,17 +173,13 @@ public enum AnalysisPromptBuilder {
         let analyzedIndex = rawTranscript.index(rawTranscript.startIndex, offsetBy: clampedAnalyzedCount)
         let previousTranscript = String(rawTranscript[..<analyzedIndex])
         let newTranscript = String(rawTranscript[analyzedIndex...])
-        let cappedNewTranscript = promptDialogueText(
-            from: cappedSuffix(newTranscript, limit: maxNewTranscriptCharacters)
-        )
+        // The scheduler already bounds each window; trimming again would skip unprocessed dialogue.
+        let newTranscriptChunk = promptDialogueText(from: newTranscript)
         let recentContext = promptDialogueText(
             from: cappedSuffix(previousTranscript, limit: recentTranscriptContextCharacters)
         )
 
         var omittedParts: [String] = []
-        if newTranscript.count > maxNewTranscriptCharacters {
-            omittedParts.append("새 transcript chunk가 길어 마지막 \(maxNewTranscriptCharacters)자만 포함했습니다.")
-        }
         if previousTranscript.count > recentTranscriptContextCharacters {
             omittedParts.append("이전 transcript 맥락은 마지막 \(recentTranscriptContextCharacters)자만 포함했습니다.")
         }
@@ -199,7 +187,7 @@ public enum AnalysisPromptBuilder {
         return TranscriptContext(
             mode: newTranscript.isEmpty ? "refresh_without_new_chunk" : "incremental",
             fullTranscript: nil,
-            newTranscriptChunk: newTranscript.isEmpty ? nil : cappedNewTranscript,
+            newTranscriptChunk: newTranscript.isEmpty ? nil : newTranscriptChunk,
             recentTranscriptContext: recentContext.isEmpty ? nil : recentContext,
             relatedTranscriptChunks: relatedTranscriptChunks(for: request),
             omittedTranscriptNote: omittedParts.isEmpty ? nil : omittedParts.joined(separator: " "),

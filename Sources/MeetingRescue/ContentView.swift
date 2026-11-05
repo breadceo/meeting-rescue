@@ -2118,14 +2118,14 @@ struct ContentView: View {
     private func usageSummary() -> some View {
         let summary = viewModel.analysisState.usageSummary
         return VStack(alignment: .leading, spacing: 10) {
-            sectionHeader("LLM 사용량 추정", systemImage: "chart.bar.doc.horizontal")
+            sectionHeader("LLM 사용량", systemImage: "chart.bar.doc.horizontal")
             HStack(spacing: 8) {
                 metricCard("\(summary.totalInputTokens)", "input tokens", "arrow.down.doc")
                 metricCard("\(summary.totalOutputTokens)", "output tokens", "arrow.up.doc")
                 metricCard(String(format: "$%.4f", summary.totalEstimatedCostUSD), "estimated", "dollarsign.circle")
             }
             if let latest = summary.latestSample {
-                Text("최근 run: \(latest.modelName) · input $\(priceText(latest.inputPricePerMillionUSD))/1M · output $\(priceText(latest.outputPricePerMillionUSD))/1M")
+                Text("최근 run: \(latest.modelName) · 토큰 \(latest.tokenUsageLabel) · input $\(priceText(latest.inputPricePerMillionUSD))/1M · output $\(priceText(latest.outputPricePerMillionUSD))/1M")
                     .font(.caption)
                     .foregroundStyle(Color.smoothMuted)
                     .fixedSize(horizontal: false, vertical: true)
@@ -2234,6 +2234,7 @@ struct ContentView: View {
             "\(attempt.modelName)",
             "input \(attempt.inputTokens)",
             "output \(attempt.outputTokens)",
+            "토큰 \(attempt.usage?.tokenUsageLabel ?? "추정")",
             attempt.elapsedMilliseconds.map { "\($0)ms" },
             attempt.batchStats?.compactSummary,
             attempt.message
@@ -4443,6 +4444,22 @@ private struct AnalysisAttemptDetailView: View {
                             detailMetric(attempt.elapsedMilliseconds.map { "\($0)ms" } ?? "running", "duration")
                             detailMetric(attempt.modelPreset.displayName, "preset")
                             detailMetric(attempt.executionProviderDisplayName, "provider")
+                            detailMetric(attempt.usage?.tokenUsageLabel ?? "추정", "token usage")
+                            if let reported = attempt.usage?.reportedUsage {
+                                detailMetric("\(reported.totalTokens)", "total tokens")
+                                if let cached = reported.cachedInputTokens {
+                                    detailMetric("\(cached)", "cached input tokens")
+                                }
+                                if let written = reported.cacheWriteInputTokens {
+                                    detailMetric("\(written)", "cache write input tokens")
+                                }
+                                if let reasoning = reported.reasoningOutputTokens {
+                                    detailMetric("\(reasoning)", "reasoning output tokens")
+                                }
+                                if let responseID = reported.responseID {
+                                    detailMetric(responseID, "response ID")
+                                }
+                            }
                         }
                     }
 

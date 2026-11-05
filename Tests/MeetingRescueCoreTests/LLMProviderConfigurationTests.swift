@@ -101,7 +101,8 @@ struct LLMProviderConfigurationTests {
         let arguments = CodexExecProvider.arguments(schemaURL: schemaURL, modelPreset: .economy)
 
         #expect(arguments.contains("--model"))
-        #expect(arguments.contains("gpt-5.4-mini"))
+        #expect(arguments.contains("gpt-6-luna"))
+        #expect(arguments.contains("--json"))
         #expect(arguments.contains("--output-schema"))
         #expect(arguments.contains(schemaURL.path))
         #expect(arguments.contains("--ignore-user-config"))
@@ -124,6 +125,15 @@ struct LLMProviderConfigurationTests {
         let arguments = CodexExecProvider.arguments(schemaURL: schemaURL, modelPreset: .automatic)
 
         #expect(!arguments.contains("--model"))
+    }
+
+    @Test("explicit Codex presets use Luna with distinct reasoning effort")
+    func codexLunaPreservesPresetEffort() {
+        for (preset, effort) in [(LLMModelPreset.economy, "low"), (.balanced, "medium"), (.frontier, "high")] {
+            let arguments = CodexExecProvider.arguments(schemaURL: URL(fileURLWithPath: "/tmp/schema.json"), modelPreset: preset)
+            #expect(arguments.contains("gpt-6-luna"))
+            #expect(arguments.contains("model_reasoning_effort=\"\(effort)\""))
+        }
     }
 
     @Test("Codex app-server provider는 stdio app-server와 minimal disables를 사용한다")
@@ -184,7 +194,7 @@ struct LLMProviderConfigurationTests {
         let environment = CodexExecProvider.environment(for: .frontier)
 
         #expect(environment["MEETING_RESCUE_LLM_MODEL_PRESET"] == "frontier")
-        #expect(environment["MEETING_RESCUE_LLM_MODEL"] == "gpt-5.5")
+        #expect(environment["MEETING_RESCUE_LLM_MODEL"] == "gpt-6-luna")
     }
 
     @Test("Codex provider PATH는 GUI app 환경에서도 CLI 후보 경로를 포함한다")

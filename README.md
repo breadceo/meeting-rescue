@@ -199,6 +199,7 @@ Codex provider의 기본 실행 형태:
 ```sh
 codex exec \
   --model <preset-model> \
+  --json \
   --skip-git-repo-check \
   --ephemeral \
   --sandbox read-only \
@@ -212,12 +213,12 @@ codex exec \
 
 model preset은 provider 공통 의미를 갖습니다.
 
-| Preset | 의미 | Codex model |
-| --- | --- | --- |
-| CLI default | provider 기본 model 사용 | `--model` 생략 |
-| Economy | 반복적인 회의 요약과 후보 추출용 | `gpt-5.4-mini` |
-| Balanced | 흐름/결정 후보 품질과 비용 균형 | `gpt-5.4` |
-| Frontier | 최종 정리나 난도 높은 회의용 | `gpt-5.5` |
+| Preset | 의미 | Codex model | 추론 강도 |
+| --- | --- | --- | --- |
+| CLI default | provider 기본 model 사용 | `--model` 생략 | CLI 기본값 |
+| Economy | 반복적인 회의 요약과 후보 추출용 | `gpt-6-luna` | low |
+| Balanced | 흐름/결정 후보 품질과 비용 균형 | `gpt-6-luna` | medium |
+| Frontier | 최종 정리나 난도 높은 회의용 | `gpt-6-luna` | high |
 
 Claude Code provider는 preset을 Claude Code CLI의 model/effort 설정으로 변환합니다. Custom Command provider에는 preset 정보를 환경변수로 전달합니다.
 
@@ -227,6 +228,16 @@ MEETING_RESCUE_LLM_MODEL
 ```
 
 provider별 secret이나 token은 앱 code에 hardcode하지 않습니다.
+
+OpenAI API 크레딧으로 테스트하려면 기존 `Custom Command` provider에
+`scripts/openai_meeting_intelligence.py`를 연결할 수 있습니다. 앱 재빌드 없이
+Responses API를 사용하며, 키 발급·로컬 저장·연결 테스트 순서는
+[OpenAI API 테스트 안내](docs/openai-api-test.md)를 따르세요.
+
+Codex CLI의 `turn.completed` 이벤트에서 실제 토큰 수를 저장합니다.
+OpenAI API 어댑터는 앱이 `MEETING_RESCUE_RESULT_FORMAT=json-v1`을 전달하면
+응답의 모델명·실제 토큰 수·response ID를 함께 반환합니다. 분석 기록과 사용량 화면은
+실측과 추정을 구분합니다. 기존 기록의 추정값은 소급해 실측으로 바꾸지 않습니다.
 
 ## Meeting Intelligence 동작 방식
 
@@ -294,6 +305,8 @@ Test Run은 과거 transcript 파일을 선택해 시간순으로 replay하는 �
 - `[12:10]` 다음 줄이 `[12:13]`이면 `1x`에서 약 3초 뒤 표시됩니다.
 - `2x`, `4x`, `8x` 배속을 지원합니다.
 - Test Run 중에도 Meeting Intelligence를 확인할 수 있습니다.
+- 자동 분석이 OFF이면 외부 provider를 호출하지 않고 로컬 미리보기만 갱신합니다.
+  1회 분석은 `분석` 버튼, 반복 분석은 자동 분석 ON을 사용하세요.
 
 ## Markdown Export
 

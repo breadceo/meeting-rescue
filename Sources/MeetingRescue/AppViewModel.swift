@@ -3885,7 +3885,8 @@ final class AppViewModel: ObservableObject {
                 outputTokens: usage.outputTokens,
                 message: shouldContinueChunk ? "chunk 완료. 다음 chunk를 이어서 분석합니다." : nil,
                 providerOutput: rawOutput,
-                runTrace: runTrace
+                runTrace: runTrace,
+                usage: usage
             )
             if reason.hasPrefix("final"), !shouldContinueChunk {
                 analysisState.isCompleted = true
@@ -3927,7 +3928,8 @@ final class AppViewModel: ObservableObject {
         outputTokens: Int,
         message: String?,
         providerOutput: String? = nil,
-        runTrace: AnalysisRunTrace? = nil
+        runTrace: AnalysisRunTrace? = nil,
+        usage: LLMUsageSample? = nil
     ) {
         guard let activeAnalysisAttemptID,
               let index = analysisState.attemptLogs.lastIndex(where: { $0.id == activeAnalysisAttemptID }) else {
@@ -3944,6 +3946,9 @@ final class AppViewModel: ObservableObject {
         analysisState.attemptLogs[index].message = message
         analysisState.attemptLogs[index].providerOutput = providerOutput
         analysisState.attemptLogs[index].runTrace = runTrace
+        if let usage {
+            analysisState.attemptLogs[index].recordUsage(usage)
+        }
     }
 
     private func makeAttemptBatchStats(
@@ -4375,7 +4380,7 @@ final class AppViewModel: ObservableObject {
                 ?? settings.modelPreset.claudeCodeModelName
                 ?? "Claude Code default"
         case .customCommand:
-            return settings.modelPreset.codexModelName ?? "custom provider default"
+            return "custom provider default"
         }
     }
 

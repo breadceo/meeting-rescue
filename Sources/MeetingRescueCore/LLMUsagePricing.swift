@@ -23,34 +23,18 @@ public struct LLMModelPrice: Equatable, Sendable {
 }
 
 public enum LLMUsagePricing {
+    private static let lunaPrice = LLMModelPrice(
+        providerLabel: "Codex / OpenAI", modelName: "gpt-6-luna",
+        inputPerMillionUSD: 0.10, outputPerMillionUSD: 0.50,
+        sourceLabel: "OpenAI Pricing, Standard, under 272K input tokens"
+    )
+
     public static func codexPrice(for modelPreset: LLMModelPreset) -> LLMModelPrice? {
         switch modelPreset {
         case .automatic:
             return nil
-        case .economy:
-            return LLMModelPrice(
-                providerLabel: "Codex / OpenAI",
-                modelName: "gpt-5.4-mini",
-                inputPerMillionUSD: 0.375,
-                outputPerMillionUSD: 2.25,
-                sourceLabel: "OpenAI Pricing, standard short context"
-            )
-        case .balanced:
-            return LLMModelPrice(
-                providerLabel: "Codex / OpenAI",
-                modelName: "gpt-5.4",
-                inputPerMillionUSD: 1.25,
-                outputPerMillionUSD: 7.50,
-                sourceLabel: "OpenAI Pricing, standard short context"
-            )
-        case .frontier:
-            return LLMModelPrice(
-                providerLabel: "Codex / OpenAI",
-                modelName: "gpt-5.5",
-                inputPerMillionUSD: 2.50,
-                outputPerMillionUSD: 15.00,
-                sourceLabel: "OpenAI Pricing, standard short context"
-            )
+        case .economy, .balanced, .frontier:
+            return lunaPrice
         }
     }
 
@@ -79,9 +63,7 @@ public enum LLMUsagePricing {
 
     public static var referencePrices: [LLMModelPrice] {
         [
-            LLMModelPrice(providerLabel: "Codex / OpenAI", modelName: "gpt-5.4-mini", inputPerMillionUSD: 0.375, outputPerMillionUSD: 2.25, sourceLabel: "OpenAI Pricing, standard short context"),
-            LLMModelPrice(providerLabel: "Codex / OpenAI", modelName: "gpt-5.4", inputPerMillionUSD: 1.25, outputPerMillionUSD: 7.50, sourceLabel: "OpenAI Pricing, standard short context"),
-            LLMModelPrice(providerLabel: "Codex / OpenAI", modelName: "gpt-5.5", inputPerMillionUSD: 2.50, outputPerMillionUSD: 15.00, sourceLabel: "OpenAI Pricing, standard short context"),
+            lunaPrice,
             LLMModelPrice(providerLabel: "Claude Code / Anthropic", modelName: "Claude Haiku 4.5", inputPerMillionUSD: 1.00, outputPerMillionUSD: 5.00, sourceLabel: "Anthropic Pricing"),
             LLMModelPrice(providerLabel: "Claude Code / Anthropic", modelName: "Claude Sonnet 4.6", inputPerMillionUSD: 3.00, outputPerMillionUSD: 15.00, sourceLabel: "Anthropic Pricing"),
             LLMModelPrice(providerLabel: "Claude Code / Anthropic", modelName: "Claude Opus 4.7", inputPerMillionUSD: 5.00, outputPerMillionUSD: 25.00, sourceLabel: "Anthropic Pricing"),
@@ -96,17 +78,23 @@ public enum LLMUsagePricing {
         modelPreset: LLMModelPreset,
         reason: String,
         inputText: String,
-        outputText: String
+        outputText: String,
+        reportedUsage: LLMReportedUsage? = nil
     ) -> LLMUsageSample {
-        let inputTokens = TokenEstimator.estimateTokens(in: inputText)
-        let outputTokens = TokenEstimator.estimateTokens(in: outputText)
-        let price: LLMModelPrice? = switch provider {
-        case .codexExec:
-            codexPrice(for: modelPreset)
-        case .claudeCode:
-            claudeCodePrice(for: modelPreset)
-        case .customCommand:
-            nil
+        let inputTokens = reportedUsage?.inputTokens ?? TokenEstimator.estimateTokens(in: inputText)
+        let outputTokens = reportedUsage?.outputTokens ?? TokenEstimator.estimateTokens(in: outputText)
+        let price: LLMModelPrice?
+        if let modelName = reportedUsage?.modelName {
+            price = modelName == "gpt-6-luna" || modelName.hasPrefix("gpt-6-luna-") ? lunaPrice : nil
+        } else {
+            price = switch provider {
+            case .codexExec:
+                codexPrice(for: modelPreset)
+            case .claudeCode:
+                claudeCodePrice(for: modelPreset)
+            case .customCommand:
+                nil
+            }
         }
         let inputPrice = price?.inputPerMillionUSD
         let outputPrice = price?.outputPerMillionUSD
@@ -120,13 +108,15 @@ public enum LLMUsagePricing {
         return LLMUsageSample(
             provider: provider,
             modelPreset: modelPreset,
-            modelName: price?.modelName ?? modelPreset.codexModelName ?? "provider default",
+            modelName: reportedUsage?.modelName ?? price?.modelName
+                ?? (provider == .customCommand ? "custom provider default" : modelPreset.codexModelName ?? "provider default"),
             inputTokens: inputTokens,
             outputTokens: outputTokens,
             inputPricePerMillionUSD: inputPrice,
             outputPricePerMillionUSD: outputPrice,
             estimatedCostUSD: cost,
-            reason: reason
+            reason: reason,
+            reportedUsage: reportedUsage
         )
     }
 

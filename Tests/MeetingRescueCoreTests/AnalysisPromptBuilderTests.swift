@@ -4,6 +4,35 @@ import Testing
 
 @Suite("Analysis prompt builder")
 struct AnalysisPromptBuilderTests {
+    @Test("selected transcript windows retain every dialogue across initial and incremental analysis")
+    func selectedWindowsNeverDropPrimaryDialogue() throws {
+        let lines = (0..<160).map { "[00:01] Alex: SENTINEL_\($0)_ 회의의 중요한 결정과 후속 작업을 기록합니다." }
+        let transcript = lines.joined(separator: "\n")
+        for reason in ["manual", "final"] {
+            var cursor = 0
+            while cursor < transcript.count {
+                let window = AnalysisTranscriptWindow.make(
+                    rawTranscript: transcript, lastAnalyzedTranscriptCharacterCount: cursor,
+                    reason: reason, maxAutomaticCatchUpCharacters: 5_000
+                )
+                let request = AnalysisRequest(
+                    meetingID: "coverage", metadata: MeetingMetadata(room: "Room"),
+                    rawTranscript: window.rawTranscript,
+                    previousSnapshot: AnalysisSnapshot(currentIssue: CurrentIssue(summary: "이전 요약")),
+                    reason: reason, lastAnalyzedTranscriptCharacterCount: cursor
+                )
+                let prompt = try AnalysisPromptBuilder.buildPrompt(for: request)
+                let start = transcript.index(transcript.startIndex, offsetBy: cursor)
+                let end = transcript.index(transcript.startIndex, offsetBy: window.targetTranscriptCharacterCount)
+                for line in transcript[start..<end].split(separator: "\n") {
+                    let marker = try #require(line.split(separator: " ").first(where: { $0.hasPrefix("SENTINEL_") }))
+                    #expect(prompt.contains(marker), "missing dialogue: \(marker)")
+                }
+                cursor = window.targetTranscriptCharacterCount
+            }
+        }
+    }
+
     @Test("성공적으로 분석한 위치 이후 새 transcript chunk를 primary input으로 보낸다")
     func usesIncrementalTranscriptChunk() throws {
         let previousTranscript = "OLD_PREFIX_SENTINEL\n" + String(repeating: "[00:01] Alex: 오래된 내용\n", count: 400)

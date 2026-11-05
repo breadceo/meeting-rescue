@@ -49,7 +49,7 @@ public enum LLMModelPreset: String, Codable, CaseIterable, Identifiable, Sendabl
         case .balanced:
             return "복잡한 회의 흐름과 결정 후보 품질을 조금 더 중시합니다."
         case .frontier:
-            return "최종 정리나 난도가 높은 회의에만 권장하는 최신 상위 preset입니다."
+            return "최종 정리나 난도가 높은 회의에 높은 추론 강도를 사용합니다."
         }
     }
 
@@ -57,12 +57,17 @@ public enum LLMModelPreset: String, Codable, CaseIterable, Identifiable, Sendabl
         switch self {
         case .automatic:
             return nil
-        case .economy:
-            return "gpt-5.4-mini"
-        case .balanced:
-            return "gpt-5.4"
-        case .frontier:
-            return "gpt-5.5"
+        case .economy, .balanced, .frontier:
+            return "gpt-6-luna"
+        }
+    }
+
+    public var codexReasoningEffort: String? {
+        switch self {
+        case .automatic: return nil
+        case .economy: return "low"
+        case .balanced: return "medium"
+        case .frontier: return "high"
         }
     }
 
@@ -954,6 +959,9 @@ public struct LLMUsageSample: Codable, Equatable, Sendable, Identifiable {
     public var estimatedCostUSD: Double?
     public var reason: String
     public var createdAt: Date
+    public var reportedUsage: LLMReportedUsage?
+
+    public var tokenUsageLabel: String { reportedUsage == nil ? "추정" : "실측" }
 
     public init(
         id: String = UUID().uuidString,
@@ -966,7 +974,8 @@ public struct LLMUsageSample: Codable, Equatable, Sendable, Identifiable {
         outputPricePerMillionUSD: Double?,
         estimatedCostUSD: Double?,
         reason: String = "",
-        createdAt: Date = Date()
+        createdAt: Date = Date(),
+        reportedUsage: LLMReportedUsage? = nil
     ) {
         self.id = id
         self.provider = provider
@@ -979,6 +988,7 @@ public struct LLMUsageSample: Codable, Equatable, Sendable, Identifiable {
         self.estimatedCostUSD = estimatedCostUSD
         self.reason = reason
         self.createdAt = createdAt
+        self.reportedUsage = reportedUsage
     }
 }
 
@@ -1210,6 +1220,14 @@ public struct AnalysisAttemptLog: Codable, Equatable, Sendable, Identifiable {
     public var batchStats: AnalysisAttemptBatchStats?
     public var contextPlan: AnalysisContextPlan?
     public var runTrace: AnalysisRunTrace?
+    public var usage: LLMUsageSample?
+
+    public mutating func recordUsage(_ sample: LLMUsageSample) {
+        usage = sample
+        modelName = sample.modelName
+        inputTokens = sample.inputTokens
+        outputTokens = sample.outputTokens
+    }
 
     public init(
         id: String = UUID().uuidString,
