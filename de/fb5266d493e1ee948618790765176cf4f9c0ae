@@ -1,0 +1,18 @@
+docs/appcast.xml
+  h_d82ccb34241a0d 11,13,15-19,21-22,24-26,29-30,36-37
+docs/releases/latest.md
+  h_d82ccb34241a0d 1,4-10
+docs/releases/v0.1.25.md
+  h_d82ccb34241a0d 1-10
+---
+{
+  "schema_version": "zax-attestation/1.2.0",
+  "base_commit_sha": "defb5266d493e1ee948618790765176cf4f9c0ae",
+  "prompts": {},
+  "humans": {
+    "h_d82ccb34241a0d": {
+      "author": "ethan@zigbang.com"
+    }
+  },
+  "attribution_source": "human_fallback"
+}
