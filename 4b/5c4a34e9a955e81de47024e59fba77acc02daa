@@ -1,0 +1,28 @@
+CHANGELOG.md
+  h_d82ccb34241a0d 9
+README.md
+  h_d82ccb34241a0d 116-121
+Sources/MeetingRescue/Resources/ReleaseNotes.md
+  h_d82ccb34241a0d 4,9-10
+Tests/release_distribution_tests.py
+  h_d82ccb34241a0d 1-136
+config/release.env.example
+  h_d82ccb34241a0d 26-30
+scripts/generate_release_notes.sh
+  h_d82ccb34241a0d 10-14,57-60,80-86,105-116
+scripts/package_release.sh
+  h_d82ccb34241a0d 11-12
+scripts/publish_github_release.sh
+  h_d82ccb34241a0d 11-16,26-28,49,72-74,76,78,84-89,91,185
+---
+{
+  "schema_version": "zax-attestation/1.2.0",
+  "base_commit_sha": "4b5c4a34e9a955e81de47024e59fba77acc02daa",
+  "prompts": {},
+  "humans": {
+    "h_d82ccb34241a0d": {
+      "author": "ethan@zigbang.com"
+    }
+  },
+  "attribution_source": "human_fallback"
+}
