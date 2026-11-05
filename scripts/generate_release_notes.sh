@@ -7,6 +7,11 @@ APP_VERSION="${APP_VERSION:-$(tr -d '[:space:]' < "$VERSION_FILE")}"
 CHANGELOG_PATH="${CHANGELOG_PATH:-$ROOT_DIR/CHANGELOG.md}"
 BUILD_NUMBER="${BUILD_NUMBER:-$(git -C "$ROOT_DIR" rev-list --count HEAD 2>/dev/null || printf '1')}"
 BUNDLE_ID="${BUNDLE_ID:-com.local.meeting-rescue}"
+RELEASE_NOTARIZED="${RELEASE_NOTARIZED:-1}"
+case "$RELEASE_NOTARIZED" in
+  0|1) ;;
+  *) printf 'error: RELEASE_NOTARIZED must be 0 or 1.\n' >&2; exit 1 ;;
+esac
 
 MODE="${1:-}"
 OUTPUT_PATH="${2:-}"
@@ -49,6 +54,10 @@ if [[ -z "${release_body//[[:space:]]/}" ]]; then
   release_body="- 이번 릴리즈의 사용자 변경사항을 CHANGELOG.md에 추가하세요."
 fi
 
+if [[ "$RELEASE_NOTARIZED" == "0" ]]; then
+  release_body+=$'\n\n배포 안내: 이 버전은 Apple 공증을 받지 않았습니다 (unnotarized). macOS에서 경고가 표시되거나 실행이 제한될 수 있습니다.'
+fi
+
 mkdir -p "$(dirname "$OUTPUT_PATH")"
 
 case "$MODE" in
@@ -68,8 +77,13 @@ case "$MODE" in
       printf -- '- Distribution: GitHub Release DMG\n\n'
       printf '## 검증\n\n'
       printf -- '- codesign verification: pending\n'
-      printf -- '- notarization: pending\n'
-      printf -- '- staple validation: pending\n'
+      if [[ "$RELEASE_NOTARIZED" == "1" ]]; then
+        printf -- '- notarization: pending\n'
+        printf -- '- staple validation: pending\n'
+      else
+        printf -- '- notarization: not requested (unnotarized release)\n'
+        printf -- '- staple validation: not requested\n'
+      fi
     } > "$OUTPUT_PATH"
     ;;
   dist-verified)
@@ -88,11 +102,18 @@ case "$MODE" in
       printf -- '- Distribution: GitHub Release DMG\n\n'
       printf '## 검증\n\n'
       printf -- '- codesign verification: passed\n'
-      printf -- '- App notarization: %s (%s)\n' "$APP_NOTARY_STATUS" "$APP_NOTARY_ID"
-      printf -- '- DMG notarization: %s (%s)\n' "$DMG_NOTARY_STATUS" "$DMG_NOTARY_ID"
-      printf -- '- staple validation: passed\n'
-      printf -- '- Gatekeeper validation: accepted\n'
-      printf -- '- Sparkle appcast signature: passed\n\n'
+      if [[ "$RELEASE_NOTARIZED" == "1" ]]; then
+        printf -- '- App notarization: %s (%s)\n' "$APP_NOTARY_STATUS" "$APP_NOTARY_ID"
+        printf -- '- DMG notarization: %s (%s)\n' "$DMG_NOTARY_STATUS" "$DMG_NOTARY_ID"
+        printf -- '- staple validation: passed\n'
+        printf -- '- Gatekeeper validation: accepted\n'
+      else
+        printf -- '- App notarization: not requested (unnotarized release)\n'
+        printf -- '- DMG notarization: not requested (unnotarized release)\n'
+        printf -- '- staple validation: not requested\n'
+        printf -- '- Gatekeeper validation: not validated\n'
+      fi
+      printf -- '- Sparkle archive signature: passed\n\n'
       printf '## Checksum\n\n'
       printf '```txt\n'
       printf '%s  %s\n' "$CHECKSUM_VALUE" "$ARCHIVE_BASENAME"

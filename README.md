@@ -113,6 +113,12 @@ GitHub Release와 Sparkle appcast를 발행하려면 notarization 이후 다음 
 ./scripts/publish_github_release.sh
 ```
 
+공증 없이 배포하기로 결정한 경우에는 `config/release.local.env`에
+`RELEASE_NOTARIZED="0"`과 사용 가능한 서명 인증서를 설정하고
+`package_release.sh` → `publish_github_release.sh` 순서로 실행합니다.
+이 모드는 공증되지 않은 `.dmg`를 발행하며, 릴리즈 노트와 앱 내 안내에
+macOS 경고 또는 실행 제한 가능성을 표시합니다. 코드 서명·체크섬·Sparkle 서명은 검증합니다.
+
 이 스크립트는 `vX.Y.Z` tag와 GitHub Release DMG asset을 만들고, Sparkle 서명을 포함한 `docs/appcast.xml`을 갱신합니다. 또한 `docs/releases/vX.Y.Z.md`와 `docs/releases/latest.md`를 갱신해 앱 안의 릴리즈 노트 화면에서 최신 노트를 확인할 수 있게 합니다. 실제 설치 앱의 기본 Sparkle feed는 `breadceo/meeting-rescue-updates` repo의 `appcast.xml`이므로, publish script는 같은 appcast와 release note 파일을 해당 repo에도 push합니다. Sparkle private key는 Keychain에 보관하고, 백업 파일이 필요하면 `private/` 아래에 두세요. `private/`는 git에 포함하지 않습니다.
 
 ## Transcript 폴더

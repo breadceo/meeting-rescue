@@ -8,6 +8,12 @@ if [[ -f "$RELEASE_CONFIG_FILE" ]]; then
   source "$RELEASE_CONFIG_FILE"
 fi
 
+export RELEASE_NOTARIZED="${RELEASE_NOTARIZED:-1}"
+case "$RELEASE_NOTARIZED" in
+  0|1) ;;
+  *) printf 'error: RELEASE_NOTARIZED must be 0 or 1.\n' >&2; exit 1 ;;
+esac
+
 VERSION_FILE="${VERSION_FILE:-$ROOT_DIR/VERSION}"
 APP_VERSION="${APP_VERSION:-$(tr -d '[:space:]' < "$VERSION_FILE")}"
 TAG_NAME="${TAG_NAME:-v$APP_VERSION}"
@@ -17,7 +23,9 @@ APP_NAME="${APP_NAME:-Meeting Rescue}"
 APP_DIR="$DIST_DIR/$APP_NAME.app"
 RELEASE_TITLE="${RELEASE_TITLE:-Meeting Rescue $TAG_NAME}"
 RELEASE_NOTES_PATH="${RELEASE_NOTES_PATH:-$DIST_DIR/release-notes-v$APP_VERSION.md}"
-ARCHIVE_PATH="${ARCHIVE_PATH:-$DIST_DIR/Meeting-Rescue-v$APP_VERSION-notarized.dmg}"
+archive_suffix=""
+if [[ "$RELEASE_NOTARIZED" == "1" ]]; then archive_suffix="-notarized"; fi
+ARCHIVE_PATH="${ARCHIVE_PATH:-$DIST_DIR/Meeting-Rescue-v$APP_VERSION$archive_suffix.dmg}"
 CHECKSUM_PATH="${CHECKSUM_PATH:-$ARCHIVE_PATH.sha256}"
 ARCHIVE_CONTENT_TYPE="${ARCHIVE_CONTENT_TYPE:-application/x-apple-diskimage}"
 RELEASE_DRAFT="${RELEASE_DRAFT:-0}"
@@ -38,7 +46,7 @@ fi
 
 if [[ ! -f "$ARCHIVE_PATH" ]]; then
   printf 'error: release archive not found: %s\n' "$ARCHIVE_PATH" >&2
-  printf 'Run ./scripts/notarize_app.sh first.\n' >&2
+  printf 'Run ./scripts/package_release.sh, and notarize_app.sh when RELEASE_NOTARIZED=1.\n' >&2
   exit 1
 fi
 
@@ -61,18 +69,26 @@ fi
 
 shasum -a 256 -c "$CHECKSUM_PATH"
 
-if [[ -d "$APP_DIR" ]]; then
-  codesign --verify --deep --strict --verbose=2 "$APP_DIR" >/dev/null
+if [[ ! -d "$APP_DIR" ]]; then
+  printf 'error: app bundle not found: %s\n' "$APP_DIR" >&2
+  exit 1
 fi
+codesign --verify --deep --strict --verbose=2 "$APP_DIR" >/dev/null
 
-if [[ "$ARCHIVE_PATH" == *.dmg ]]; then
+if [[ "$ARCHIVE_PATH" == *.dmg && "$RELEASE_NOTARIZED" == "1" ]]; then
   xcrun stapler validate "$ARCHIVE_PATH" >/dev/null
   spctl -a -t open --context context:primary-signature -vv "$ARCHIVE_PATH" >/dev/null
 fi
 
 signature_attributes="$("$SPARKLE_SIGN_UPDATE_TOOL" "$ARCHIVE_PATH")"
+archive_signature="$(printf '%s\n' "$signature_attributes" | sed -n 's/.*sparkle:edSignature="\([^"]*\)".*/\1/p')"
+if [[ -z "$archive_signature" ]]; then
+  printf 'error: Sparkle archive signature was not returned.\n' >&2
+  exit 1
+fi
+"$SPARKLE_SIGN_UPDATE_TOOL" --verify "$ARCHIVE_PATH" "$archive_signature"
 pub_date="$(LC_ALL=C date -R)"
-build_number="$(plutil -extract CFBundleVersion raw -o - "$DIST_DIR/Meeting Rescue.app/Contents/Info.plist" 2>/dev/null || git rev-list --count HEAD 2>/dev/null || printf '1')"
+build_number="$(plutil -extract CFBundleVersion raw -o - "$APP_DIR/Contents/Info.plist" 2>/dev/null || git rev-list --count HEAD 2>/dev/null || printf '1')"
 archive_basename="$(basename "$ARCHIVE_PATH")"
 checksum_value="$(awk '{print $1}' "$CHECKSUM_PATH")"
 app_notary_result="$DIST_DIR/notary/Meeting-Rescue-v$APP_VERSION-notary-result.json"
@@ -166,6 +182,7 @@ $(sed 's/^/        /' "$appcast_description")
 APPCAST
 
 "$SPARKLE_SIGN_UPDATE_TOOL" --disable-signing-warning "$APPCAST_PATH" >/dev/null
+"$SPARKLE_SIGN_UPDATE_TOOL" --verify "$APPCAST_PATH"
 
 if [[ -n "$UPDATE_FEED_REPOSITORY" ]]; then
   update_feed_dir="$(mktemp -d "${TMPDIR:-/tmp}/meeting-rescue-update-feed.XXXXXX")"

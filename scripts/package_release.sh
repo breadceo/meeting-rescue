@@ -8,6 +8,8 @@ if [[ -f "$RELEASE_CONFIG_FILE" ]]; then
   source "$RELEASE_CONFIG_FILE"
 fi
 
+export RELEASE_NOTARIZED="${RELEASE_NOTARIZED:-1}"
+
 APP_NAME="${APP_NAME:-Meeting Rescue}"
 VERSION_FILE="${VERSION_FILE:-$ROOT_DIR/VERSION}"
 APP_VERSION="${APP_VERSION:-$(tr -d '[:space:]' < "$VERSION_FILE")}"
