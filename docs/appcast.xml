@@ -8,31 +8,27 @@
     <description>Meeting Rescue release updates.</description>
     <language>ko</language>
     <item>
-      <title>Meeting Rescue 0.1.25</title>
+      <title>Meeting Rescue 0.1.26</title>
       <description><![CDATA[
-        <h2>Meeting Rescue v0.1.25</h2>
+        <h2>Meeting Rescue v0.1.26</h2>
         <ul>
-        <li>공증 없는 DMG 배포를 명시적으로 선택할 수 있게 하고, 배포 안내와 검증 상태를 릴리즈 노트에 표시합니다.</li>
-        <li>긴 회의의 새 transcript 구간을 다시 잘라 일부 발화가 분석에서 빠지던 문제를 수정했습니다.</li>
-        <li>Codex의 Economy, Balanced, Frontier preset이 Luna를 사용하고 추론 강도로 구분되도록 변경했습니다.</li>
-        <li>OpenAI API 응답 모델명, 실제 입출력·합계·캐시·추론 토큰과 response ID를 분석 기록에 저장하고 추정값과 구분합니다.</li>
-        <li>Custom Command의 기존 JSON 출력 호환성을 유지하면서 실제 사용량 메타데이터 전달을 지원합니다.</li>
+        <li>회의 종료 분석이 최근 구간만 반환해도 Meeting Intelligence의 전체 흐름에 누적된 앞부분을 보존합니다.</li>
         </ul>
         <p>배포 안내: 이 버전은 Apple 공증을 받지 않았습니다 (unnotarized). macOS에서 경고가 표시되거나 실행이 제한될 수 있습니다.</p>
-        <p><a href="https://github.com/breadceo/meeting-rescue/releases/tag/v0.1.25">Release notes</a></p>
+        <p><a href="https://github.com/breadceo/meeting-rescue/releases/tag/v0.1.26">Release notes</a></p>
       ]]></description>
-      <pubDate>Thu, 05 Nov 2026 12:09:16 +0900</pubDate>
-      <sparkle:version>130</sparkle:version>
-      <sparkle:shortVersionString>0.1.25</sparkle:shortVersionString>
+      <pubDate>Mon, 09 Nov 2026 17:30:11 +0900</pubDate>
+      <sparkle:version>132</sparkle:version>
+      <sparkle:shortVersionString>0.1.26</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
       <enclosure
-        url="https://github.com/breadceo/meeting-rescue/releases/download/v0.1.25/Meeting-Rescue-v0.1.25.dmg"
-        sparkle:edSignature="Q5z/Ef9FOH/ZDQ8BO66Rcpa5I+zUuh1sKCfAhzbb5O+E2g24DUup8XV+L//Z+fx92WZs6zNHQ8fvN5Vf4pyKDw==" length="7883472"
+        url="https://github.com/breadceo/meeting-rescue/releases/download/v0.1.26/Meeting-Rescue-v0.1.26.dmg"
+        sparkle:edSignature="Wkv78CNWE5EFwq/+t8IRc4aLye2+1wxMXkMufXfk/+vAsE9PFl8YeHKh14TGMftHWdWgVJjosyJbyxqnXBRwBA==" length="7883934"
         type="application/x-apple-diskimage" />
     </item>
   </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: jc8+WMSwCXT2dNlMTuME3L0NmjKrPCkkOHYW3DASP7DavR5lF8epT0XxekuvjnDqD2CKmdC4CeGPF8DUnVWMCA==
-length: 2187
+edSignature: zTa7r2hbMu4eyZMjYn77e9x+I848um47tO397JIQITSTWW6/6hO6lYxfqpYjgtr9/jG/cxJSXY+6DAGaTBkYCg==
+length: 1585
 -->
