@@ -4,6 +4,30 @@ import Testing
 
 @Suite("LLM provider output")
 struct LLMProviderOutputTests {
+    @Test("Final analysis preserves accumulated topics and updates the closing segment")
+    func finalAnalysisPreservesTimeline() throws {
+        let opening = TopicTimelineItem(id: "opening", startTimestamp: "00:20", title: "Opening", summary: "First topic")
+        let middle = TopicTimelineItem(id: "middle", startTimestamp: "20:30", title: "Middle", summary: "Middle topic")
+        let late = TopicTimelineItem(id: "late", startTimestamp: "[40:15]", title: "Late", summary: "Before final")
+        let revised = TopicTimelineItem(id: "regenerated", startTimestamp: "40:15", title: "Late", summary: "After final")
+        let closing = TopicTimelineItem(id: "closing", startTimestamp: "44:22", title: "Closing", summary: "Last topic")
+        let previous = AnalysisSnapshot(topicTimeline: [opening, middle, late])
+        let output = AnalysisSnapshot(meetingSummary: MeetingSummary(overview: "Final summary"), topicTimeline: [revised, closing])
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let request = AnalysisRequest(
+            meetingID: "meeting-1", metadata: MeetingMetadata(room: "Room"),
+            rawTranscript: "[44:22] Alex: Wrap up.", previousSnapshot: previous, reason: "final"
+        )
+
+        let snapshot = try decodeProviderOutput(from: String(decoding: encoder.encode(output), as: UTF8.self),
+                                                request: request, provider: .customCommand)
+
+        #expect(snapshot.topicTimeline.map(\.id) == ["opening", "middle", "late", "closing"])
+        #expect(snapshot.topicTimeline.first(where: { $0.id == "late" })?.summary == "After final")
+        #expect(snapshot.meetingSummary.overview == "Final summary")
+    }
+
     @Test("full snapshot provider output은 D0 meeting summary contract를 decode한다")
     func fullSnapshotDecodesD0Contract() throws {
         let output = """

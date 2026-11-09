@@ -1182,7 +1182,15 @@ func decodeProviderOutput(
 
     switch request.outputMode {
     case .fullSnapshot:
-        return applyingRequestedMeetingType(try decodeSnapshot(from: output, provider: provider))
+        var snapshot = try decodeSnapshot(from: output, provider: provider)
+        if request.reason.hasPrefix("final"), let previousSnapshot = request.previousSnapshot,
+           !previousSnapshot.topicTimeline.isEmpty {
+            // The final prompt only sees a compact slice of the accumulated timeline.
+            snapshot.topicTimeline = AnalysisSnapshot.mergeFinalTimeline(
+                previousSnapshot.topicTimeline, with: snapshot.topicTimeline
+            )
+        }
+        return applyingRequestedMeetingType(snapshot)
     case .livePatch:
         guard let previousSnapshot = request.previousSnapshot else {
             throw LLMProviderError.invalidOutput

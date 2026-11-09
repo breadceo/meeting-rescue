@@ -771,6 +771,25 @@ public struct AnalysisSnapshot: Codable, Equatable, Sendable {
         return nil
     }
 
+    static func mergeFinalTimeline(
+        _ existing: [TopicTimelineItem],
+        with finalTopics: [TopicTimelineItem]
+    ) -> [TopicTimelineItem] {
+        var topics = existing
+        for var topic in finalTopics {
+            let start = timestampSortKey(topic.startTimestamp)
+            let index = topics.firstIndex { !topic.id.isEmpty && $0.id == topic.id }
+                ?? topics.firstIndex { start != Int.max && timestampSortKey($0.startTimestamp) == start }
+            if let index {
+                topic.id = topics[index].id
+                topics[index] = topic
+            } else {
+                topics.append(topic)
+            }
+        }
+        return topics.sorted { timestampSortKey($0.startTimestamp) < timestampSortKey($1.startTimestamp) }
+    }
+
     private static func upsertTimeline(
         _ existing: [TopicTimelineItem],
         with upserts: [TopicTimelineItem]
