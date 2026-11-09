@@ -1,0 +1,24 @@
+CHANGELOG.md
+  h_d82ccb34241a0d 7-10
+Sources/MeetingRescue/Resources/ReleaseNotes.md
+  h_d82ccb34241a0d 1,4
+Sources/MeetingRescueCore/AnalysisModels.swift
+  h_d82ccb34241a0d 774-792
+Sources/MeetingRescueCore/LLMProvider.swift
+  h_d82ccb34241a0d 1185-1193
+Tests/MeetingRescueCoreTests/LLMProviderOutputTests.swift
+  h_d82ccb34241a0d 7-30
+VERSION
+  h_d82ccb34241a0d 1
+---
+{
+  "schema_version": "zax-attestation/1.2.0",
+  "base_commit_sha": "7023c3bb308f167ee1ab293be4aacd0c9f3ac6e3",
+  "prompts": {},
+  "humans": {
+    "h_d82ccb34241a0d": {
+      "author": "ethan@zigbang.com"
+    }
+  },
+  "attribution_source": "human_fallback"
+}
